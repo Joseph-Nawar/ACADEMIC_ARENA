@@ -110,6 +110,18 @@
       await loadLeaderboard();
       return;
     }
+    if (result.state === "empty" || !result.groups.length) {
+      boardState.groups = [];
+      boardState.modules = {};
+      replaceOptions(group, [], "", "No cohorts available");
+      setModules(previousModule);
+      boardSequence += 1;
+      document.querySelector(".podium-zone").hidden = true;
+      document.querySelector(".rank-sheet").hidden = true;
+      $("ranking-rows").replaceChildren();
+      announce("ranking-status", "No cohorts are available for this level and semester yet.", "empty");
+      return;
+    }
     boardState.groups = result.groups;
     boardState.modules = result.modules;
     replaceOptions(group, result.groups, previousGroup, "No cohorts available");

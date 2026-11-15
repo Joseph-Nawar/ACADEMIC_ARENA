@@ -143,6 +143,26 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.deepEqual(errors, []);
   await page.close();
 
+  const emptyCatalogPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  let leaderboardRequests = 0;
+  await emptyCatalogPage.route("**/api/public/catalog**", async (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ groups: [], modules: {} }),
+  }));
+  await emptyCatalogPage.route("**/api/public/leaderboards**", async (route) => {
+    leaderboardRequests += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [] }) });
+  });
+  await emptyCatalogPage.goto(baseUrl);
+  await waitForReady(emptyCatalogPage);
+  assert.match(await emptyCatalogPage.locator("#ranking-status").textContent(), /no cohorts/i);
+  assert.equal(await emptyCatalogPage.locator("#ranking-status").getAttribute("data-state"), "empty");
+  assert.equal(await emptyCatalogPage.locator("#group-filter").isDisabled(), true);
+  assert.equal(await emptyCatalogPage.locator("#group-filter").inputValue(), "");
+  assert.equal(leaderboardRequests, 0, "do not query rankings without a cohort");
+  await emptyCatalogPage.close();
+
   const racePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   let levelFourStarted = false;
   await racePage.route("**/api/public/leaderboards**", async (route) => {

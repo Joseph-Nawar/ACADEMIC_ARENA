@@ -253,10 +253,17 @@
         try {
           const query = new URLSearchParams({ level, semester });
           const payload = await request("GET", "/public/catalog?" + query.toString());
+          if (!payload || typeof payload !== "object" || !Array.isArray(payload.groups) ||
+              !payload.modules || typeof payload.modules !== "object" || Array.isArray(payload.modules)) {
+            return { state: "unavailable", groups: [], modules: {} };
+          }
           const groups = Array.isArray(payload.groups)
             ? payload.groups.filter((group) => group && typeof group.key === "string" && typeof group.label === "string")
                 .map((group) => ({ key: group.key.slice(0, 60), label: group.label.slice(0, 80) }))
             : [];
+          if (payload.groups.length > 0 && groups.length === 0) {
+            return { state: "unavailable", groups: [], modules: {} };
+          }
           const modules = {};
           if (payload.modules && typeof payload.modules === "object" && !Array.isArray(payload.modules)) {
             for (const [group, items] of Object.entries(payload.modules)) {
@@ -289,7 +296,11 @@
         const query = new URLSearchParams(filters);
         try {
           const payload = await request("GET", "/public/leaderboards?" + query.toString());
-          const rows = Array.isArray(payload.rows) ? payload.rows.map(sanitizeBoardRow).filter(Boolean) : [];
+          if (!payload || typeof payload !== "object" || !Array.isArray(payload.rows)) {
+            return { state: "unavailable", publishedAt: null, rows: [] };
+          }
+          const rows = payload.rows.map(sanitizeBoardRow).filter(Boolean);
+          if (rows.length !== payload.rows.length) return { state: "unavailable", publishedAt: null, rows: [] };
           return {
             state: rows.length ? "ok" : "empty",
             publishedAt: text(payload.publishedAt) || null,
@@ -323,7 +334,11 @@
         try {
           const query = new URLSearchParams({ category });
           const payload = await request("GET", "/public/campus-wins?" + query.toString());
-          const posts = Array.isArray(payload.posts) ? payload.posts.map(sanitizeWin).filter(Boolean) : [];
+          if (!payload || typeof payload !== "object" || !Array.isArray(payload.posts)) {
+            return { state: "unavailable", posts: [] };
+          }
+          const posts = payload.posts.map(sanitizeWin).filter(Boolean);
+          if (posts.length !== payload.posts.length) return { state: "unavailable", posts: [] };
           return { state: posts.length ? "ok" : "empty", posts };
         } catch {
           return { state: "unavailable", posts: [] };

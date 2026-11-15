@@ -116,6 +116,28 @@ test("empty_public_responses_are_distinct_from_backend_unavailability", async ()
   assert.deepEqual(wins, { state: "empty", posts: [] });
 });
 
+test("empty_catalog_is_distinct_from_unavailable_and_malformed_api_responses", async () => {
+  const emptyApi = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async () => response({ groups: [], modules: {} }),
+  });
+  const emptyCatalog = await emptyApi.public.getCatalog({ level: "5", semester: "1" });
+  assert.deepEqual(emptyCatalog, { state: "empty", groups: [], modules: {} });
+
+  const malformedApi = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async () => response({}),
+  });
+  const catalog = await malformedApi.public.getCatalog({ level: "5", semester: "1" });
+  const board = await malformedApi.public.getLeaderboard({
+    level: "5", semester: "1", group: "core", kind: "semester", module: "",
+  });
+  const wins = await malformedApi.public.getWins("all");
+  assert.equal(catalog.state, "unavailable");
+  assert.equal(board.state, "unavailable");
+  assert.equal(wins.state, "unavailable");
+});
+
 test("campus_wins_public_shape_excludes_private_and_free_text_fields", async () => {
   const api = createArenaDataAccess({
     mode: "production",
