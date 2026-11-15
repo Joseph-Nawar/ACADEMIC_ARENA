@@ -11,6 +11,7 @@ __pycache__/
 venv/
 .venv/
 node_modules/
+.wrangler/
 dist/
 playwright-report/
 test-results/

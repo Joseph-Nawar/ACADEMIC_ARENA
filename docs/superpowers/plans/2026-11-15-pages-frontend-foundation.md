@@ -78,13 +78,13 @@
 - Production initial markup contains no fictional names or ranking rows.
 - Demo names and approved-template examples are loaded from the demo fixture only.
 
-- [ ] Write UI contract tests for production placeholder markup, no free-text Campus Wins input, and a visible status region; run them and confirm failures.
-- [ ] Write the Playwright flow tests for filters, podium/crown, avatar customization and both art families, Campus Wins filters/reactions, production-unavailable behavior, and mobile overflow; run them and confirm they fail before UI integration.
-- [ ] Connect app.js to the data provider. Keep stale responses from replacing the latest filter selection. Render explicit loading, empty, and unavailable states.
-- [ ] Move all fictional leaderboard and Campus Wins records out of app.js/index.html and into the demo fixture. Remove free-text achievement submission while preserving the existing Campus Wins visual feed and reactions.
-- [ ] Keep avatar customization functional in demo mode and route production saves through the current-account endpoint.
-- [ ] Replace inline style attributes and style assignments with allowlisted data attributes and CSS selectors.
-- [ ] Run node --test tests/frontend/*.test.mjs and npm run test:browser; confirm browser flows pass at 1440 and 390 CSS pixels.
+- [x] Write and run UI contract tests for production placeholder markup, no free-text Campus Wins input, and visible status regions.
+- [x] Write and run Playwright flows for filters, podium/crown, avatar customization and both art families, Campus Wins filters/reactions, production-unavailable behavior, and mobile overflow.
+- [x] Connect app.js to the data provider. Keep stale responses from replacing the latest filter selection. Render explicit loading, empty, and unavailable states.
+- [x] Move fictional leaderboard and Campus Wins records out of app.js/index.html and into the demo fixture. Remove free-text achievement submission while preserving the Campus Wins visual feed and reactions.
+- [x] Keep avatar customization functional in demo mode and route production saves through the current-account endpoint.
+- [x] Replace inline style attributes and style assignments with allowlisted data attributes and CSS selectors.
+- [x] Run node --test tests/frontend/*.test.mjs and npm run test:browser; confirm browser flows pass at 1440 and 390 CSS pixels.
 
 ### Task 4: CI, secret checks, roadmap, and auth/security documentation
 
@@ -97,12 +97,12 @@
 - CI runs on pull requests and pushes with read-only repository permissions and no deployment secrets.
 - Python smoke tests install the test client dependency without undocumented manual steps.
 
-- [ ] Write secret scanner tests for private-key blocks, service-role/JWT-shaped secrets, safe placeholders, and fictional demo fixture exclusion from production output; confirm the synthetic-secrets tests fail before the scanner exists.
-- [ ] Add a deterministic secret-pattern scan and static build checks. The scan must report file and line only and must never print the matched secret.
-- [ ] Pin compatible FastAPI, Uvicorn, SQLAlchemy, Argon2, Pydantic, and httpx2 test dependency versions based on the passing baseline.
-- [ ] Add one GitHub Actions workflow that installs Node/Python dependencies, runs frontend tests and both builds, runs browser smoke against local Pages, runs secret/static checks, and runs tests/smoke_api.py.
-- [ ] Update the roadmap and architecture docs. Record the Supabase user-object/JWT email exposure finding and the required server-side opaque-session BFF; distinguish completed frontend contract work from pending M2 server security controls.
-- [ ] Run npm ci, npm test, npm run build:demo, npm run build:production, npm run test:browser, npm run check:security, and python tests/smoke_api.py from a clean checkout.
+- [x] Write and run secret scanner tests for private-key blocks, service-role/JWT-shaped secrets, safe placeholders, and production public-field checks.
+- [x] Add a deterministic secret-pattern scan and static build checks. The scan reports file and line only and never prints a matched secret.
+- [x] Pin compatible FastAPI, Uvicorn, SQLAlchemy, Argon2, Pydantic, and httpx2 test dependency versions based on the passing baseline.
+- [x] Add one GitHub Actions workflow that installs Node/Python dependencies, runs frontend tests and both builds, runs browser smoke against local Pages, runs secret/static checks, and runs tests/smoke_api.py.
+- [x] Update the roadmap and architecture docs. Record the Supabase user-object/JWT email exposure finding and the required server-side opaque-session BFF; distinguish completed frontend contract work from pending M2 server security controls.
+- [x] Run npm ci, npm test, npm run build:demo, npm run build:production, npm run test:browser, npm run check:security, and python tests/smoke_api.py from the clean dependency installation. GitHub Actions status remains pending until the PR is opened.
 
 ## Pre-flight interfaces
 
