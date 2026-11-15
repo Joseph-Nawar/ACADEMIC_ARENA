@@ -20,6 +20,7 @@
 ## Baseline evidence
 
 - The supplied archive contains the files listed above and six desktop/mobile screenshots.
+- Source archive SHA-256: `0216834af692a43d2e3f33f196b09171c324002f51cc0bd26e429419f7cf39e5`.
 - `tests/smoke_api.py` passed against a temporary SQLite database after installing the declared runtime requirements plus `httpx2` into a temporary Python 3.12 environment. A clean environment using only `requirements.txt` failed first because the installed Starlette TestClient requires `httpx2`, which is not declared in the archive’s requirements.
 - No real identities, grades, scores, attendance, public deployments, Supabase project, Cloudflare project, or GitHub Actions workflow were used for this audit.
 - The screenshots were visually inspected as reference images; this was not a fresh browser render or accessibility audit.

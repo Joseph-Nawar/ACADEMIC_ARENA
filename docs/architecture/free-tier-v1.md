@@ -66,7 +66,7 @@ The provider pages currently document:
 
 | Service | Current free allowance or behavior | Practical consequence |
 | --- | --- | --- |
-| GitHub Free | Unlimited private repositories and 2,000 Actions minutes/month | Keep CI small; use a university-controlled owner/custodian account before launch. The current repository has been made private but is still owned by a personal GitHub account. |
+| GitHub Free | Unlimited private repositories and 2,000 standard-runner minutes/month | Private runner usage draws from included compute and can bill after the allowance if billing is enabled. Keep Actions disabled until additional spending is blocked. Use a university-controlled owner/custodian account before launch. The current repository is private but still owned by a personal GitHub account. |
 | Cloudflare Pages Free | 500 builds/month, up to 20,000 files/site, 25 MiB per file | The V6 static site fits the intended model; check the actual asset bundle before configuring Pages. |
 | Cloudflare Workers / Pages Functions Free | 100,000 requests/day shared across Workers and Pages Functions; 10 ms CPU per invocation | Keep functions small and avoid CPU-heavy password hashing in a Worker without a measured compatibility/performance proof. |
 | Cloudflare D1 Free | 5 million rows read/day, 100,000 rows written/day, 5 GB total storage | A possible auth alternative, but it does not by itself solve the audited username-only authentication requirement. |
@@ -84,8 +84,21 @@ Do not add a credit-card-dependent service, metered paid fallback, paid DNS/doma
 - [Supabase pricing](https://supabase.com/pricing)
 - [Supabase free-project pausing](https://supabase.com/docs/guides/platform/free-project-pausing)
 - [Supabase database backups](https://supabase.com/docs/guides/platform/backups)
+- [GitHub Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)
+- [GitHub Actions billing and budgets](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+- [Cloudflare Self-Serve Subscription Agreement](https://www.cloudflare.com/terms/)
+- [Supabase Terms of Service](https://supabase.com/terms)
+- [Supabase Data Processing Addendum](https://supabase.com/legal/customer-resources/data-processing-addendum)
 
 Provider limits were checked on 15 November 2026. Recheck at project creation and before each release. This review did not create a provider account or validate a production plan, data-processing agreement, or institutional procurement approval.
+
+## Terms and institutional account checks
+
+- GitHub Free permits private repositories. Its Terms treat private repository content as confidential subject to stated service, security, and legal exceptions. Private Actions use can incur charges after included compute if billing is enabled; keep CI disabled until the billing account has a zero-spend limit or no payment method. The present repo is owned by a personal account, so the university still needs to approve the custodian or move it to an institution-controlled owner.
+- Cloudflare's self-serve agreement permits free services but describes them as free services that may be changed or terminated, and prohibits bypassing product usage limits. This design uses no artificial keepalive traffic or quota circumvention. Free hosting provides no institutional uptime commitment.
+- Supabase's terms make the customer responsible for rights, consent, and instructions for submitted customer data. A DPA is available, but EUE must determine whether its terms, processing region, and data handling are acceptable before any student identity or record is sent there.
+
+This is a technical fit review, not legal advice or approval to process university data. Institutional IT, privacy, procurement, and the director must review and approve the actual provider accounts and agreements before production use.
 
 ## Milestone boundary
 

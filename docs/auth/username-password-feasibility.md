@@ -71,6 +71,8 @@ The documentation-level feasibility check rules out native Supabase username log
 - [Supabase Auth general configuration](https://supabase.com/docs/guides/auth/general-configuration)
 - [Supabase TOTP MFA](https://supabase.com/docs/guides/auth/auth-mfa/totp)
 - [Supabase MFA enforcement with RLS](https://supabase.com/docs/guides/auth/auth-mfa)
+- [Supabase Terms of Service](https://supabase.com/terms)
+- [Supabase Data Processing Addendum](https://supabase.com/legal/customer-resources/data-processing-addendum)
 - [Better Auth username plugin](https://better-auth.com/docs/plugins/username)
 - [Cloudflare Python package support](https://developers.cloudflare.com/workers/languages/python/packages/)
 - [Cloudflare Python Workers runtime](https://developers.cloudflare.com/workers/languages/python/how-python-workers-work/)
