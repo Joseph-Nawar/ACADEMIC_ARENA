@@ -61,11 +61,11 @@
 - Produces: createArenaDataAccess({mode, fetchImpl, storage}) with public, auth, student, and staff method groups.
 - Public filters are level, semester, group, kind, and module; student mutation bodies contain no owner ID or role.
 
-- [ ] Write tests named public_board_query_encodes_all_filters_and_allowlists_rows, production_failure_never_falls_back_to_fixture, campus_wins_public_shape_excludes_private_and_free_text_fields, login_uses_same_origin_and_returns_only_sanitized_session, and student_and_staff_writes_do_not_accept_client_roles.
-- [ ] Run node --test tests/frontend/data-access.test.mjs and confirm the missing-module failures.
-- [ ] Implement the demo adapter using only fixtures/demo/academic-arena.json. Implement production same-origin request routes with generic authentication failures and fail-closed reads.
-- [ ] Validate response shapes and return only public allowlisted board/post fields and sanitized session state. Include staff publishing/moderation and provisioning method boundaries; do not expose a Supabase client.
-- [ ] Run node --test tests/frontend/data-access.test.mjs and confirm all tests pass.
+- [x] Write tests named public_board_query_encodes_all_filters_and_allowlists_rows, production_failure_never_falls_back_to_fixture, campus_wins_public_shape_excludes_private_and_free_text_fields, login_uses_same_origin_and_returns_only_sanitized_session, and student_and_staff_writes_do_not_accept_client_roles.
+- [x] Run node --test tests/frontend/data-access.test.mjs and confirm the missing-module failures.
+- [x] Implement the demo adapter using only fixtures/demo/academic-arena.json. Implement production same-origin request routes with generic authentication failures and fail-closed reads.
+- [x] Validate response shapes and return only public allowlisted board/post fields and sanitized session state. Include staff publishing/moderation and provisioning method boundaries; do not expose a Supabase client.
+- [x] Run node --test tests/frontend/data-access.test.mjs and confirm all tests pass.
 
 ### Task 3: Preserve the UI and connect loading/error states to the provider
 
