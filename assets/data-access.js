@@ -74,23 +74,21 @@
       ? value.counts.map((count) => Number.isSafeInteger(count) && count >= 0 ? count : 0)
       : [0, 0, 0];
     if (!id || !author || !avatar || !style || !type || !created) return null;
-    return { id, author, avatar, style, type, category: TEMPLATES[type].category, created, counts };
+    const myReaction = REACTIONS.has(value.myReaction) ? value.myReaction : null;
+    return { id, author, avatar, style, type, category: TEMPLATES[type].category, created, counts, myReaction };
   }
 
   function sanitizeSession(value) {
     if (!value || value.authenticated !== true || !value.user || typeof value.user !== "object") {
       return { authenticated: false };
     }
-    const displayName = text(value.user.displayName);
     const role = ROLES.has(value.user.role) ? value.user.role : "student";
     const user = {
-      displayName,
       role,
       mustChangePassword: value.user.mustChangePassword === true,
     };
     const avatar = sanitizeAvatar(value.user.avatar);
     if (avatar) user.avatar = avatar;
-    if (!displayName) return { authenticated: false };
     return { authenticated: true, user };
   }
 
@@ -146,11 +144,9 @@
       let payload = {};
       try { payload = await response.json(); } catch {}
       if (!response.ok) {
-        if (route === "/auth/login" && response.status === 401) {
-          throw new ArenaDataError("Invalid username or password.", "invalid_credentials");
-        }
-        if (route === "/auth/login" && response.status === 429) {
-          throw new ArenaDataError("Sign-in is temporarily unavailable. Try again later.", "rate_limited");
+        if (route === "/auth/login" && [401, 429].includes(response.status)) {
+          throw new ArenaDataError("Could not sign you in. Check your details or try again later.",
+            response.status === 429 ? "rate_limited" : "invalid_credentials");
         }
         throw new ArenaDataError("Request could not be completed.", response.status === 401 ? "unauthorized" : "request_failed");
       }
@@ -209,13 +205,26 @@
     }
 
     function demoRows(students, filters) {
-      const seed = (Number(filters.level) - 5) * 2 + (Number(filters.semester) - 1) +
-        (filters.kind === "module" ? Math.max(1, filters.module.charCodeAt(0) % 3) : 0);
-      const first = students.slice(0, 3);
-      const rest = students.slice(3);
-      const firstShift = ((seed % first.length) + first.length) % first.length;
-      const restShift = ((seed % rest.length) + rest.length) % rest.length;
-      return [...first.slice(firstShift), ...first.slice(0, firstShift), ...rest.slice(restShift), ...rest.slice(0, restShift)]
+      if (filters.level === "5" && filters.semester === "1" && filters.group === "core" &&
+          filters.kind === "semester") {
+        return students.slice(0, 10).map((student, index) => sanitizeBoardRow({
+          position: index + 1,
+          name: student.name,
+          avatar: student.avatar,
+          style: student.style,
+        })).filter(Boolean);
+      }
+      const scope = [filters.level, filters.semester, filters.group, filters.kind, filters.module].join("|");
+      function score(student) {
+        let value = 2166136261;
+        for (const character of scope + "|" + student.avatar) {
+          value ^= character.charCodeAt(0);
+          value = Math.imul(value, 16777619) >>> 0;
+        }
+        return value;
+      }
+      return [...students]
+        .sort((first, second) => score(first) - score(second))
         .slice(0, 10)
         .map((student, index) => sanitizeBoardRow({
           position: index + 1,
@@ -296,9 +305,15 @@
         if (mode === "demo") {
           try {
             const fixture = await loadFixture();
+            const own = storageRead("arena-v1-demo-reactions", {});
             const posts = fixture.wins
               .filter((post) => category === "all" || TEMPLATES[post.type]?.category === category)
-              .map(sanitizeWin)
+              .map((post) => {
+                const myReaction = REACTIONS.has(own[post.id]) ? own[post.id] : null;
+                const counts = copyCounts(post.counts);
+                if (myReaction) counts[["heart", "clap", "fire"].indexOf(myReaction)] += 1;
+                return sanitizeWin({ ...post, counts, myReaction });
+              })
               .filter(Boolean);
             return { state: posts.length ? "ok" : "empty", posts };
           } catch {
@@ -364,6 +379,16 @@
     };
 
     const student = {
+      async getMyCharacter() {
+        if (mode === "demo") return sanitizeAvatar(storageRead("arena-v1-demo-avatar", null));
+        try {
+          const payload = await request("GET", "/me/avatar");
+          return sanitizeAvatar(payload.avatar);
+        } catch (error) {
+          if (error.code === "unauthorized") return null;
+          throw error;
+        }
+      },
       async saveCharacter(input) {
         const avatar = sanitizeAvatar(input);
         if (!avatar) throw new ArenaDataError("Choose a valid character.", "invalid_avatar");

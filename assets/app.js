@@ -1,55 +1,608 @@
+(() => {
+  "use strict";
 
-(()=>{'use strict';
-const $=id=>document.getElementById(id);
-const characterIds=['omar','mariam','youssef','amara','tariq','habiba2','malek','nour2','zein'];
-const characterNames=['WAVE','BOLD','CHILL','SPARK','CASUAL','BRAVE','SUNNY','CREATIVE','CALM'];
-const styleNames={ink:'COMIC ORIGINAL',cartoon3d:'3D CARTOON'};
-const characters=Object.fromEntries(characterIds.map((id,i)=>[id,{name:characterNames[i]}]));
-const tones={mint:'#76bbb1',coral:'#ef6f56',gold:'#f4c856',paper:'#dfd6c6',blue:'#a3bfd7',lilac:'#c9b7d9'};
-const art=(id,style='ink')=>`assets/characters/${id}-${style==='cartoon3d'?'3d':style}.png`;
-const face=id=>`assets/characters/${id}-face.png`;
-const path=(s)=>`assets/${s}`;
-let liveRows=null;
-const athletes=[{name:'Mariam',avatar:'mariam'},{name:'Omar',avatar:'omar'},{name:'Youssef',avatar:'youssef'},{name:'Salma',avatar:'amara'},{name:'Ahmed',avatar:'malek'},{name:'Nour',avatar:'nour2'},{name:'Karim',avatar:'zein'},{name:'Laila',avatar:'habiba2'},{name:'Tarek',avatar:'tariq'},{name:'Habiba',avatar:'habiba2'}];
-let mode='semester',page='leaderboard',filter='all';
-const level=$('level-filter'),sem=$('semester-filter'),module=$('module-filter');
-function getStore(key,fallback){try{const s=localStorage.getItem(key);return s?JSON.parse(s):fallback}catch{return fallback}}
-function setStore(key,x){try{localStorage.setItem(key,JSON.stringify(x))}catch{}}
-const raw=getStore('arena-v6-character',getStore('arena-v5-character',null));
-const choices={base:characterIds.includes(raw?.base)?raw.base:'mariam',style:Object.keys(styleNames).includes(raw?.style)?raw.style:'ink',tone:tones[raw?.tone]?raw.tone:'mint',badge:['✦','⚡','♥','★',''].includes(raw?.badge)?raw.badge:'✦'};
-let saved={...choices};
-function showPage(target){page=target;document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!==`page-${target}`);document.querySelectorAll('.nav-link').forEach(b=>{let yes=b.dataset.page===target;b.classList.toggle('active',yes);if(yes)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});window.scrollTo(0,0);if(target==='wins')renderWins();}
-function getRankings(){if(liveRows!==null)return liveRows;const seed=(Number(level.value)-5)*2+(Number(sem.value)-1)+(mode==='module'?Number(module.value)+1:0);let leads=athletes.slice(0,3);if(seed!==0){const shift=((seed%3)+3)%3;leads=[...leads.slice(shift),...leads.slice(0,shift)]}const rest=athletes.slice(3);const shift=((seed%rest.length)+rest.length)%rest.length;return [...leads,...rest.slice(shift),...rest.slice(0,shift)]}
-function rankingRender(){const a=getRankings();if(liveRows!==null&&a.length<3){document.querySelector('.podium-zone').hidden=true;$('ranking-rows').replaceChildren();$('sheet-subtitle').textContent='Awaiting an approved leaderboard publication.';return;}document.querySelector('.podium-zone').hidden=false;$('podium-label').textContent=`LEVEL ${level.value} / SEM ${sem.value} / ${mode==='module'?`MODULE ${window.ArenaV6Server?module.value:['A','B','C'][+module.value]}`:'TOP 3'}`;$('sheet-subtitle').textContent=mode==='module'?`Module ${window.ArenaV6Server?module.value:['A','B','C'][+module.value]} · approved top ten`:'Seven more names. One leaderboard.';
- [1,2,3].forEach((rank,i)=>{const e=$(`art-${rank}`);e.src=art(a[i].avatar,a[i].style||'ink');e.alt=`Illustrated avatar for ${a[i].name}, rank ${rank}`;$(`name-${rank}`).textContent=a[i].name});
- const rows=$('ranking-rows');rows.replaceChildren();a.slice(3,10).forEach((p,i)=>{const row=document.createElement('li');row.className='rank-row'+(liveRows===null&&p.name==='Laila'?' you':'');const pos=document.createElement('b');pos.textContent=String(i+4).padStart(2,'0');const portrait=document.createElement('span');portrait.className='pic';const image=document.createElement('img');const demo=liveRows===null&&p.name==='Laila';image.src=demo&&liveRows===null?art(saved.base,saved.style):(p.style==='cartoon3d'?`assets/characters/${p.avatar}-3d-face.jpg`:face(p.avatar));image.alt='';if(demo){image.style.objectFit='contain';image.style.objectPosition='center top';portrait.style.background=tones[saved.tone];}portrait.append(image);if(demo&&saved.badge){const s=document.createElement('span');s.className='avatar-stamp';s.textContent=saved.badge;portrait.appendChild(s)}const name=document.createElement('span');name.className='person';name.textContent=p.name;if(demo){const you=document.createElement('span');you.className='you-tag';you.textContent='DEMO';name.append(you)}const arrow=document.createElement('span');arrow.className='arrow';arrow.textContent='›';row.append(pos,portrait,name,arrow);rows.appendChild(row)});$('nav-portrait').src=art(saved.base,saved.style);$('nav-portrait').style.objectFit='contain';document.querySelector('.mini-photo').style.background=tones[saved.tone]}
-function setMode(next){mode=next;['semester','module'].forEach(m=>{const yes=mode===m;$(`tab-${m}`).classList.toggle('active',yes);$(`tab-${m}`).setAttribute('aria-pressed',String(yes))});$('module-wrap').hidden=mode!=='module';rankingRender();document.dispatchEvent(new CustomEvent('arena-board-change'))}
-function createPickerOptions(){const bases=$('base-options');bases.replaceChildren();characterIds.forEach((id,i)=>{const b=document.createElement('button');b.className='base-btn';b.dataset.base=id;const im=document.createElement('img');im.src=art(id,choices.style);im.alt='';const prev=document.createElement('span');prev.className='base-preview';prev.append(im);const label=document.createElement('span');label.className='base-name';label.textContent=characterNames[i];b.append(prev,label);b.addEventListener('click',()=>{choices.base=id;renderStudio()});bases.append(b)});
- const styles=$('style-options');styles.replaceChildren();Object.entries(styleNames).forEach(([style,name])=>{const b=document.createElement('button');b.className='style-option';b.dataset.style=style;const im=document.createElement('img');im.src=art('mariam',style);im.alt='';const t=document.createElement('span');t.textContent=name;b.append(im,t);b.addEventListener('click',()=>{choices.style=style;renderStudio()});styles.append(b)});
- const colorGroup=document.querySelector('.swatches');colorGroup.replaceChildren();Object.entries(tones).forEach(([name,color])=>{const b=document.createElement('button');b.className='swatch';b.dataset.tone=name;b.style.background=color;b.setAttribute('aria-label',`${name} backdrop`);b.addEventListener('click',()=>{choices.tone=name;renderStudio()});colorGroup.append(b)});
- document.querySelectorAll('.badge-choice').forEach(el=>el.addEventListener('click',()=>{choices.badge=el.dataset.badge;renderStudio()}));}
-function renderStudio(){$('studio-art').src=art(choices.base,choices.style);$('studio-art').alt=`Illustrated ${choices.base} avatar in ${styleNames[choices.style]} style`;$('studio-stage').dataset.style=choices.style;$('studio-stage').dataset.tone=choices.tone;$('studio-stage').style.background=tones[choices.tone];$('studio-badge').textContent=choices.badge;document.querySelectorAll('.base-btn img').forEach((im,i)=>im.src=art(characterIds[i],choices.style));
- document.querySelectorAll('[data-base]').forEach(b=>{const yes=b.dataset.base===choices.base;b.classList.toggle('selected',yes);b.setAttribute('aria-pressed',String(yes))});document.querySelectorAll('[data-style]').forEach(b=>{const yes=b.dataset.style===choices.style;b.classList.toggle('selected',yes);b.setAttribute('aria-pressed',String(yes))});document.querySelectorAll('.swatch').forEach(b=>{const yes=b.dataset.tone===choices.tone;b.classList.toggle('selected',yes);b.setAttribute('aria-pressed',String(yes))});document.querySelectorAll('.badge-choice').forEach(b=>{const yes=b.dataset.badge===choices.badge;b.classList.toggle('selected',yes);b.setAttribute('aria-pressed',String(yes))});$('save-status').textContent=''}
-// Campus Wins. The demo stores fictional posts and one reaction per browser per post.
-const seedPosts=[{id:'win1',author:'Mariam',char:'mariam',category:'academic',type:'top3',note:'First time reaching the podium!',created:'2h ago',counts:[42,18,11]},{id:'win2',author:'Salma',char:'habiba2',category:'consistency',type:'streak',note:'Five teaching weeks in a row. Keeping it going.',created:'1 day ago',counts:[37,24,9]},{id:'win3',author:'Omar',char:'omar',category:'community',type:'helped',note:'Loved preparing with our study group this week.',created:'2 days ago',counts:[22,39,6]},{id:'win4',author:'Youssef',char:'youssef',category:'academic',type:'project',note:'Finally finished our semester project!',created:'3 days ago',counts:[28,14,16]}];
-const types={top3:{title:'TOP THREE!','icon':'🏆',category:'academic',tone:'gold'},streak:{title:'FIVE-WEEK STREAK!','icon':'🔥',category:'consistency',tone:'coral'},workshop:{title:'WORKSHOP WIN!','icon':'🎯',category:'consistency',tone:'mint'},project:{title:'PROJECT DONE!','icon':'🚀',category:'academic',tone:'blue'},helped:{title:'BETTER TOGETHER!','icon':'✦',category:'community',tone:'mint'}};
-let demoPosts=getStore('arena-v5-demo-posts',[]).filter(p=>p&&types[p.type]&&typeof p.note==='string').slice(0,12);let pending=null;
-const reactions=['❤️','👏','🔥'];let ownReactions=getStore('arena-v5-reactions',{});
-function renderWins(){const feed=$('wins-feed');feed.replaceChildren();const posts=(window.ArenaV6PublicWins!==undefined?window.ArenaV6PublicWins:[...demoPosts,...seedPosts]).filter(p=>filter==='all'||p.category===filter);if(!posts.length){const e=document.createElement('p');e.className='feed-empty';e.textContent='No wins in this category yet.';feed.append(e)}
- posts.forEach(p=>{const type=types[p.type];const box=document.createElement('article');box.className='win-post';const head=document.createElement('header');const pic=document.createElement('span');pic.className='win-avatar';const img=document.createElement('img');img.src=p.style==='cartoon3d'?`assets/characters/${p.char}-3d-face.jpg`:face(p.char);img.alt='';pic.append(img);const details=document.createElement('div');const name=document.createElement('p');name.className='win-author';name.textContent=p.author;const sub=document.createElement('span');sub.className='win-sub';sub.textContent=`${p.created} · ${p.category}`;details.append(name,sub);head.append(pic,details);
- const tile=document.createElement('div');tile.className='win-sticker';tile.dataset.theme=type.tone;const t=document.createElement('div');t.className='sticker-text';t.textContent=type.title;const icon=document.createElement('span');icon.className='sticker-icon';icon.setAttribute('aria-hidden','true');icon.textContent=type.icon;tile.append(t,icon);
- const message=document.createElement('p');message.className='win-message';message.textContent=p.note;const footer=document.createElement('div');footer.className='win-reactions';reactions.forEach((r,i)=>{const b=document.createElement('button');const chosen=ownReactions[p.id]===i;b.className='react-btn'+(chosen?' chosen':'');b.type='button';b.setAttribute('aria-pressed',String(chosen));b.setAttribute('aria-label',`${r} reaction to ${p.author}'s achievement`);b.textContent=`${r} ${p.counts[i]+(chosen?1:0)}`;b.addEventListener('click',()=>{if(window.ArenaV6Server){window.ArenaV6Server.react(p.id,['heart','clap','fire'][i]);return;}if(ownReactions[p.id]===i)delete ownReactions[p.id];else ownReactions[p.id]=i;setStore('arena-v5-reactions',ownReactions);renderWins()});footer.append(b)});box.append(head,tile,message,footer);feed.append(box)})}
-function closeComposer(){$('composer-backdrop').hidden=true;$('open-composer').focus()}
-function openComposer(){$('composer-backdrop').hidden=false;$('achievement-type').focus()}
-function renderPending(){$('pending-panel').hidden=!pending;if(pending)$('pending-description').textContent=`${types[pending.type].title} — ${pending.note||'A new milestone'} (demo account: Laila).`}
-function safeNote(note){const cleaned=note.trim().replace(/\s+/g,' ').slice(0,100);if(/https?:\/\/|www\.|@|[0-9]{6,}/i.test(cleaned))return null;return cleaned}
-$('achievement-form').addEventListener('submit',e=>{e.preventDefault();const type=$('achievement-type').value;const note=safeNote($('achievement-note').value);if(!types[type]||note===null){$('composer-status').textContent='Please remove links, contact details or long number sequences.';return}pending={type,note};$('achievement-form').reset();$('composer-backdrop').hidden=true;renderPending();showPage('wins')});
-$('approve-demo').addEventListener('click',()=>{if(!pending)return;const newPost={id:`local-${Date.now()}`,author:'Laila (demo)',char:saved.base,category:types[pending.type].category,type:pending.type,note:pending.note||'Celebrating a new milestone!',created:'just now',counts:[0,0,0]};demoPosts.unshift(newPost);demoPosts=demoPosts.slice(0,12);setStore('arena-v5-demo-posts',demoPosts);pending=null;renderPending();filter='all';setFilter('all');renderWins()});
-function setFilter(f){filter=f;document.querySelectorAll('.wins-filter').forEach(x=>{const active=x.dataset.filter===filter;x.classList.toggle('current',active);x.setAttribute('aria-pressed',String(active))});renderWins()}
-// bindings
-$('tab-semester').addEventListener('click',()=>setMode('semester'));$('tab-module').addEventListener('click',()=>setMode('module'));[level,sem,module].forEach(x=>x.addEventListener('change',()=>{rankingRender();document.dispatchEvent(new CustomEvent('arena-board-change'))}));
-document.querySelectorAll('.nav-link').forEach(x=>x.addEventListener('click',()=>showPage(x.dataset.page)));$('profile-link').addEventListener('click',()=>showPage('avatar'));$('create-button').addEventListener('click',()=>showPage('avatar'));$('see-wins').addEventListener('click',()=>showPage('wins'));
-$('save-character').addEventListener('click',()=>{if(window.ArenaV6Server){window.ArenaV6Server.saveAvatar({...choices});return;}saved={...choices};setStore('arena-v6-character',saved);$('save-status').textContent='Demo character saved in this browser. Check Laila on the leaderboard.';rankingRender()});
-$('open-composer').addEventListener('click',openComposer);$('close-composer').addEventListener('click',closeComposer);$('composer-backdrop').addEventListener('click',e=>{if(e.target===$('composer-backdrop'))closeComposer()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('composer-backdrop').hidden)closeComposer()});document.querySelectorAll('.wins-filter').forEach(b=>b.addEventListener('click',()=>setFilter(b.dataset.filter)));
-window.ArenaV6={getChoices:()=>({...choices}),setSavedAvatar:(v)=>{if(!v||!characterIds.includes(v.base)||!styleNames[v.style])return;choices.base=v.base;choices.style=v.style;choices.tone=tones[v.tone]?v.tone:'mint';choices.badge=['✦','⚡','♥','★',''].includes(v.badge)?v.badge:'✦';saved={...choices};renderStudio();rankingRender();},setRows:(rows)=>{liveRows=rows;rankingRender()},renderWins,filters:()=>({level:level.value,semester:sem.value,mode,module:module.value,group:$('group-filter')?.value||'core'}),status:(v)=>{$('save-status').textContent=v}};createPickerOptions();rankingRender();renderStudio();renderWins();
+  const $ = (id) => document.getElementById(id);
+  const api = window.AcademicArenaDataAccess.createArenaDataAccess();
+  const mode = api.mode;
+  const characterIds = ["omar", "mariam", "youssef", "amara", "tariq", "habiba2", "malek", "nour2", "zein"];
+  const characterLabels = ["WAVE", "BOLD", "CHILL", "SPARK", "CASUAL", "BRAVE", "SUNNY", "CREATIVE", "CALM"];
+  const styles = { ink: "COMIC ORIGINAL", cartoon3d: "3D CARTOON" };
+  const tones = ["mint", "coral", "gold", "paper", "blue", "lilac"];
+  const badges = ["✦", "⚡", "♥", "★", ""];
+  const artwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d" : "ink"}.png`;
+  const faceArtwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d-face.jpg" : "face.png"}`;
+  const templates = Object.freeze({
+    top3: { title: "TOP THREE!", icon: "🏆", category: "academic", tone: "gold" },
+    workshop: { title: "WORKSHOP WIN!", icon: "🎯", category: "consistency", tone: "mint" },
+    project: { title: "PROJECT DONE!", icon: "🚀", category: "academic", tone: "blue" },
+    helped: { title: "BETTER TOGETHER!", icon: "✦", category: "community", tone: "mint" },
+  });
+  const reactionTypes = ["heart", "clap", "fire"];
+  const reactionIcons = ["❤️", "👏", "🔥"];
+  const level = $("level-filter");
+  const semester = $("semester-filter");
+  const group = $("group-filter");
+  const module = $("module-filter");
+  const boardState = { kind: "semester", groups: [], modules: {}, selectedCategory: "all" };
+  let boardSequence = 0;
+  let catalogSequence = 0;
+  let winsSequence = 0;
+  let currentPage = "leaderboard";
+  let session = { authenticated: false };
+  let pendingSubmission = null;
+  let previewPosts = [];
+  let selectedCategory = "all";
+  let choices = { base: "amara", style: "ink", tone: "mint", badge: "✦" };
+
+  function showPage(target) {
+    currentPage = target;
+    document.querySelectorAll(".page").forEach((section) => {
+      section.hidden = section.id !== `page-${target}`;
+    });
+    document.querySelectorAll(".nav-link").forEach((button) => {
+      const active = button.dataset.page === target;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    window.scrollTo(0, 0);
+    if (target === "wins") void loadWins();
+  }
+
+  function announce(id, message, state = "info") {
+    const target = $(id);
+    target.textContent = message;
+    target.dataset.state = state;
+  }
+
+  function updateFilterButtons() {
+    for (const kind of ["semester", "module"]) {
+      const active = boardState.kind === kind;
+      $(`tab-${kind}`).classList.toggle("active", active);
+      $(`tab-${kind}`).setAttribute("aria-pressed", String(active));
+    }
+    $("module-wrap").hidden = boardState.kind !== "module";
+  }
+
+  function currentFilters() {
+    return {
+      level: level.value,
+      semester: semester.value,
+      group: group.value,
+      kind: boardState.kind,
+      module: boardState.kind === "module" ? module.value : "",
+    };
+  }
+
+  function replaceOptions(select, items, previous, placeholder) {
+    select.replaceChildren();
+    if (!items.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = placeholder;
+      select.append(option);
+      select.disabled = true;
+      return;
+    }
+    for (const item of items) {
+      const option = document.createElement("option");
+      option.value = item.key;
+      option.textContent = item.label;
+      select.append(option);
+    }
+    select.disabled = false;
+    select.value = items.some((item) => item.key === previous) ? previous : items[0].key;
+  }
+
+  async function loadCatalog() {
+    const sequence = ++catalogSequence;
+    const previousGroup = group.value;
+    const previousModule = module.value;
+    group.disabled = true;
+    module.disabled = true;
+    const result = await api.public.getCatalog({ level: level.value, semester: semester.value });
+    if (sequence !== catalogSequence) return;
+    if (result.state === "unavailable") {
+      boardState.groups = [];
+      boardState.modules = {};
+      replaceOptions(group, [], "", "Cohorts unavailable");
+      replaceOptions(module, [], "", "Modules unavailable");
+      await loadLeaderboard();
+      return;
+    }
+    boardState.groups = result.groups;
+    boardState.modules = result.modules;
+    replaceOptions(group, result.groups, previousGroup, "No cohorts available");
+    setModules(previousModule);
+    await loadLeaderboard();
+  }
+
+  function setModules(previous = "") {
+    const available = boardState.modules[group.value] || [];
+    replaceOptions(module, available, previous, "No modules available");
+  }
+
+  function renderBoard(rows) {
+    const podium = document.querySelector(".podium-zone");
+    const sheet = document.querySelector(".rank-sheet");
+    const list = $("ranking-rows");
+    list.replaceChildren();
+    podium.hidden = rows.length < 3;
+    sheet.hidden = rows.length < 3;
+    if (rows.length < 3) return;
+
+    const selectedModule = (boardState.modules[group.value] || []).find((item) => item.key === module.value);
+    const scope = boardState.kind === "module" ? selectedModule?.label || "Module" : "TOP 3";
+    $("podium-label").textContent = `LEVEL ${level.value} / SEM ${semester.value} / ${scope}`;
+    $("sheet-subtitle").textContent = boardState.kind === "module"
+      ? `${selectedModule?.label || "Module"} · approved top ten`
+      : "Seven more names. One leaderboard.";
+    for (let position = 1; position <= 3; position += 1) {
+      const row = rows.find((item) => item.position === position);
+      const image = $(`art-${position}`);
+      const name = $(`name-${position}`);
+      if (!row) {
+        image.removeAttribute("src");
+        image.alt = "";
+        name.textContent = "—";
+        continue;
+      }
+      image.src = artwork(row.avatar, row.style);
+      image.alt = `Illustrated character for rank ${position}`;
+      name.textContent = row.name;
+    }
+    for (const rowData of rows.filter((row) => row.position > 3).slice(0, 7)) {
+      const row = document.createElement("li");
+      row.className = "rank-row";
+      const position = document.createElement("b");
+      position.textContent = String(rowData.position).padStart(2, "0");
+      const portrait = document.createElement("span");
+      portrait.className = "pic";
+      const image = document.createElement("img");
+      image.src = faceArtwork(rowData.avatar, rowData.style);
+      image.alt = "";
+      portrait.append(image);
+      const name = document.createElement("span");
+      name.className = "person";
+      name.textContent = rowData.name;
+      const arrow = document.createElement("span");
+      arrow.className = "arrow";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.textContent = "›";
+      row.append(position, portrait, name, arrow);
+      list.append(row);
+    }
+  }
+
+  async function loadLeaderboard() {
+    const sequence = ++boardSequence;
+    const podium = document.querySelector(".podium-zone");
+    podium.hidden = true;
+    document.querySelector(".rank-sheet").hidden = true;
+    $("ranking-rows").replaceChildren();
+    announce("ranking-status", "Loading approved standings…", "loading");
+    if (!group.value) {
+      announce("ranking-status", "Standings are temporarily unavailable. Please try again later.", "unavailable");
+      return;
+    }
+    if (boardState.kind === "module" && !module.value) {
+      announce("ranking-status", "No modules are available for this selection.", "empty");
+      return;
+    }
+    const result = await api.public.getLeaderboard(currentFilters());
+    if (sequence !== boardSequence) return;
+    if (result.state === "unavailable") {
+      announce("ranking-status", "Standings are temporarily unavailable. Please try again later.", "unavailable");
+      return;
+    }
+    if (result.state === "empty" || !result.rows.length) {
+      announce("ranking-status", "No approved standings are available for this selection yet.", "empty");
+      return;
+    }
+    if (result.rows.length < 3) {
+      announce("ranking-status", "Not enough approved standings are available for a podium yet.", "empty");
+      return;
+    }
+    renderBoard(result.rows);
+    announce("ranking-status", "Showing the approved top ten standings.", "ready");
+  }
+
+  function updateCharacterControls() {
+    document.querySelectorAll(".base-btn").forEach((button) => {
+      const active = button.dataset.base === choices.base;
+      button.classList.toggle("selected", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll(".style-option").forEach((button) => {
+      const active = button.dataset.style === choices.style;
+      button.classList.toggle("selected", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll(".swatch").forEach((button) => {
+      const active = button.dataset.tone === choices.tone;
+      button.classList.toggle("selected", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll(".badge-choice").forEach((button) => {
+      const active = button.dataset.badge === choices.badge;
+      button.classList.toggle("selected", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function renderStudio() {
+    const stage = $("studio-stage");
+    stage.dataset.style = choices.style;
+    stage.dataset.tone = choices.tone;
+    $("studio-art").src = artwork(choices.base, choices.style);
+    $("studio-art").alt = `Illustrated character in ${styles[choices.style]} style`;
+    $("studio-badge").textContent = choices.badge;
+    $("nav-portrait").src = artwork(choices.base, choices.style);
+    document.querySelector(".mini-photo").dataset.tone = choices.tone;
+    $("base-options").querySelectorAll("img").forEach((image) => {
+      image.src = artwork(image.dataset.character, choices.style);
+    });
+    updateCharacterControls();
+  }
+
+  function createPickerOptions() {
+    const bases = $("base-options");
+    for (let index = 0; index < characterIds.length; index += 1) {
+      const id = characterIds[index];
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "base-btn";
+      button.dataset.base = id;
+      const preview = document.createElement("span");
+      preview.className = "base-preview";
+      const image = document.createElement("img");
+      image.dataset.character = id;
+      image.alt = "";
+      preview.append(image);
+      const label = document.createElement("span");
+      label.className = "base-name";
+      label.textContent = characterLabels[index];
+      button.append(preview, label);
+      button.addEventListener("click", () => {
+        choices.base = id;
+        renderStudio();
+      });
+      bases.append(button);
+    }
+
+    const stylesContainer = $("style-options");
+    for (const [key, label] of Object.entries(styles)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "style-option";
+      button.dataset.style = key;
+      const image = document.createElement("img");
+      image.src = artwork("amara", key);
+      image.alt = "";
+      const name = document.createElement("span");
+      name.textContent = label;
+      button.append(image, name);
+      button.addEventListener("click", () => {
+        choices.style = key;
+        renderStudio();
+      });
+      stylesContainer.append(button);
+    }
+
+    for (const button of document.querySelectorAll(".swatch")) {
+      button.addEventListener("click", () => {
+        choices.tone = button.dataset.tone;
+        renderStudio();
+      });
+    }
+    for (const button of document.querySelectorAll(".badge-choice")) {
+      button.addEventListener("click", () => {
+        choices.badge = button.dataset.badge;
+        renderStudio();
+      });
+    }
+  }
+
+  async function loadSavedCharacter() {
+    try {
+      const saved = await api.student.getMyCharacter();
+      if (saved) choices = { ...choices, ...saved };
+    } catch {
+      if (mode === "production") $("save-note").textContent = "Sign in with your staff-issued account to load your saved character.";
+    }
+    renderStudio();
+  }
+
+  function openLogin() {
+    $("login-backdrop").hidden = false;
+    $("login-status").textContent = "";
+    $("login-form").hidden = session.authenticated;
+    $("account-panel").hidden = !session.authenticated;
+    if (session.authenticated) $("account-status").textContent = "You are signed in to your character account.";
+    else $("login-username").focus();
+  }
+
+  function closeLogin() {
+    $("login-backdrop").hidden = true;
+    $("account-entry").focus();
+  }
+
+  function showLoginRequired(message) {
+    $("login-status").textContent = message;
+    openLogin();
+    $("login-status").textContent = message;
+  }
+
+  async function renderSession() {
+    try {
+      session = await api.auth.getSession();
+    } catch {
+      session = { authenticated: false };
+    }
+    $("account-entry").textContent = session.authenticated ? "ACCOUNT" : "SIGN IN";
+  }
+
+  function renderWinCard(post) {
+    const template = templates[post.type];
+    if (!template) return null;
+    const card = document.createElement("article");
+    card.className = "win-post";
+    const header = document.createElement("header");
+    const avatar = document.createElement("span");
+    avatar.className = "win-avatar";
+    const image = document.createElement("img");
+    image.src = faceArtwork(post.avatar, post.style);
+    image.alt = "";
+    avatar.append(image);
+    const details = document.createElement("div");
+    const author = document.createElement("p");
+    author.className = "win-author";
+    author.textContent = post.author;
+    const subtitle = document.createElement("span");
+    subtitle.className = "win-sub";
+    subtitle.textContent = `${post.created} · ${post.category}`;
+    details.append(author, subtitle);
+    header.append(avatar, details);
+
+    const tile = document.createElement("div");
+    tile.className = "win-sticker";
+    tile.dataset.theme = template.tone;
+    const title = document.createElement("div");
+    title.className = "sticker-text";
+    title.textContent = template.title;
+    const icon = document.createElement("span");
+    icon.className = "sticker-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = template.icon;
+    tile.append(title, icon);
+
+    const reactions = document.createElement("div");
+    reactions.className = "win-reactions";
+    reactionTypes.forEach((reaction, index) => {
+      const chosen = post.myReaction === reaction;
+      const button = document.createElement("button");
+      button.className = `react-btn${chosen ? " chosen" : ""}`;
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(chosen));
+      button.setAttribute("aria-label", `${reactionIcons[index]} reaction to an achievement`);
+      button.textContent = `${reactionIcons[index]} ${post.counts[index]}`;
+      button.addEventListener("click", async () => {
+        if (mode === "production" && !session.authenticated) {
+          showLoginRequired("Sign in with your staff-issued account to react.");
+          return;
+        }
+        try {
+          await api.student.setReaction(post.id, reaction);
+          await loadWins();
+        } catch {
+          announce("wins-status", "Your reaction could not be saved. Please sign in and try again.", "unavailable");
+        }
+      });
+      reactions.append(button);
+    });
+    card.append(header, tile, reactions);
+    return card;
+  }
+
+  async function loadWins() {
+    const sequence = ++winsSequence;
+    announce("wins-status", "Loading approved Campus Wins…", "loading");
+    const result = await api.public.getWins(selectedCategory);
+    if (sequence !== winsSequence) return;
+    const feed = $("wins-feed");
+    feed.replaceChildren();
+    if (result.state === "unavailable") {
+      announce("wins-status", "Campus Wins are temporarily unavailable. Please try again later.", "unavailable");
+      return;
+    }
+    const posts = [...previewPosts, ...result.posts];
+    for (const post of posts) {
+      const card = renderWinCard(post);
+      if (card) feed.append(card);
+    }
+    if (!posts.length) {
+      announce("wins-status", "No approved wins are available in this category yet.", "empty");
+      return;
+    }
+    announce("wins-status", "Showing approved Campus Wins.", "ready");
+  }
+
+  function setCategory(category) {
+    selectedCategory = category;
+    document.querySelectorAll(".wins-filter").forEach((button) => {
+      const active = button.dataset.filter === category;
+      button.classList.toggle("current", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    void loadWins();
+  }
+
+  function openComposer() {
+    if (mode === "production" && !session.authenticated) {
+      showLoginRequired("Sign in with your staff-issued account to submit a milestone.");
+      return;
+    }
+    $("composer-status").textContent = "";
+    $("composer-backdrop").hidden = false;
+    $("achievement-type").focus();
+  }
+
+  async function submitAchievement(event) {
+    event.preventDefault();
+    const type = $("achievement-type").value;
+    try {
+      const result = await api.student.submitAchievement({ type });
+      pendingSubmission = { type, id: result.id };
+      $("composer-backdrop").hidden = true;
+      $("pending-description").textContent = `${templates[type].title} · awaiting staff review.`;
+      $("approve-demo").hidden = mode !== "demo";
+      $("pending-panel").hidden = false;
+      showPage("wins");
+      announce("wins-status", "Your milestone was submitted for staff review.", "ready");
+    } catch {
+      $("composer-status").textContent = "The submission could not be saved. Please sign in and try again.";
+    }
+  }
+
+  async function approveDemoSubmission() {
+    if (mode !== "demo" || !pendingSubmission) return;
+    const template = templates[pendingSubmission.type];
+    previewPosts.unshift({
+      id: pendingSubmission.id,
+      author: "You (demo)",
+      avatar: choices.base,
+      style: choices.style,
+      type: pendingSubmission.type,
+      category: template.category,
+      created: "just now",
+      counts: [0, 0, 0],
+      myReaction: null,
+    });
+    previewPosts = previewPosts.slice(0, 10);
+    pendingSubmission = null;
+    $("pending-panel").hidden = true;
+    setCategory("all");
+  }
+
+  async function saveCharacter() {
+    if (mode === "production" && !session.authenticated) {
+      showLoginRequired("Sign in with your staff-issued account to save your character.");
+      return;
+    }
+    try {
+      await api.student.saveCharacter(choices);
+      $("save-status").textContent = mode === "demo"
+        ? "Fictional character saved in this browser."
+        : "Character saved to your account.";
+    } catch {
+      $("save-status").textContent = "Your character could not be saved. Sign in and try again.";
+    }
+  }
+
+  function closeComposer() {
+    $("composer-backdrop").hidden = true;
+    $("open-composer").focus();
+  }
+
+  function bindEvents() {
+    $("tab-semester").addEventListener("click", () => {
+      boardState.kind = "semester";
+      updateFilterButtons();
+      void loadLeaderboard();
+    });
+    $("tab-module").addEventListener("click", () => {
+      boardState.kind = "module";
+      updateFilterButtons();
+      void loadLeaderboard();
+    });
+    level.addEventListener("change", () => void loadCatalog());
+    semester.addEventListener("change", () => void loadCatalog());
+    group.addEventListener("change", () => {
+      setModules();
+      void loadLeaderboard();
+    });
+    module.addEventListener("change", () => void loadLeaderboard());
+    document.querySelectorAll(".nav-link").forEach((button) => button.addEventListener("click", () => showPage(button.dataset.page)));
+    $("profile-link").addEventListener("click", () => showPage("avatar"));
+    $("create-button").addEventListener("click", () => showPage("avatar"));
+    $("see-wins").addEventListener("click", () => showPage("wins"));
+    $("save-character").addEventListener("click", () => void saveCharacter());
+    $("open-composer").addEventListener("click", openComposer);
+    $("close-composer").addEventListener("click", closeComposer);
+    $("composer-backdrop").addEventListener("click", (event) => {
+      if (event.target === $("composer-backdrop")) closeComposer();
+    });
+    $("achievement-form").addEventListener("submit", (event) => void submitAchievement(event));
+    $("approve-demo").addEventListener("click", () => void approveDemoSubmission());
+    document.querySelectorAll(".wins-filter").forEach((button) => button.addEventListener("click", () => setCategory(button.dataset.filter)));
+    $("account-entry").addEventListener("click", openLogin);
+    $("close-login").addEventListener("click", closeLogin);
+    $("login-backdrop").addEventListener("click", (event) => {
+      if (event.target === $("login-backdrop")) closeLogin();
+    });
+    $("login-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("login-status").textContent = "Signing in…";
+      try {
+        session = await api.auth.signIn({
+          username: $("login-username").value,
+          password: $("login-password").value,
+        });
+        if (!session.authenticated) throw new Error("Sign-in failed");
+        $("login-form").reset();
+        $("account-entry").textContent = "ACCOUNT";
+        $("login-form").hidden = true;
+        $("account-panel").hidden = false;
+        $("account-status").textContent = "You are signed in to your character account.";
+        if (session.user.mustChangePassword) $("account-status").textContent += " Change your initial password before continuing.";
+      } catch {
+        $("login-status").textContent = "Could not sign you in. Check your details or try again later.";
+      }
+    });
+    $("change-password-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const oldPassword = $("old-password").value;
+      const newPassword = $("new-password").value;
+      try {
+        await api.auth.changePassword(oldPassword, newPassword);
+        $("change-password-form").reset();
+        $("account-status").textContent = "Password changed.";
+      } catch {
+        $("account-status").textContent = "Password change could not be completed. Check the new password or try again later.";
+      }
+    });
+    $("logout-btn").addEventListener("click", async () => {
+      try {
+        await api.auth.signOut();
+        session = { authenticated: false };
+        $("account-entry").textContent = "SIGN IN";
+        $("account-panel").hidden = true;
+        $("login-form").hidden = false;
+        $("login-status").textContent = "You are signed out.";
+      } catch {
+        $("account-status").textContent = "Sign-out could not be confirmed. Close this browser session and try again.";
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        if (!$("composer-backdrop").hidden) closeComposer();
+        if (!$("login-backdrop").hidden) closeLogin();
+      }
+    });
+  }
+
+  async function start() {
+    document.documentElement.dataset.appMode = mode;
+    $("mode-stamp").hidden = mode !== "demo";
+    $("approve-demo").hidden = mode !== "demo";
+    if (mode === "production") $("save-note").textContent = "Your character is private to your account. Staff-issued sign-in is required to save changes.";
+    createPickerOptions();
+    renderStudio();
+    updateFilterButtons();
+    bindEvents();
+    await Promise.all([loadCatalog(), loadWins(), renderSession(), loadSavedCharacter()]);
+    document.documentElement.dataset.appReady = "true";
+  }
+
+  void start();
 })();

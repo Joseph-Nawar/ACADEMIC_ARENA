@@ -27,11 +27,14 @@ await copyFile(join(root, "public", "_headers"), join(outDir, "_headers"));
 
 const sourceAssets = join(root, "assets");
 const targetAssets = join(outDir, "assets");
+const packagedRootAssets = new Set(["app.css", "app.js", "data-access.js", "eue-wordmark-draft.svg"]);
 await mkdir(targetAssets, { recursive: true });
 await cp(sourceAssets, targetAssets, {
   recursive: true,
   filter(source) {
-    return !source.endsWith(join("assets", "server-adapter.js"));
+    const relative = source.slice(sourceAssets.length + 1).split(sep).join("/");
+    return !relative || relative === "characters" || relative.startsWith("characters/") ||
+      packagedRootAssets.has(relative);
   },
 });
 await writeFile(

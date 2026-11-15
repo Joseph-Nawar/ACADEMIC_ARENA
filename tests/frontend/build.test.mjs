@@ -32,6 +32,37 @@ test("production_build_excludes_fixtures_and_pilot_backend", () => {
     assert.equal(existsSync(join(result.outDir, "fixtures")), false);
     assert.equal(existsSync(join(result.outDir, "data")), false);
     assert.equal(existsSync(join(result.outDir, "assets", "server-adapter.js")), false);
+    assert.equal(existsSync(join(result.outDir, "assets", "source")), false);
+    for (const legacy of ["laila.jpg", "ahmed.jpg", "mariam.png", "omar.png", "youssef.png"]) {
+      assert.equal(existsSync(join(result.outDir, "assets", legacy)), false);
+    }
+  } finally {
+    rmSync(result.outDir, { recursive: true, force: true });
+  }
+});
+
+test("pages_bundle_includes_eue_branding_and_both_approved_character_families", () => {
+  const result = build("production");
+  try {
+    for (const file of [
+      "assets/eue-wordmark-draft.svg",
+      "assets/characters/amara-ink.png",
+      "assets/characters/amara-3d.png",
+      "assets/characters/amara-face.png",
+      "assets/characters/amara-3d-face.jpg",
+    ]) assert.equal(existsSync(join(result.outDir, file)), true, file + " must be in the Pages bundle");
+  } finally {
+    rmSync(result.outDir, { recursive: true, force: true });
+  }
+});
+
+test("production_static_assets_exclude_fictional_student_records", () => {
+  const result = build("production");
+  try {
+    const publicText = ["index.html", "assets/app.js", "assets/data-access.js", "assets/runtime-config.js"]
+      .map((file) => readFileSync(join(result.outDir, file), "utf8"))
+      .join("\n");
+    assert.doesNotMatch(publicText, /\b(Mariam|Omar|Youssef|Salma|Ahmed|Nour|Karim|Laila|Tarek|Habiba)\b/);
   } finally {
     rmSync(result.outDir, { recursive: true, force: true });
   }

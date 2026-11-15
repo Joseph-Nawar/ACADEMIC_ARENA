@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import "../../assets/data-access.js";
 
 const { createArenaDataAccess } = globalThis.AcademicArenaDataAccess;
+const root = fileURLToPath(new URL("../../", import.meta.url));
+const demoFixture = JSON.parse(readFileSync(join(root, "fixtures/demo/academic-arena.json"), "utf8"));
 
 function response(data, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => data };
@@ -75,6 +80,42 @@ test("production_failure_never_falls_back_to_fixture", async () => {
   assert.deepEqual(requests, ["/api/public/leaderboards?level=5&semester=1&group=core&kind=semester&module="]);
 });
 
+test("missing_runtime_config_defaults_to_production_without_loading_fixtures", async () => {
+  const previous = globalThis.ARENA_CONFIG;
+  delete globalThis.ARENA_CONFIG;
+  const requests = [];
+  try {
+    const api = createArenaDataAccess({
+      fetchImpl: async (url) => {
+        requests.push(String(url));
+        throw new Error("backend unavailable");
+      },
+    });
+    const result = await api.public.getLeaderboard({
+      level: "5", semester: "1", group: "core", kind: "semester", module: "",
+    });
+    assert.equal(api.mode, "production");
+    assert.equal(result.state, "unavailable");
+    assert.equal(requests.every((url) => url.startsWith("/api/")), true);
+  } finally {
+    if (previous === undefined) delete globalThis.ARENA_CONFIG;
+    else globalThis.ARENA_CONFIG = previous;
+  }
+});
+
+test("empty_public_responses_are_distinct_from_backend_unavailability", async () => {
+  const api = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async () => response({ rows: [], posts: [] }),
+  });
+  const board = await api.public.getLeaderboard({
+    level: "5", semester: "1", group: "core", kind: "semester", module: "",
+  });
+  const wins = await api.public.getWins("all");
+  assert.deepEqual(board, { state: "empty", publishedAt: null, rows: [] });
+  assert.deepEqual(wins, { state: "empty", posts: [] });
+});
+
 test("campus_wins_public_shape_excludes_private_and_free_text_fields", async () => {
   const api = createArenaDataAccess({
     mode: "production",
@@ -106,6 +147,7 @@ test("campus_wins_public_shape_excludes_private_and_free_text_fields", async () 
     category: "academic",
     created: "2026-11-15",
     counts: [2, 3, 4],
+    myReaction: null,
   }]);
 });
 
@@ -118,15 +160,10 @@ test("login_uses_same_origin_and_returns_only_sanitized_session", async () => {
       return response({
         authenticated: true,
         user: {
-          displayName: "Fictional Student",
           role: "student",
           mustChangePassword: true,
-          email: "fictional@student.invalid",
-          id: "private-user-id",
         },
         csrfToken: "csrf-fixture-token",
-        access_token: "fake-provider-token",
-        refresh_token: "fake-provider-refresh",
       });
     },
   });
@@ -144,10 +181,32 @@ test("login_uses_same_origin_and_returns_only_sanitized_session", async () => {
   });
   assert.deepEqual(result, {
     authenticated: true,
-    user: { displayName: "Fictional Student", role: "student", mustChangePassword: true },
+    user: { role: "student", mustChangePassword: true },
   });
   assert.equal(JSON.stringify(result).includes("email"), false);
   assert.equal(JSON.stringify(result).includes("token"), false);
+  assert.equal(JSON.stringify(observed).includes("@"), false);
+});
+
+test("login_uses_the_same_generic_error_for_unknown_and_throttled_accounts", async () => {
+  async function failureMessage(status) {
+    const api = createArenaDataAccess({
+      mode: "production",
+      fetchImpl: async () => response({}, status),
+    });
+    let caught;
+    try {
+      await api.auth.signIn({ username: "fictional-user", password: "fictional-password" });
+    } catch (error) {
+      caught = error;
+    }
+    assert.ok(caught instanceof Error);
+    assert.equal(caught.message, "Could not sign you in. Check your details or try again later.");
+    return caught.message;
+  }
+
+  assert.equal(await failureMessage(401), "Could not sign you in. Check your details or try again later.");
+  assert.equal(await failureMessage(429), "Could not sign you in. Check your details or try again later.");
 });
 
 test("student_and_staff_writes_do_not_accept_client_roles", async () => {
@@ -183,4 +242,69 @@ test("student_and_staff_writes_do_not_accept_client_roles", async () => {
     temporaryPassword: "fictional-password",
   });
   assert.equal(calls.every((call) => call.options.credentials === "same-origin"), true);
+});
+
+test("demo_avatar_settings_are_owned_by_the_current_preview_account", async () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const api = createArenaDataAccess({
+    mode: "demo",
+    fetchImpl: async () => response(demoFixture),
+    storage,
+  });
+  const avatar = { base: "amara", style: "cartoon3d", tone: "coral", badge: "★" };
+
+  assert.equal(await api.student.getMyCharacter(), null);
+  await api.student.saveCharacter({ ...avatar, role: "admin", account_id: "fictional-other-account" });
+  assert.deepEqual(await api.student.getMyCharacter(), avatar);
+});
+
+test("demo_leaderboard_fixture_changes_with_level_semester_and_module_filters", async () => {
+  const api = createArenaDataAccess({ mode: "demo", fetchImpl: async () => response(demoFixture) });
+  const filters = { level: "5", semester: "1", group: "core", kind: "semester", module: "" };
+  const names = async (overrides = {}) => (await api.public.getLeaderboard({ ...filters, ...overrides }))
+    .rows.map((row) => row.name).join(",");
+  const baseline = await names();
+  const variants = [
+    await names({ level: "4" }),
+    await names({ level: "6" }),
+    await names({ semester: "2" }),
+    await names({ kind: "module", module: "module-a" }),
+    await names({ kind: "module", module: "module-b" }),
+    await names({ kind: "module", module: "module-c" }),
+  ];
+  assert.equal(new Set([baseline, ...variants]).size, 7);
+});
+
+test("demo_reactions_toggle_one_active_reaction_and_update_counts", async () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const api = createArenaDataAccess({
+    mode: "demo",
+    fetchImpl: async () => response(demoFixture),
+    storage,
+  });
+
+  const initial = (await api.public.getWins("all")).posts[0];
+  assert.deepEqual(initial.counts, [42, 18, 11]);
+  await api.student.setReaction("demo-win-1", "heart");
+  const heart = (await api.public.getWins("all")).posts[0];
+  assert.deepEqual(heart.counts, [43, 18, 11]);
+  assert.equal(heart.myReaction, "heart");
+
+  await api.student.setReaction("demo-win-1", "clap");
+  const clap = (await api.public.getWins("all")).posts[0];
+  assert.deepEqual(clap.counts, [42, 19, 11]);
+  assert.equal(clap.myReaction, "clap");
+
+  await api.student.setReaction("demo-win-1", "clap");
+  const cleared = (await api.public.getWins("all")).posts[0];
+  assert.deepEqual(cleared.counts, [42, 18, 11]);
+  assert.equal(cleared.myReaction, null);
 });
