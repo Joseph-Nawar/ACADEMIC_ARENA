@@ -1,0 +1,22 @@
+{
+  "name": "academic-arena",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build:demo": "node scripts/build.mjs --mode demo --allow-demo-output",
+    "build:production": "node scripts/build.mjs --mode production",
+    "preview": "npm run build:demo && wrangler pages dev dist --ip 127.0.0.1 --port 8788",
+    "test": "node --test tests/frontend/*.test.mjs",
+    "test:browser": "npm run build:demo && node scripts/run-browser-smoke.mjs",
+    "check:security": "npm run build:production && python3 scripts/check_secrets.py --root . && python3 scripts/check_secrets.py --root dist --public",
+    "test:security": "python3 -m unittest discover -s tests -p test_check_secrets.py"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1",
+    "wrangler": "4.162.0"
+  }
+}

@@ -1,0 +1,2 @@
+# Starlette's TestClient dependency required by tests/smoke_api.py.
+httpx2==2.16.0

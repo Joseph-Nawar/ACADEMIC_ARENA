@@ -10,5 +10,11 @@ __pycache__/
 *.log
 venv/
 .venv/
+node_modules/
+.wrangler/
+dist/
+playwright-report/
+test-results/
+.test-build-*/
 data/*
 !data/sample-approved-ranks.example.csv

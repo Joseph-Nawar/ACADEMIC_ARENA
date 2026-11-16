@@ -1,6 +1,6 @@
 # Academic Arena V1: free-tier architecture recommendation
 
-- **Status:** M0 recommendation, pending the identity approval gate.
+- **Status:** M1 frontend foundation implemented on a feature branch; authentication architecture approved for fictional development.
 - **Reviewed:** 15 November 2026
 - **Scope:** Architecture only. No production service or real university data is configured.
 
@@ -32,8 +32,7 @@ flowchart LR
   Offline[University-controlled offline preparation\nraw data and rank calculation stay here]
 
   Browser -->|static assets| Pages
-  Browser -->|public allowlisted reads| DB
-  Browser -->|authenticated writes| Edge
+  Browser -->|same-origin allowlisted reads and writes| Edge
   Edge --> Auth
   Edge --> DB
   Staff -->|approved sanitized CSV| Edge
@@ -42,7 +41,7 @@ flowchart LR
 
 ### Public reads
 
-Serve the V6 files as static assets. Read only approved public fields from a published snapshot: academic year, level, semester, approved cohort/module, rank, approved public name, approved avatar preset/family, approved achievement template, and reaction totals. Public responses must not include private join keys or author/reaction account IDs. Apply RLS to every exposed Postgres table and grant only the exact operations needed.
+Serve the V6 files as static assets. The browser calls same-origin API routes; those routes read only approved public fields from a published snapshot: academic year, level, semester, approved cohort/module, rank, approved public name, approved avatar preset/family, approved achievement template, and reaction totals. The server response allowlist is the security boundary; filtering fields in browser JavaScript is only defense in depth. Public responses must not include private join keys or author/reaction account IDs. Apply RLS to every exposed Postgres table and grant only the exact operations needed.
 
 If the database is unavailable, show a clearly dated, approved static ranking snapshot only when the university has approved that exact copy. Disable sign-in, posting, and reactions while offline. Provide a documented urgent snapshot removal and CDN cache purge path. Without an approved snapshot, show a service-unavailable state. Never silently show the fictional demo on a live hostname.
 
@@ -52,7 +51,7 @@ The student login interface remains username and password, with no public sign-u
 
 Students may update only their own avatar preferences and submit eligible approved Campus Wins templates. They cannot write public names, ranks, cohort/module membership, roles, account links, or moderation state. Use server-verified identity plus restrictive RLS, not frontend field hiding.
 
-This design is not approved for implementation yet. See `docs/auth/username-password-feasibility.md`.
+The conditional architecture is approved for fictional-data development. Milestone 1 implements only the browser contract. A same-origin BFF must hold Supabase tokens server-side and return only authentication state, role, and password-change requirement; it must never forward the Auth user object, email, provider IDs, JWTs, or private account mappings. Real institutional emails remain gated on explicit university authorization of their external processing in Supabase. See `docs/auth/username-password-feasibility.md`.
 
 ### Staff operations and publishing
 
@@ -66,7 +65,7 @@ The provider pages currently document:
 
 | Service | Current free allowance or behavior | Practical consequence |
 | --- | --- | --- |
-| GitHub Free | Unlimited private repositories and 2,000 standard-runner minutes/month | Private runner usage draws from included compute and can bill after the allowance if billing is enabled. Keep Actions disabled until additional spending is blocked. Use a university-controlled owner/custodian account before launch. The current repository is private but still owned by a personal GitHub account. |
+| GitHub Free | Unlimited private repositories and 2,000 standard-runner minutes/month | Read-only CI is enabled for validation and has no deployment secrets. Keep its runtime bounded, monitor included minutes, and review account billing controls before exceeding them. Use a university-controlled owner/custodian account before launch. The current repository is private but still owned by a personal GitHub account. |
 | Cloudflare Pages Free | 500 builds/month, up to 20,000 files/site, 25 MiB per file | The V6 static site fits the intended model; check the actual asset bundle before configuring Pages. |
 | Cloudflare Workers / Pages Functions Free | 100,000 requests/day shared across Workers and Pages Functions; 10 ms CPU per invocation | Keep functions small and avoid CPU-heavy password hashing in a Worker without a measured compatibility/performance proof. |
 | Cloudflare D1 Free | 5 million rows read/day, 100,000 rows written/day, 5 GB total storage | A possible auth alternative, but it does not by itself solve the audited username-only authentication requirement. |
@@ -74,6 +73,10 @@ The provider pages currently document:
 | Supabase Free backups | No daily automatic backups listed for Free; daily backups are a paid-plan feature | Require encrypted offsite exports, publication pre-backups, weekly active-term cadence, and a tested restore drill. |
 
 Do not add a credit-card-dependent service, metered paid fallback, paid DNS/domain, SMS, Redis, or persistent compute. Configure provider alerts and spending controls where available, and fail closed when quotas are exhausted. Zero-cost hosting does not promise continuous availability.
+
+Cloudflare's Worker Rate Limiting binding can add route/IP throttling, but its documented counters are approximate and tracked per Cloudflare location. It must not be the only account lockout or submission limit. Milestone 2/3 should combine edge throttling with bounded server-side account counters and atomic database constraints; it must return a generic login error for unknown, incorrect, suspended, and throttled accounts.
+
+Reference: [Cloudflare Workers Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/).
 
 ### Provider references
 
@@ -102,4 +105,4 @@ This is a technical fit review, not legal advice or approval to process universi
 
 ## Milestone boundary
 
-M0 establishes findings and decisions. M1 may adapt only the static V6 frontend and fictional preview after the identity decision is approved. M2 remains blocked until the identity proof, staff MFA enforcement, migrations, and RLS are accepted. M3 and M4 remain separate reviewable milestones. No public deployment or real ranking import is authorized by this document.
+M0 and M1 are complete when this branch passes review. M2 may proceed with fictional identities, a local Supabase stack, and the same-origin BFF; actual institutional email processing requires its separate explicit authorization. M2 must prove session privacy, provisioning, password change/recovery, suspension, staff MFA/AAL2, migrations, and RLS before real accounts. M3 and M4 remain separate reviewable milestones. No public deployment or real ranking import is authorized by this document.

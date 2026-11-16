@@ -1,0 +1,34 @@
+{
+  "mode": "fictional-demo",
+  "publishedAt": "Fictional preview data",
+  "catalog": {
+    "groups": [
+      { "key": "core", "label": "Core module selection" }
+    ],
+    "modules": {
+      "core": [
+        { "key": "module-a", "label": "Module A" },
+        { "key": "module-b", "label": "Module B" },
+        { "key": "module-c", "label": "Module C" }
+      ]
+    }
+  },
+  "students": [
+    { "name": "Mariam", "avatar": "mariam", "style": "ink" },
+    { "name": "Omar", "avatar": "omar", "style": "ink" },
+    { "name": "Youssef", "avatar": "youssef", "style": "ink" },
+    { "name": "Salma", "avatar": "amara", "style": "ink" },
+    { "name": "Ahmed", "avatar": "malek", "style": "ink" },
+    { "name": "Nour", "avatar": "nour2", "style": "ink" },
+    { "name": "Karim", "avatar": "zein", "style": "ink" },
+    { "name": "Laila", "avatar": "habiba2", "style": "cartoon3d" },
+    { "name": "Tarek", "avatar": "tariq", "style": "ink" },
+    { "name": "Habiba", "avatar": "habiba2", "style": "ink" }
+  ],
+  "wins": [
+    { "id": "demo-win-1", "author": "Mariam", "avatar": "mariam", "style": "ink", "type": "top3", "created": "2h ago", "counts": [42, 18, 11] },
+    { "id": "demo-win-2", "author": "Salma", "avatar": "habiba2", "style": "cartoon3d", "type": "workshop", "created": "1 day ago", "counts": [37, 24, 9] },
+    { "id": "demo-win-3", "author": "Omar", "avatar": "omar", "style": "ink", "type": "helped", "created": "2 days ago", "counts": [22, 39, 6] },
+    { "id": "demo-win-4", "author": "Youssef", "avatar": "youssef", "style": "ink", "type": "project", "created": "3 days ago", "counts": [28, 14, 16] }
+  ]
+}
