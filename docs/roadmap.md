@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 0. Audit and architecture | Complete | V6 audited; baseline FastAPI smoke flow passed; free-tier and auth feasibility documented; threat model and migration diff recorded. |
 | 1. Deployable frontend foundation | **Complete** — merged as `01a4808097b545523cd653b39b3c8fa7e397b3cd`; PR #2 reviewed independently and hosted CI passed | Pages build modes with a Cloudflare demo-build guard, fictional-only demo fixtures, production fail-closed states, same-origin data/auth contract, security headers, CI, and local desktop/mobile checks. No public deployment is authorized. |
-| 2. Authentication and database | **In progress** on `m2/auth-database-foundation`; fictional local development only | Same-origin BFF, local Supabase provider tests, private identity mapping, opaque/revocable sessions, persistent rate limits, account lifecycle/recovery, RLS, staff MFA/AAL2. No real identity import or public deployment. |
+| 2. Authentication and database | **Implementation candidate; independent review pending** on `m2/auth-database-foundation`; fictional local development only | Same-origin BFF, private username mapping, opaque/revocable sessions, persistent rate limits, account lifecycle/recovery, owner-derived avatar writes, restrictive RLS, staff TOTP/AAL2. Local Supabase verification passes 98 pgTAP/RLS assertions and 27 live integration tests. Hosted provider configuration, external identity authorization, initial admin bootstrap, and sole-admin factor recovery remain gated. No real identity import or public deployment. |
 | 3. Publishing and moderation | Not started | Staff account management, sanitized CSV validation/preview, complete versioned atomic publication, omission retirement and rollback; fixed Campus Wins templates, approval/moderation actions, server limits, and atomic reactions. |
 | 4. Security and operational readiness | Not started | Independent security and privacy review, mobile/accessibility QA, secret/abuse checks, manual encrypted backup and restore drill, quota/outage runbooks, CDN snapshot revocation where approved, deployment docs, and separate release authorization. |
 
@@ -24,7 +24,7 @@
 
 - Appropriate university personnel must explicitly authorize external processing of real institutional emails in Supabase before any such import.
 - The university must approve provider ownership, terms/data-processing region, staff custodians, public name/rank disclosure, notices/opt-out and correction/takedown, account recovery, retention, and operational ownership.
-- M2/M3 must pass role-based RLS and BFF tests, staff MFA/AAL2 enforcement, session revocation, server-side account/rate limits, atomic publication and rollback, and moderation controls.
+- M2's local Auth, BFF, session, account lifecycle, staff MFA/AAL2, and RLS foundation has provider-backed fictional-data coverage; it still requires independent review and an explicitly authorized hosted integration before real identities can be used. M3 must pass atomic publication and rollback, complete board retirement, and moderation controls.
 - M4 must complete the backup/restore drill, free-tier quota and pause runbooks, independent security review, and explicit launch authorization.
 
 The current branch and CI workflow are for review and local/automated preview only. No workflow publishes a site or consumes production credentials.

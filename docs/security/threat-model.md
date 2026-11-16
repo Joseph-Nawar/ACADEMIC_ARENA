@@ -1,69 +1,72 @@
 # Academic Arena V1 threat model
 
-- **Status:** Updated for M1 implementation. Static frontend controls are in place on the feature branch; server-side identity, RLS, publishing, moderation, and operations controls remain pending their later milestones.
-- **Reviewed:** 15 November 2026
-- **Scope:** V6 pilot and proposed Cloudflare Pages + Supabase Free architecture.
+- **Status:** Updated for the M2 local implementation candidate on `m2/auth-database-foundation`. Auth, BFF sessions, account lifecycle, staff MFA, and database/RLS behavior have been exercised against local Supabase using fictional identities. Hosted provider configuration, independent review, publication/moderation, and operational readiness remain incomplete.
+- **Reviewed:** 16 November 2026
+- **Scope:** V6 pilot and the approved Cloudflare Pages + Supabase Free architecture. No public deployment or real university data is in scope for this branch.
 
 ## Security objectives
 
-1. Keep grades, scores, raw attendance, student IDs, credentials, emails, sessions, internal roles, account links, and private university records out of public responses and static assets.
-2. Publish names and ranking positions only with explicit university approval, notice/consent/opt-out policy, correction path, and takedown process.
-3. Let each student change only their own avatar and eligible Campus Wins submissions/reaction. Only authorized staff manage accounts, moderation, and publication.
+1. Keep grades, scores, raw attendance, student IDs, credentials, emails, provider tokens, private mappings, and university records out of public responses and static assets.
+2. Publish names and ranking positions only after explicit university approval, notice/consent/opt-out policy, correction path, and takedown procedure.
+3. Let each student change only their own avatar. Reserve account management and future publication/moderation for authorized staff with role checks and MFA.
 4. Fail closed when authentication, database, or quota services are unavailable. Never substitute fictional data on a live site.
-5. Preserve the approved V6 experience while moving away from the pilot’s single-process server and SQLite assumptions.
+5. Preserve the approved V6 experience while replacing the pilot's single-process server and SQLite assumptions.
 
 ## Assets and data classification
 
 | Asset | Classification | Required treatment |
 | --- | --- | --- |
-| Approved public board rows and published Campus Wins | Public only after university approval | Exact allowlist, versioned publication, cache/revocation plan |
-| Student username, legitimate provider email if approved, account status, role, password hash/provider credentials | Confidential | Server-side only, least privilege, no logs or static files |
-| Account-to-public-identity link and staff mapping | Restricted | Staff/function-only access; never returned by public queries |
-| Session cookies, refresh tokens, CSRF values, service-role key | Secret | HttpOnly/Secure cookies where applicable; server secrets only; never in Git, browser bundles, logs, or PR text |
-| Unpublished CSV and raw academic source data | Highly restricted | Raw data and ranking calculations stay offline; only approved sanitized output may be uploaded |
-| Avatar preference, moderation queue, audit records | Confidential | Ownership checks and restrictive RLS; audit changes without credential content |
-| V6 art and static UI | Public asset after rights review | Preserve original approved assets; replace draft logo only with supplied official asset |
+| Approved public board rows and Campus Wins | Public only after university approval | Explicit field allowlist, versioned publication, cache/revocation plan. No production rows exist. |
+| Student username, legitimate provider email if authorized, account status, provider identity | Confidential | Private mapping, server-only access, least privilege, never log or return to the browser. |
+| Account-to-public-identity link and staff roles | Restricted | Private schema and server authorization; never included in public JSON. |
+| Session cookies, provider access/refresh tokens, CSRF material, service-role key | Secret | Opaque Secure/HttpOnly cookie; encrypted server-side provider/CSRF values; server secrets only; never in Git, browser-readable storage, logs, or PR text. |
+| Unpublished CSV and raw academic source data | Highly restricted | Keep calculations and raw data offline; upload only an approved sanitized publication file in a later milestone. |
+| Avatar preference, moderation queue, audit records | Confidential | Avatar owner derived from authenticated identity; private workflow data and credential-free audit. |
+| V6 art and static UI | Public asset after rights review | Preserve approved art; replace draft EUE mark only with an approved asset. |
 
 ## Principals and trust boundaries
 
-- Anonymous visitor: may read only currently published, allowlisted public content.
-- Student: may act only as the account proven by the approved identity flow. May update their avatar and eligible post/reaction data.
-- Moderator: may review Campus Wins; cannot change rankings or provision accounts unless separately authorized.
-- Publisher/admin: may provision/suspend accounts and publish/rollback rankings under stronger authentication and MFA.
-- GitHub/Cloudflare/Supabase custodians: can change code or service configuration. Limit to named approved operators with recovery coverage.
-- University source system: remains outside the public application and supplies only an approved sanitized publication file.
+- Anonymous visitor: may read only currently published, allowlisted projections. The local test schema has fictional rows; no production rows are present.
+- Student: acts only as the staff-provisioned account resolved by the private BFF mapping. May change only their own avatar.
+- Moderator/publisher/admin: least-privilege staff roles. Every privileged BFF operation rechecks current account status, current role, and verified TOTP/AAL2. Local account lifecycle routes are disabled outside `ENVIRONMENT=test`.
+- GitHub, Cloudflare, and Supabase custodians: can change code or service configuration. Limit to approved operators with MFA, named backup custodians, and recovery procedures before launch.
+- University source system: remains outside the public application and supplies only an approved sanitized publication file after authorization.
 
-Trust boundaries are the browser/static site, Pages/Worker functions, Supabase Auth, the Postgres Data API/RLS boundary, staff devices, GitHub/CI, and the university’s offline data environment. Any boundary that handles credentials, private mappings, or publication authority must have an explicit server-side control.
+Trust boundaries are the browser/static site, Pages Functions BFF, Supabase Auth, Postgres/PostgREST RLS, staff devices, GitHub/CI, and the university's offline data environment. The browser has no Supabase client, provider JWT, or service key. The BFF holds provider credentials and the private mapping. Every boundary requires independent authorization and tests.
 
 ## Threats and current status
 
-| ID | Threat | V6 evidence / current status | Required V1 control |
+| ID | Threat | M2 evidence / current status | Remaining control or gate |
 | --- | --- | --- | --- |
-| T1 | Public disclosure of an unapproved name/rank or cohort | Demo screenshots and example CSV are stated to be fictional; no institutional approval evidence is included. | Hide real boards until director/privacy/IT approval and opt-out/takedown policy. Publish only explicit approved fields. |
-| T2 | Student claims another student’s identity | V6 CLI can bind a username to a public row and checks matching display name; there is no tested institutional identity source. | Staff-provisioned account plus private binding from an authoritative approved roster. No student self-claim or public username lookup. |
-| T3 | IDOR/BOLA or mass assignment changes another user’s avatar, identity, role, or rank | Pilot API checks current account for avatar updates and has no public role/rank write API; production RLS does not exist. | RLS on every exposed table; server-side ownership and allowlisted writes; immutable student-facing identity/rank fields; automated role-matrix tests. |
-| T4 | Credential stuffing or username enumeration | Generic invalid-credential response and per-account lockout exist. IP attempts are stored in a process-local in-memory map, not distributed, and there are no submission/reaction limits. | Distributed/edge rate limits with bounded storage, generic errors, no availability endpoint, monitoring, and provider limits. Test concurrent attempts. |
-| T5 | Staff account takeover or privilege abuse | Staff and students use the same password-only login. No MFA or separate publisher role is present. | Staff TOTP MFA required and enforced server-side (AAL2/RLS or equivalent); least-privilege moderator/publisher roles; named primary and backup custodians; audit trail. |
-| T6 | Session theft, CSRF, or stale access after credential change | Pilot uses an opaque HttpOnly cookie, origin and CSRF checks, same-site lax, and 24-hour expiry. Password changes do not revoke other sessions; deployment-wide behavior is untested. | Secure/HttpOnly/SameSite cookies, short and revocable sessions, CSRF/origin protections, session revocation on password reset/suspension, HTTPS-only production, tests through Pages. |
-| T7 | Stored XSS or harmful student-supplied content | M1 removes free-text Campus Wins fields from the frontend and exposes only fixed template keys; the legacy FastAPI API is not in the Pages build. | Keep the server API template-only in M3. Escape staff-controlled labels and validate every template key server-side before moderation/publication. |
-| T8 | Spam, duplicate submissions, race conditions, or reaction identity leakage | Pilot has no server-side weekly/pending submission caps. A uniqueness constraint exists for reactions, but toggle uses read-then-write rather than an atomic upsert. Public responses return counts only. | Enforce one pending and one/week per account; atomic reaction upsert/toggle; rate limits; counts only; no reactor identities. |
-| T9 | Incorrect/incomplete publication leaves stale boards visible | CLI replaces rows only for boards present in the upload. Omitted/retired boards remain; there is no version history, preview, rollback, or global atomic publication. | Validate complete expected board set, version snapshots, preview diffs, atomically publish and retire omissions, rollback and urgent unpublish. |
-| T10 | Malicious or sensitive CSV leaks through upload, logs, Git, or browser | CLI has a strict column allowlist and the sample account mapping is private; no staff UI, upload route, audit log, or CSV privacy workflow exists. | Upload only sanitized allowlisted data through privileged server path; reject unknown columns/rows; keep files out of Git/logs; audit staff actions. |
-| T11 | Demo fallback displays fictional or outdated values on a live site | Resolved for the M1 frontend: build mode is explicit, production excludes the fixture, and failed/missing same-origin API routes show unavailable states. No static approved snapshot is implemented. | Keep production mode fail-closed. Any later static snapshot needs approval, a visible date, revocation testing, and cache removal instructions. |
-| T12 | Free-tier pause/quota loss or data loss | Pilot uses SQLite and has no backup/restore or quota monitoring. Supabase Free pauses after inactivity and has no automatic DB backup. | Encrypted offsite manual exports; before-publication and weekly active-term backups; tested restore; quota monitoring; no paid fallback/keepalive. |
-| T13 | Privileged key, CSV, or test credential is committed | M1 adds a secret-pattern scanner in read-only CI; fixtures use fictional identities and no provider credentials. A scanner cannot detect every secret or replace credential rotation. | Keep private; review CI findings; service-role credentials only in a server secret store; use fictional test records; confirm account owner/custodians before production. |
-| T14 | Compromised or single-person-owned source control | GitHub reports the repo owner as a personal user account, not an institution. | Move to an institution-controlled owner or approved custodians, enable MFA, set branch protections and require review before production. |
+| T1 | Unapproved name/rank or cohort disclosure | Static production bundle excludes demo records; public schema exposes only rank position, approved public name/avatar, and competition dimensions. No production data is seeded. | Keep all production publication disabled until the university approves each public field, consent/notice, opt-out, correction, and takedown process. |
+| T2 | Student claims another identity | Username resolves only through `app_private`; no lookup/availability endpoint exists. Provisioning sets only the student role and forces a password change. Lifecycle routes are test-environment-only. | Authorize an authoritative roster and real-email processing before hosted accounts; no self-claim flow. |
+| T3 | IDOR or mass assignment changes another user's avatar, role, or rank | Actual local PostgREST tests prove private schema denial, account isolation, owner-key denial, and role escalation denial. Avatar reads use RLS; a narrow atomic RPC derives owner from `auth.uid()`. Direct browser table writes are revoked. BFF accepts only avatar fields. | Repeat independent authorization review; keep future writes on narrowly scoped server/RLS-checked operations. |
+| T4 | Credential stuffing or username enumeration | Unknown, wrong, suspended, and throttled login requests return generic 401 responses with minimum duration. HMACed username and edge-IP buckets persist in Postgres; concurrent rate-limit tests pass. | Review limits against hosted quotas/traffic; monitor abuse and ensure the deployed edge controls the client-IP header. No hosted abuse exercise has occurred. |
+| T5 | Staff account takeover or privilege abuse | Local Supabase Auth TOTP enrollment and step-up produce AAL2; BFF and SQL permissions deny staff at AAL1. MFA reset requires a different AAL2 admin; audit events omit credentials. | Approve named custodians, first admin bootstrap, staff enrollment, and offline recovery if the sole administrator loses their factor. Hosted enforcement remains unverified. |
+| T6 | Session theft, CSRF, stale token, or session misuse | Random opaque `__Host-` cookie is Secure/HttpOnly/SameSite=Strict with no Domain; database stores only its hash. Provider and CSRF values are encrypted at rest. Exact Origin and session-bound CSRF checks protect mutations. BFF revocation is server-side and tested. | Provider JWTs already issued remain acceptable to PostgREST until their short expiry; browser never receives them and RLS checks account status. Lifecycle provider-token invalidation behavior needs hosted confirmation. |
+| T7 | Stored XSS or harmful student content | M1 frontend offers only approved Campus Wins templates; no free text, comments, messaging, or image upload. M2 has no submission endpoint. | Keep template allowlists and staff moderation server-side in M3; escape approved labels and test before enabling submissions. |
+| T8 | Spam, duplicates, race conditions, or reaction identity leakage | M2 tests concurrent session, rate-limit, and avatar writes. No Campus Wins submissions/reaction API is implemented. | M3 must implement atomic post limits/reaction upsert, moderation, and aggregate-only public counts. |
+| T9 | Incorrect publication leaves stale boards visible | M2 defines versioned snapshot tables, constraints for level/semester/module and a single current snapshot; no writer or live ranking is implemented. | M3 must validate the complete board set, retire omitted boards atomically, support preview/rollback/unpublish, and test cache revocation. |
+| T10 | Sensitive CSV leaks through upload, logs, Git, or browser | Raw academic sources remain outside the app; no CSV upload route is implemented. | M3 must accept only sanitized allowlisted input through a privileged path and keep files out of Git/logs. |
+| T11 | Demo data appears on production | M1 uses explicit demo/production modes, rejects demo builds on Pages, excludes fixtures from production bundles, and fails closed when APIs are unavailable. | Keep deployment workflows disabled until separately authorized. No public deployment is authorized. |
+| T12 | Free-tier pause, quota exhaustion, or data loss | Architecture uses only Cloudflare Pages Free, Supabase Free, and GitHub Free. No keepalive, paid fallback, or hosted service is configured. | M4 still requires encrypted offsite backup, restore drill, quota/pause monitoring, staff recovery/runbooks, and snapshot revocation. |
+| T13 | Secret, provider token, or credential committed/exposed | CI is read-only and has secret scanning; local tests generate ephemeral keys and fictional passwords; local Auth/provider responses are checked for browser non-disclosure. Provider keys are not in the frontend bundle. | Secret scanners are incomplete. Hosted binding setup, rotation, operator access, and provider log/retention controls need review before integration. |
+| T14 | Compromised or single-person-owned source control | CI is pinned, pull-request based, and has read-only repository permissions. | Repository currently has an individual owner; institutional ownership/custodians, MFA, protected branches, and required review remain to be approved. |
+
+## Session and authorization assumptions
+
+The BFF validates a provider token with Supabase Auth on requests and derives account/role state from private database records. It never trusts browser-supplied account IDs, roles, usernames after sign-in, or MFA flags. Student table reads use the user JWT and RLS. Avatar writes call an authenticated function that derives the owner from `auth.uid()` and allowlists character fields; the function is narrowly granted, and the underlying table has forced RLS with no browser insert/update privilege.
+
+The server-side session row can be revoked immediately. Supabase access JWTs cannot be made cryptographically disappear after issuance and may remain accepted by PostgREST until expiration. That is bounded by provider expiry, is not browser-accessible in this architecture, and is separately constrained by active-account/forced-password checks in RLS. Hosted expiration and revocation behavior still requires integration confirmation.
 
 ## Required launch gates
 
-- The Supabase/BFF architecture is approved for fictional development. Before real identities, obtain separate authorization for institutional email processing and an approved source for account ownership; staff MFA must be enforceable.
-- University privacy/director/IT approval of every public field, notices, consent/opt-out, correction, retention, and takedown.
-- Versioned PostgreSQL migrations and RLS tests for anon, student, moderator, publisher, and suspended users.
-- Atomic publishing, omitted-board retirement, rollback, and static cache revocation tests.
-- Campus Wins template-only design, server-side weekly/pending limits, moderation, and urgent removal.
-- Backup/export and restore drill; quota monitoring; staff pause/recovery procedure.
-- Mobile, keyboard, contrast, and security verification; independent security review before production.
+- Obtain university authorization for legitimate email processing in Supabase before importing any real identities; approve provider ownership, terms/region, staff custodians, initial admin bootstrap, and account recovery.
+- Obtain separate approval for public names/rankings, notices, consent/opt-out, correction/takedown, retention, and publication ownership.
+- Complete independent security review of the BFF, session revocation, staff MFA, SQL grants, RLS, and account lifecycle before enabling hosted identity operations.
+- Implement M3 atomic publishing, complete board retirement, rollback, Campus Wins templates/moderation/reactions, server-side limits, and removal controls.
+- Complete M4 encrypted backup/restore drill, free-tier quota/pause runbooks, mobile/accessibility QA, operational ownership, and deployment authorization.
 
 ## Residual risks
 
-Free tiers can pause or exhaust quotas and provide limited operational guarantees. A public ranking can be sensitive even when it contains no score. TOTP recovery can lock out staff if custody is not planned. Static snapshots can persist in caches or copies after publication and therefore need a tested revocation procedure. These risks remain until the university approves the disclosure and operating model.
+Local provider tests establish the behavior of the pinned local Supabase Auth/Postgres/PostgREST stack, not a hosted project's configuration or contractual approval. The identity lifecycle routes currently reject all non-test environments. Initial hosted admin bootstrap and sole-admin factor-loss recovery have no approved runbook. Provider JWTs remain valid until expiry even after the BFF row is revoked. Free tiers can pause or exhaust quotas and do not provide the backup/availability commitments of paid plans. A public ranking can be sensitive even when it omits scores. These risks remain open and block production deployment.

@@ -41,13 +41,13 @@
 **Interfaces:**
 - Produces: reproducible `npm run supabase:start`, `npm run supabase:reset`, and `npm run test:m2:local` commands. The harness binds local services to loopback and captures local keys without printing them.
 
-- [ ] Update the roadmap to record M1 complete at merge commit `01a4808097b545523cd653b39b3c8fa7e397b3cd` and M2 active on this branch.
-- [ ] Add a failing stack-config check for public signup disabled, local-only Auth URLs, and fictional `.test` fixtures not marked verified.
-- [ ] Install the pinned Supabase CLI; record that an unconfirmed Auth user receives `email_provider_disabled` for password sign-in when the provider-specific signup flag is false.
-- [ ] Implement local native-stack config/seeds and a cleanup-safe harness; run start/reset/stop, assert actual API/database listeners are loopback-only, and prove public signup is disabled with the actual Auth endpoint.
-- [ ] Create/delete a random `*.academic-arena.test` identity through the actual local Auth Admin API and prove Auth returns email/tokens only within the server-side test process.
-- [ ] Add the local Supabase native-runtime test job to GitHub Actions without hosted secrets; verify current M1 tests remain green.
-- [ ] Commit the local provider foundation.
+- [x] Update the roadmap to record M1 complete at merge commit `01a4808097b545523cd653b39b3c8fa7e397b3cd` and M2 active on this branch.
+- [x] Add a failing stack-config check for public signup disabled, local-only Auth URLs, and fictional `.test` fixtures not marked verified.
+- [x] Pin Supabase CLI and verify actual local Auth configuration. Provider-specific signup disabling rejects password sign-in, so project-wide signup is disabled instead; local password tests require `email_confirm=true` only for ephemeral fictional `.academic-arena.test` identities.
+- [x] Implement local native-stack config/seeds and a cleanup-safe harness; assert actual Auth/API/database listeners are loopback-only and public signup is rejected by the Auth endpoint.
+- [x] Create/delete random local fictional identities through Auth Admin and verify email/tokens remain in server-side test code.
+- [x] Add the local Supabase native-runtime CI job without hosted secrets; retain M1 validation.
+- [x] Commit the local provider foundation.
 
 ### Task 2: Database schema, roles, and Row Level Security
 
@@ -69,8 +69,8 @@
 ### Task 3: BFF session, request, and CSRF boundary
 
 **Files:**
-- Create: `functions/_middleware.ts`, `functions/lib/{env,provider,session,csrf,validation,response}.ts`
-- Create: `functions/api/auth/session.ts`, `functions/api/auth/logout.ts`
+- Create: `functions/_middleware.js`, `functions/lib/{env,provider,session,csrf,validation,response,secure-crypto}.js`
+- Create: `functions/api/auth/session.js`, `functions/api/auth/logout.js`
 - Test: `tests/m2/session.integration.test.mjs`, `tests/m2/csrf.integration.test.mjs`
 
 **Interfaces:**
@@ -87,8 +87,8 @@
 ### Task 4: Username login, password change, rate limits, and account recovery
 
 **Files:**
-- Create: `functions/api/auth/login.ts`, `functions/api/auth/change-password.ts`
-- Create: `functions/api/staff/accounts.ts`, `functions/api/staff/accounts/[accountId]/suspend.ts`, `functions/api/staff/accounts/[accountId]/recovery.ts`
+- Create: `functions/api/auth/login.js`, `functions/api/auth/change-password.js`
+- Create: `functions/api/staff/accounts.js`, `functions/api/staff/accounts/recovery.js`, `functions/api/staff/accounts/suspend.js`
 - Modify: `functions/lib/{provider,session,validation}.ts`
 - Test: `tests/m2/login.integration.test.mjs`, `tests/m2/account-lifecycle.integration.test.mjs`, `tests/m2/rate-limit.integration.test.mjs`
 
@@ -96,45 +96,45 @@
 - Login accepts only `{username,password}`. Unknown, incorrect, suspended, and throttled failures share the same generic 401 response.
 - Student provisioning is staff-only and forces role `student`; account reset returns one-time recovery material only to an authorized staff caller with `Cache-Control: no-store`.
 
-- [ ] Add failing local-provider tests for wrong password, unknown username, suspended user, no public registration, forced password change, staff reset, suspension, and prior-session revocation.
-- [ ] Implement normalized private username resolution and account status/role checks without a public lookup route.
-- [ ] Add atomic Postgres rate-limit RPCs for keyed username and client-IP buckets; test concurrent boundary attempts and retention limits.
-- [ ] Implement staff-mediated provisioning/recovery/suspension with role checks, input allowlists, audit records, and session/provider revocation.
-- [ ] Prove password change clears the forced-change flag and makes old credentials and old BFF cookies unusable.
-- [ ] Commit lifecycle/rate-limit changes after provider-backed concurrency tests pass.
+- [x] Add local-provider tests for wrong password, unknown username, suspended user, no public registration, forced password change, staff recovery, suspension, and prior-session revocation.
+- [x] Implement normalized private username resolution and account status/role checks without a public lookup route.
+- [x] Add atomic Postgres rate-limit RPCs for keyed username and client-IP buckets; test concurrent attempts.
+- [x] Implement staff-mediated provisioning/recovery/suspension with role checks, input allowlists, audit records, BFF session revocation, and provider-side password/ban operations. Routes are deliberately test-environment-only pending external identity authorization.
+- [x] Prove password change clears the forced-change flag and makes old credentials and old BFF cookies unusable.
+- [x] Commit lifecycle/rate-limit changes after provider-backed concurrency tests pass.
 
 ### Task 5: Staff TOTP MFA and privileged authorization
 
 **Files:**
-- Create: `functions/api/auth/mfa/enroll.ts`, `functions/api/auth/mfa/challenge.ts`, `functions/api/auth/mfa/verify.ts`
-- Modify: `functions/lib/session.ts`, `functions/lib/authorization.ts`
+- Create: `functions/api/auth/mfa/enroll.js`, `functions/api/auth/mfa/verify.js`
+- Modify: `functions/lib/session.js`, `functions/lib/authorization.js`, `functions/lib/mfa-authorization.js`
 - Test: `tests/m2/mfa.integration.test.mjs`, `supabase/tests/staff_aal2.test.sql`
 
 **Interfaces:**
 - Staff login returns a restricted step-up state until Supabase reports verified TOTP and current AAL2.
 - Every staff BFF operation rechecks active role and current AAL2; RLS policies independently require AAL2 for privileged database access.
 
-- [ ] Add failing tests for first staff factor enrollment, invalid/expired codes, valid challenge/verify, AAL1 provisioning denial, and direct RLS AAL1 denial.
-- [ ] Use Supabase Auth TOTP APIs and a pinned test-only OTP library; never store the TOTP secret beyond the one-time enrollment response.
-- [ ] Implement AAL2 checks in BFF authorization and restrictive RLS policies.
-- [ ] Run concurrent duplicate factor verification and privileged-action tests against local Supabase.
-- [ ] Commit the MFA slice after provider-backed tests pass.
+- [x] Add tests for first staff factor enrollment, invalid codes, valid challenge/verify, AAL1 provisioning denial, and direct RLS AAL1 denial.
+- [x] Use Supabase Auth TOTP APIs and a pinned OTP library; keep the setup key only in the one-time enrollment response and UI confirmation state.
+- [x] Implement AAL2 checks in BFF authorization and restrictive RLS policies.
+- [x] Run factor verification, rate-limit concurrency, and privileged-action tests against local Supabase.
+- [x] Commit the MFA slice after provider-backed tests pass.
 
 ### Task 6: Minimal existing-UI integration and final verification
 
 **Files:**
 - Modify: `assets/data-access.js`, `assets/app.js`, `index.html`, `assets/app.css` only as needed for login, forced password change, and staff TOTP states.
-- Modify: `docs/security/threat-model.md`, `docs/auth/username-password-feasibility.md`, `docs/architecture/m2-auth-database.md`, `README.md`, `.github/workflows/ci.yml`
+- Modify: `docs/security/threat-model.md`, `docs/auth/username-password-feasibility.md`, `docs/architecture/m2-auth-database.md`, `README.md`, `docs/roadmap.md`, `.github/workflows/ci.yml`
 - Test: `tests/browser/m2-auth.spec.mjs`, full M1 and M2 suites.
 
 **Interfaces:**
 - Keep the M1 `/api` data-access boundary and add only allowlisted M2 session/MFA state. Provider SDK and secrets remain server-only.
 
-- [ ] Add failing browser tests that inspect response bodies, browser storage, and cookies during fictional login, first password change, logout, and staff MFA.
-- [ ] Connect existing forms to the BFF with accessible pending/error states, preserving approved V6 styling.
-- [ ] Run clean `npm ci`, Node tests, secret scans, actual Supabase migration/pgTAP/RLS/provider tests, Chromium desktop/mobile flows, and legacy FastAPI baseline tests.
-- [ ] Update threat model with implemented evidence, exact unverified provider/institutional gates, and residual risks; do not claim hosted-provider verification.
-- [ ] Commit, push the M2 branch, open a PR, and wait for independent review. Do not merge or deploy.
+- [x] Add browser tests that inspect response bodies, browser storage, and cookies during fictional login, forced password change, logout, and staff MFA states.
+- [x] Connect existing forms to the BFF with accessible pending/error states, preserving approved V6 styling.
+- [x] Run clean `npm ci`, frontend tests (27/27), secret-scanner tests (4/4), production build and both secret scans, Chromium desktop/mobile browser smoke, local Supabase tests (98 pgTAP/RLS assertions and 27/27 live integration tests), and retained FastAPI baseline smoke.
+- [x] Update threat model, feasibility memo, README, roadmap, and architecture with verified local evidence, exact unverified provider/institutional gates, and residual risks; do not claim hosted-provider verification.
+- [ ] Commit final implementation, push the M2 branch, open a PR, and request independent review. Do not merge or deploy.
 
 ---
 
