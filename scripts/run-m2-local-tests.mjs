@@ -102,11 +102,20 @@ async function stopProcess(child) {
 }
 
 let pagesProcess;
+let supabaseStarted = false;
 let testEnvironmentFile;
 let previousDevVars;
 
 try {
+  const existingStack = await capture("npx", ["--no-install", "supabase", "status", "--env", "--output-format", "text"], {
+    ...process.env,
+    SUPABASE_TELEMETRY_DISABLED: "1",
+  });
+  if (existingStack.code === 0) {
+    throw new Error("A local Supabase stack is already running. Stop it before running this test command; the command resets its local database.");
+  }
   await run(process.execPath, ["scripts/local-supabase.mjs", "start"], "Supabase start");
+  supabaseStarted = true;
   await run("npx", ["--no-install", "supabase", "db", "reset"], "Supabase reset", {
     ...process.env,
     SUPABASE_TELEMETRY_DISABLED: "1",
@@ -190,6 +199,17 @@ try {
       await chmod(testEnvironmentFile, previousDevVars.mode);
     } else {
       await rm(testEnvironmentFile, { force: true });
+    }
+  }
+  if (supabaseStarted) {
+    try {
+      await run(process.execPath, ["scripts/local-supabase.mjs", "stop"], "Supabase stop", {
+        ...process.env,
+        SUPABASE_TELEMETRY_DISABLED: "1",
+      });
+    } catch {
+      process.stderr.write("Local Supabase cleanup failed; use npm run supabase:stop before continuing.\n");
+      if (process.exitCode === undefined || process.exitCode === 0) process.exitCode = 1;
     }
   }
 }

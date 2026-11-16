@@ -461,4 +461,3 @@ grant insert, update, delete on table public.campus_wins_public to service_role;
 -- Server-owned trigger functions and RPCs execute as their migration owner.
 revoke all on function public.provision_account(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.consume_login_rate_limit(bytea, bytea) from public, anon, authenticated;
-
