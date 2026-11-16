@@ -116,23 +116,6 @@ export async function releaseProviderRequest(providerUserId, operation) {
   assert.equal(response.status, 204, "loopback test proxy releases the selected delayed fictional provider request");
 }
 
-export function expireCredentialSyncLease(accountId, operationKind) {
-  assert.match(accountId, /^[0-9a-f-]{36}$/iu);
-  assert.ok(["student_password_recovery", "staff_mfa_reset"].includes(operationKind));
-  try {
-    execFileSync("npx", [
-      "--no-install", "supabase", "db", "query", "--local",
-      `update app_private.credential_sync_operations set lease_until = now() - interval '1 second' where account_id = '${accountId}' and operation_kind = '${operationKind}'`,
-    ], {
-      cwd: process.cwd(),
-      env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" },
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch {
-    throw new Error("Local fictional provider-sync lease fixture could not be applied.");
-  }
-}
-
 export function setFictionalAccountStatus(accountId, status) {
   assert.match(accountId, /^[0-9a-f-]{36}$/iu);
   assert.ok(["active", "suspended"].includes(status));

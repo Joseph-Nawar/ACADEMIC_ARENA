@@ -89,7 +89,12 @@ async function startPagesPreview(port) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   child.kill("SIGTERM");
-  throw new Error("Local Cloudflare Pages preview did not become ready.");
+  const safeLog = log
+    .replace(/eyJ[A-Za-z0-9_.-]{20,}/gu, "[redacted-jwt]")
+    .replace(/(SUPABASE_[A-Z_]+|SESSION_JWE_KEY|RATE_LIMIT_HMAC_KEY)=\S+/gu, "$1=[redacted]")
+    .replace(/[A-Za-z0-9_-]{64,}/gu, "[redacted-value]")
+    .slice(-1200);
+  throw new Error(`Local Cloudflare Pages preview did not become ready.${safeLog ? ` ${safeLog}` : ""}`);
 }
 
 async function startProviderFaultProxy(targetUrl, port) {
@@ -97,6 +102,7 @@ async function startProviderFaultProxy(targetUrl, port) {
   let pendingPause;
   let activePause;
   const providerRequestCounts = new Map();
+  const providerRequestCompletionCounts = new Map();
   const testInstruction = (body) => {
     const instruction = JSON.parse(body.toString("utf8"));
     if (!/^[0-9a-f-]{36}$/iu.test(instruction.providerUserId) ||
@@ -165,6 +171,7 @@ async function startProviderFaultProxy(targetUrl, port) {
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
         .end(JSON.stringify({
           count: providerRequestCounts.get(key) || 0,
+          completedCount: providerRequestCompletionCounts.get(key) || 0,
           paused: activePause?.providerUserId === instruction.providerUserId && activePause?.operation === instruction.operation,
         }));
       return;
@@ -239,7 +246,9 @@ async function startProviderFaultProxy(targetUrl, port) {
       }
       const cookies = upstream.headers.getSetCookie?.();
       if (cookies?.length) response.setHeader("set-cookie", cookies);
-      response.end(request.method === "HEAD" ? undefined : Buffer.from(await upstream.arrayBuffer()));
+      const upstreamBody = request.method === "HEAD" ? undefined : Buffer.from(await upstream.arrayBuffer());
+      if (operationKey) providerRequestCompletionCounts.set(operationKey, (providerRequestCompletionCounts.get(operationKey) || 0) + 1);
+      response.end(upstreamBody);
     } catch {
       response.writeHead(502, { "content-type": "application/json", "cache-control": "no-store" })
         .end(JSON.stringify({ msg: "Local provider proxy unavailable." }));

@@ -5,7 +5,6 @@ import {
   api,
   cleanupProvisionedIdentity,
   createIdentity,
-  expireCredentialSyncLease,
   injectProviderFailure,
   json,
   local,
@@ -225,15 +224,6 @@ test("staff TOTP enrollment, login step-up, and privileged account provisioning 
   assert.equal((await json(recoveryIdentity))[0].credential_update_pending, true,
     "the account remains blocked after the injected provider failure");
 
-  const recoveryStillLeased = await api("/api/staff/accounts/recovery", {
-    method: "POST", origin,
-    headers: staffHeaders(secondLogin.cookie, secondLogin.payload.csrfToken),
-    body: { username: provisioned.username },
-  });
-  assert.equal(recoveryStillLeased.status, 503, "an uncertain provider result cannot be retried before its lease expires");
-  assert.equal(recoveryStillLeased.headers.get("retry-after"), "300");
-  expireCredentialSyncLease(provisionedIdentity.account_id, "student_password_recovery");
-
   const recovery = await api("/api/staff/accounts/recovery", {
     method: "POST", origin,
     headers: staffHeaders(secondLogin.cookie, secondLogin.payload.csrfToken),
@@ -361,16 +351,6 @@ test("AAL2 administrator can recover another staff MFA and revoke that account's
   assert.equal((await json(targetIdentity))[0].credential_update_pending, true,
     "staff login stays blocked after the injected provider failure");
 
-  const resetStillLeased = await api("/api/staff/accounts/mfa-reset", {
-    method: "POST",
-    origin,
-    headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
-    body: { username: target.username },
-  });
-  assert.equal(resetStillLeased.status, 503, "uncertain provider factor deletion cannot be retried during its lease");
-  assert.equal(resetStillLeased.headers.get("retry-after"), "300");
-  expireCredentialSyncLease(target.accountId, "staff_mfa_reset");
-
   const reset = await api("/api/staff/accounts/mfa-reset", {
     method: "POST",
     origin,
@@ -436,7 +416,8 @@ test("a delayed provider password request blocks overlapping recovery and a newe
       body: { username: student.username },
     });
     assert.equal(overlap.status, 503, "the second BFF request cannot enter Auth Admin while the first owns the lease");
-    assert.equal(overlap.headers.get("retry-after"), "300");
+    assert.equal(overlap.headers.get("retry-after"), null,
+      "the BFF does not promise automatic recovery from an ambiguous provider operation");
     assert.deepEqual(await json(overlap), { error: "recovery_applied_password_sync_pending" });
     const state = await providerRequestState(student.user.id, "user-password-update");
     assert.equal(state.count, 1, "the provider saw exactly one request for the active recovery generation");
@@ -470,4 +451,93 @@ test("a delayed provider password request blocks overlapping recovery and a newe
   const accountResponse = await serviceRpc("resolve_account_identity", { p_account_id: student.accountId });
   assert.equal(accountResponse.ok, true);
   assert.equal((await json(accountResponse))[0].credential_epoch, 2);
+});
+
+test("an Auth Admin request that outlives the BFF timeout cannot be reclaimed or overtaken", async (context) => {
+  const administrator = await staffIdentity(context, "recovery-timeout-admin");
+  const adminSession = await enrollStaffFactor(administrator, "192.0.2.81");
+  const student = await createIdentity(context, "timeout-student");
+  await pauseNextProviderRequest(student.user.id, "user-password-update");
+
+  const firstRequest = api("/api/staff/accounts/recovery", {
+    method: "POST",
+    origin,
+    headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
+    body: { username: student.username },
+  });
+  let firstResponse;
+  let paused = false;
+  let failure;
+  try {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const state = await providerRequestState(student.user.id, "user-password-update");
+      if (state.paused) {
+        paused = true;
+        assert.equal(state.count, 1);
+        assert.equal(state.completedCount, 0);
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(paused, true, "the provider request is held in the loopback proxy");
+
+    firstResponse = await firstRequest;
+    assert.equal(firstResponse.status, 503, "the BFF's 15-second provider timeout fails closed");
+    assert.deepEqual(await json(firstResponse), { error: "recovery_applied_password_sync_pending" });
+    let state = await providerRequestState(student.user.id, "user-password-update");
+    assert.equal(state.paused, true, "downstream work remains queued after the BFF timed out");
+    assert.equal(state.completedCount, 0);
+
+    const overlap = await api("/api/staff/accounts/recovery", {
+      method: "POST",
+      origin,
+      headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
+      body: { username: student.username },
+    });
+    assert.equal(overlap.status, 503, "a second request cannot steal a non-expiring provider claim");
+    assert.equal(overlap.headers.get("retry-after"), null, "the BFF does not promise automatic lease expiry");
+    state = await providerRequestState(student.user.id, "user-password-update");
+    assert.equal(state.count, 1, "the overlapping request does not enter Auth Admin");
+
+    const accountResponse = await serviceRpc("resolve_account_identity", { p_account_id: student.accountId });
+    assert.equal(accountResponse.ok, true);
+    const accountRows = await json(accountResponse);
+    assert.equal(accountRows[0].credential_epoch, 1);
+    assert.equal(accountRows[0].credential_update_pending, true);
+  } catch (error) {
+    failure = error;
+  } finally {
+    if (paused) await releaseProviderRequest(student.user.id, "user-password-update");
+    if (!firstResponse) firstResponse = await firstRequest;
+  }
+  if (failure) throw failure;
+
+  let state;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    state = await providerRequestState(student.user.id, "user-password-update");
+    if (state.completedCount === 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(state.completedCount, 1, "the delayed upstream password update completed after the BFF response timed out");
+
+  const stillBlocked = await api("/api/staff/accounts/recovery", {
+    method: "POST",
+    origin,
+    headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
+    body: { username: student.username },
+  });
+  assert.equal(stillBlocked.status, 503, "a later credential generation remains blocked after the stale provider write completes");
+  const accountResponse = await serviceRpc("resolve_account_identity", { p_account_id: student.accountId });
+  assert.equal(accountResponse.ok, true);
+  const accountRows = await json(accountResponse);
+  assert.equal(accountRows[0].credential_epoch, 1, "no new credential epoch can overtake an uncertain provider request");
+  assert.equal(accountRows[0].credential_update_pending, true);
+
+  const claimAttempt = await serviceRpc("claim_credential_sync_operation", {
+    p_account_id: student.accountId,
+    p_operation_kind: "student_password_recovery",
+    p_lease_token_hash: "e".repeat(64),
+  });
+  assert.equal(claimAttempt.ok, true);
+  assert.deepEqual(await json(claimAttempt), [], "only explicit provider reconciliation can release the timed-out claim");
 });

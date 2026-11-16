@@ -1,9 +1,22 @@
 import { authorizeStaffMutation } from "../../../lib/authorization.js";
-import { serviceClient, userAuthClient } from "../../../lib/provider.js";
+import { providerReturnedHttpResponse, serviceClient, userAuthClient } from "../../../lib/provider.js";
 import { randomOpaqueToken, sha256Bytea } from "../../../lib/secure-crypto.js";
 import { jsonResponse } from "../../../lib/response.js";
 import { findLoginIdentity } from "../../../lib/staff-accounts.js";
 import { hasExactKeys, isFictionalFixtureEmail, normalizeUsername, readJsonBody } from "../../../lib/validation.js";
+
+async function releaseClaim(provider, accountId, credentialEpoch, leaseTokenHash) {
+  try {
+    await provider.rpc("release_credential_sync_operation", {
+      p_account_id: accountId,
+      p_operation_kind: "staff_mfa_reset",
+      p_expected_credential_epoch: credentialEpoch,
+      p_lease_token_hash: leaseTokenHash,
+    });
+  } catch {
+    // A lost release response leaves the account fail-closed; no new generation can claim this operation.
+  }
+}
 
 export async function onRequestPost({ request, env }) {
   const authorization = await authorizeStaffMutation(request, env, "accounts.mfa_reset");
@@ -50,27 +63,44 @@ export async function onRequestPost({ request, env }) {
       p_lease_token_hash: leaseTokenHash,
     });
     resetState = Array.isArray(operation) ? operation[0] || null : operation || null;
-    if (operationError) return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+    if (operationError) {
+      await releaseClaim(provider, identity.account_id, null, leaseTokenHash);
+      return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+    }
   } catch {
+    if (leaseTokenHash && provider) await releaseClaim(provider, identity.account_id, null, leaseTokenHash);
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
   if (!resetState) {
-    return jsonResponse({ error: "mfa_reset_sync_pending" }, 503, { "Retry-After": "300" });
+    return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
   if (resetState.provider_user_id !== identity.provider_user_id ||
       !Number.isSafeInteger(resetState.credential_epoch)) {
+    if (Number.isSafeInteger(resetState.credential_epoch)) {
+      await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
+    }
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
 
   try {
     const { data, error } = await provider.auth.admin.mfa.listFactors({ userId: identity.provider_user_id });
-    if (error || !Array.isArray(data?.factors)) return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+    if (error || !Array.isArray(data?.factors)) {
+      if (providerReturnedHttpResponse(error)) {
+        await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
+      }
+      return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+    }
     for (const factor of data.factors) {
       const { error: deleteError } = await provider.auth.admin.mfa.deleteFactor({
         userId: identity.provider_user_id,
         id: factor.id,
       });
-      if (deleteError) return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+      if (deleteError) {
+        if (providerReturnedHttpResponse(deleteError)) {
+          await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
+        }
+        return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+      }
     }
   } catch {
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
@@ -85,8 +115,12 @@ export async function onRequestPost({ request, env }) {
       p_lease_token_hash: leaseTokenHash,
     }));
   } catch {
+    await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
-  if (finalizeError || finalized !== true) return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+  if (finalizeError || finalized !== true) {
+    await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
+    return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
+  }
   return jsonResponse({ mfaReset: true, username });
 }

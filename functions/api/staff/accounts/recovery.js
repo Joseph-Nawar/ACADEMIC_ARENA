@@ -1,10 +1,23 @@
 import { authorizeStaffMutation } from "../../../lib/authorization.js";
-import { serviceClient, userAuthClient } from "../../../lib/provider.js";
+import { providerReturnedHttpResponse, serviceClient, userAuthClient } from "../../../lib/provider.js";
 import { configuration } from "../../../lib/env.js";
 import { decryptSessionSecret, encryptSessionSecret, randomOpaqueToken, sha256Bytea } from "../../../lib/secure-crypto.js";
 import { jsonResponse } from "../../../lib/response.js";
 import { findLoginIdentity } from "../../../lib/staff-accounts.js";
 import { hasExactKeys, isFictionalFixtureEmail, normalizeUsername, readJsonBody } from "../../../lib/validation.js";
+
+async function releaseClaim(provider, accountId, credentialEpoch, leaseTokenHash) {
+  try {
+    await provider.rpc("release_credential_sync_operation", {
+      p_account_id: accountId,
+      p_operation_kind: "student_password_recovery",
+      p_expected_credential_epoch: credentialEpoch,
+      p_lease_token_hash: leaseTokenHash,
+    });
+  } catch {
+    // A lost release response leaves the account fail-closed; no new generation can claim this operation.
+  }
+}
 
 export async function onRequestPost({ request, env }) {
   const authorization = await authorizeStaffMutation(request, env, "accounts.recover");
@@ -63,12 +76,18 @@ export async function onRequestPost({ request, env }) {
       p_lease_token_hash: leaseTokenHash,
     });
     recoveryState = Array.isArray(operation) ? operation[0] || null : operation || null;
-    if (operationError) return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
+    if (operationError) {
+      await releaseClaim(provider, identity.account_id, null, leaseTokenHash);
+      return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
+    }
     if (!recoveryState) {
-      return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503, { "Retry-After": "300" });
+      return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
     }
     if (recoveryState.provider_user_id !== identity.provider_user_id ||
         !Number.isSafeInteger(recoveryState.credential_epoch) || typeof recoveryState.password_jwe !== "string") {
+      if (Number.isSafeInteger(recoveryState.credential_epoch)) {
+        await releaseClaim(provider, identity.account_id, recoveryState.credential_epoch, leaseTokenHash);
+      }
       return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
     }
     initialPassword = await decryptSessionSecret(
@@ -77,6 +96,11 @@ export async function onRequestPost({ request, env }) {
       "AA-Recovery-Password",
     );
   } catch {
+    if (recoveryState && Number.isSafeInteger(recoveryState.credential_epoch) && leaseTokenHash && provider) {
+      await releaseClaim(provider, identity.account_id, recoveryState.credential_epoch, leaseTokenHash);
+    } else if (leaseTokenHash && provider) {
+      await releaseClaim(provider, identity.account_id, null, leaseTokenHash);
+    }
     return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
   }
 
@@ -84,7 +108,12 @@ export async function onRequestPost({ request, env }) {
     const { error: resetError } = await provider.auth.admin.updateUserById(identity.provider_user_id, {
       password: initialPassword,
     });
-    if (resetError) return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
+    if (resetError) {
+      if (providerReturnedHttpResponse(resetError)) {
+        await releaseClaim(provider, identity.account_id, recoveryState.credential_epoch, leaseTokenHash);
+      }
+      return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
+    }
   } catch {
     return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
   }
@@ -98,9 +127,11 @@ export async function onRequestPost({ request, env }) {
       p_lease_token_hash: leaseTokenHash,
     }));
   } catch {
+    await releaseClaim(provider, identity.account_id, recoveryState.credential_epoch, leaseTokenHash);
     return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
   }
   if (finalizeError || finalized !== true) {
+    await releaseClaim(provider, identity.account_id, recoveryState.credential_epoch, leaseTokenHash);
     return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
   }
   return jsonResponse({ recovered: true, username, initialPassword });

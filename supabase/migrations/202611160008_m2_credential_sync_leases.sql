@@ -1,19 +1,13 @@
 -- Fence provider-side credential changes so only one BFF request can mutate an
--- Auth identity for a recovery generation at a time. The five-minute lease is
--- longer than the BFF's bounded provider request timeout; retries wait for the
--- lease to expire after an uncertain upstream result.
+-- Auth identity for a recovery generation at a time. Supabase Auth does not
+-- enforce our fencing token, so an uncertain in-flight provider request must
+-- never be reclaimed automatically.
 
 alter table app_private.credential_sync_operations
   add column lease_token_hash bytea,
-  add column lease_until timestamptz,
   add constraint credential_sync_operations_lease_pair_check check (
-    (lease_token_hash is null and lease_until is null)
-    or (lease_token_hash is not null and pg_catalog.octet_length(lease_token_hash) = 32 and lease_until is not null)
+    lease_token_hash is null or pg_catalog.octet_length(lease_token_hash) = 32
   );
-
-create index credential_sync_operations_lease_until_idx
-  on app_private.credential_sync_operations (lease_until)
-  where lease_until is not null;
 
 drop function public.resolve_credential_sync_operation(uuid, text);
 drop function public.complete_student_password_recovery(uuid, bigint);
@@ -30,7 +24,7 @@ declare
 begin
   delete from app_private.credential_sync_operations as operation
   where operation.expires_at <= pg_catalog.clock_timestamp()
-    and (operation.lease_until is null or operation.lease_until <= pg_catalog.clock_timestamp());
+    and operation.lease_token_hash is null;
   get diagnostics deleted_count = row_count;
   return deleted_count;
 end
@@ -89,7 +83,7 @@ begin
   if found then
     -- An upstream request may still be running even when its retry payload has
     -- expired. Never let a new generation race the outstanding provider call.
-    if current_operation.lease_until > pg_catalog.clock_timestamp() then
+    if current_operation.lease_token_hash is not null then
       return true;
     end if;
     if current_operation.credential_epoch = target_epoch
@@ -119,19 +113,18 @@ begin
 
   insert into app_private.credential_sync_operations (
     account_id, operation_kind, credential_epoch, password_jwe, expires_at,
-    completed_at, created_at, lease_token_hash, lease_until
+    completed_at, created_at, lease_token_hash
   ) values (
     target_account_id, 'student_password_recovery', target_epoch, p_password_jwe,
     pg_catalog.clock_timestamp() + interval '15 minutes', null,
-    pg_catalog.clock_timestamp(), null, null
+    pg_catalog.clock_timestamp(), null
   ) on conflict (account_id, operation_kind) do update set
     credential_epoch = excluded.credential_epoch,
     password_jwe = excluded.password_jwe,
     expires_at = excluded.expires_at,
     completed_at = null,
     created_at = excluded.created_at,
-    lease_token_hash = null,
-    lease_until = null;
+    lease_token_hash = null;
 
   insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
   values (actor_account_id, target_account_id, 'account.recovery_started', 'staff_recovery');
@@ -181,7 +174,7 @@ begin
     and operation.operation_kind = 'staff_mfa_reset'
   for update;
   if found then
-    if current_operation.lease_until > pg_catalog.clock_timestamp() then
+    if current_operation.lease_token_hash is not null then
       return true;
     end if;
     if current_operation.credential_epoch = target_epoch
@@ -210,19 +203,18 @@ begin
 
   insert into app_private.credential_sync_operations (
     account_id, operation_kind, credential_epoch, password_jwe, expires_at,
-    completed_at, created_at, lease_token_hash, lease_until
+    completed_at, created_at, lease_token_hash
   ) values (
     target_account_id, 'staff_mfa_reset', target_epoch, null,
     pg_catalog.clock_timestamp() + interval '15 minutes', null,
-    pg_catalog.clock_timestamp(), null, null
+    pg_catalog.clock_timestamp(), null
   ) on conflict (account_id, operation_kind) do update set
     credential_epoch = excluded.credential_epoch,
     password_jwe = null,
     expires_at = excluded.expires_at,
     completed_at = null,
     created_at = excluded.created_at,
-    lease_token_hash = null,
-    lease_until = null;
+    lease_token_hash = null;
 
   insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
   values (actor_account_id, target_account_id, 'staff.mfa_reset', 'administrator_recovery');
@@ -255,8 +247,7 @@ begin
   return query
   with claimed as (
     update app_private.credential_sync_operations as operation
-    set lease_token_hash = pg_catalog.decode(p_lease_token_hash, 'hex'),
-        lease_until = pg_catalog.clock_timestamp() + interval '5 minutes'
+    set lease_token_hash = pg_catalog.decode(p_lease_token_hash, 'hex')
     from app_private.accounts as account
     where operation.account_id = p_account_id
       and operation.operation_kind = p_operation_kind
@@ -264,7 +255,7 @@ begin
       and operation.credential_epoch = account.credential_epoch
       and operation.expires_at > pg_catalog.clock_timestamp()
       and operation.completed_at is null
-      and (operation.lease_until is null or operation.lease_until <= pg_catalog.clock_timestamp())
+      and operation.lease_token_hash is null
       and account.status = 'active'
       and account.force_password_change = true
       and account.credential_update_pending = true
@@ -274,6 +265,35 @@ begin
   select claimed.account_id, account.provider_user_id, claimed.credential_epoch, claimed.password_jwe
   from claimed
   join app_private.accounts as account on account.id = claimed.account_id;
+end
+$$;
+
+create or replace function public.release_credential_sync_operation(
+  p_account_id uuid,
+  p_operation_kind text,
+  p_expected_credential_epoch bigint,
+  p_lease_token_hash text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_lease_token_hash is null or p_lease_token_hash !~ '^[0-9a-f]{64}$'
+    or p_operation_kind is null
+    or p_operation_kind not in ('student_password_recovery', 'staff_mfa_reset') then
+    return false;
+  end if;
+
+  update app_private.credential_sync_operations as operation
+  set lease_token_hash = null
+  where operation.account_id = p_account_id
+    and operation.operation_kind = p_operation_kind
+    and (p_expected_credential_epoch is null or operation.credential_epoch = p_expected_credential_epoch)
+    and operation.lease_token_hash = pg_catalog.decode(p_lease_token_hash, 'hex')
+    and operation.completed_at is null;
+  return found;
 end
 $$;
 
@@ -303,7 +323,6 @@ begin
     and operation.credential_epoch = p_expected_credential_epoch
     and operation.completed_at is null
     and operation.lease_token_hash = pg_catalog.decode(p_lease_token_hash, 'hex')
-    and operation.lease_until > pg_catalog.clock_timestamp()
   for update of account, operation;
   if not found or not update_pending then
     return false;
@@ -322,8 +341,7 @@ begin
   update app_private.credential_sync_operations as operation
   set password_jwe = null,
       completed_at = pg_catalog.clock_timestamp(),
-      lease_token_hash = null,
-      lease_until = null
+      lease_token_hash = null
   where operation.account_id = p_account_id
     and operation.operation_kind = 'student_password_recovery'
     and operation.credential_epoch = p_expected_credential_epoch
@@ -360,7 +378,6 @@ begin
     and operation.credential_epoch = p_expected_credential_epoch
     and operation.completed_at is null
     and operation.lease_token_hash = pg_catalog.decode(p_lease_token_hash, 'hex')
-    and operation.lease_until > pg_catalog.clock_timestamp()
   for update of account, operation;
   if not found or not update_pending then
     return false;
@@ -378,8 +395,7 @@ begin
   end if;
   update app_private.credential_sync_operations as operation
   set completed_at = pg_catalog.clock_timestamp(),
-      lease_token_hash = null,
-      lease_until = null
+      lease_token_hash = null
   where operation.account_id = p_account_id
     and operation.operation_kind = 'staff_mfa_reset'
     and operation.credential_epoch = p_expected_credential_epoch
@@ -396,6 +412,8 @@ revoke all on function public.reset_staff_mfa_for_account(text) from public, ano
 grant execute on function public.reset_staff_mfa_for_account(text) to authenticated;
 revoke all on function public.claim_credential_sync_operation(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.claim_credential_sync_operation(uuid, text, text) to service_role;
+revoke all on function public.release_credential_sync_operation(uuid, text, bigint, text) from public, anon, authenticated;
+grant execute on function public.release_credential_sync_operation(uuid, text, bigint, text) to service_role;
 revoke all on function public.prune_expired_credential_sync_operations() from public, anon, authenticated;
 grant execute on function public.prune_expired_credential_sync_operations() to service_role;
 revoke all on function public.complete_student_password_recovery(uuid, bigint, text) from public, anon, authenticated;

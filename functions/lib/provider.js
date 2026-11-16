@@ -11,6 +11,10 @@ async function safeFetch(input, init = {}) {
   return response;
 }
 
+export function providerReturnedHttpResponse(error) {
+  return typeof error?.status === "number" && Number.isInteger(error.status) && error.status >= 100 && error.status <= 599;
+}
+
 function options(extra = {}) {
   const { auth: extraAuth = {}, global: extraGlobal = {}, ...rest } = extra;
   return {
