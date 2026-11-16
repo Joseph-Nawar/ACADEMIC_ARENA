@@ -305,12 +305,31 @@ let testEnvironmentFile;
 let previousDevVars;
 
 try {
-  const existingStack = await capture("npx", ["--no-install", "supabase", "status", "--env", "--output-format", "text"], {
+  const existingStack = await capture("npx", ["--no-install", "supabase", "status", "--output-format", "json"], {
     ...process.env,
     SUPABASE_TELEMETRY_DISABLED: "1",
   });
-  if (existingStack.code === 0) {
-    throw new Error("A local Supabase stack is already running. Stop it before running this test command; the command resets its local database.");
+  if (existingStack.timedOut) {
+    throw new Error("Could not verify the local Supabase stack state; refusing to start or reset an unknown stack.");
+  }
+  let stackStatus;
+  try {
+    stackStatus = JSON.parse(existingStack.stdout);
+  } catch {
+    throw new Error("Could not verify the local Supabase stack state; refusing to start or reset an unknown stack.");
+  }
+  if (existingStack.code !== 0) {
+    if (stackStatus.error?.message !== "No managed stack exists for the selected project.") {
+      throw new Error("Could not verify the local Supabase stack state; refusing to start or reset an unknown stack.");
+    }
+  } else {
+    if (stackStatus.identity?.project_root !== root || !Array.isArray(stackStatus.services)) {
+      throw new Error("Could not verify ownership of the local Supabase stack; refusing to start or reset it.");
+    }
+    const stoppedStates = new Set(["unavailable", "stopped"]);
+    if (stackStatus.services.some((service) => !stoppedStates.has(service.state))) {
+      throw new Error("A local Supabase stack is already running or partially available. Stop it before running this test command; the command resets local data.");
+    }
   }
   supabaseStartAttempted = true;
   await run(process.execPath, ["scripts/local-supabase.mjs", "start"], "Supabase start");
