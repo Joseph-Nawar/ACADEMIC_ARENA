@@ -59,12 +59,12 @@
 **Interfaces:**
 - Produces: private `app_private` account, role, identity-map, session, rate-limit, and audit structures; public avatar, leaderboard snapshot/row, and Campus Wins projection structures; narrowly granted server RPCs; RLS helper functions.
 
-- [ ] Write pgTAP deny/allow tests for anon, two students, moderator, publisher, suspended student, and staff at AAL1/AAL2; run them before the migration and confirm the expected missing-table/policy failures.
-- [ ] Add migration with RLS enabled and forced on every exposed table, column-level grants for public-safe projections, unique/check/foreign-key constraints, and least-privilege RPC grants.
-- [ ] Use `security definer` only where required, pin `search_path = ''`, fully qualify names, and revoke default execute grants.
-- [ ] Add actual local PostgREST tests proving anon cannot query private mappings/sessions, students are isolated to their own avatars, and roles cannot be changed by students.
-- [ ] Add snapshot board constraints for level, semester, cohort, board kind, and module key without storing scores or student IDs in public projections.
-- [ ] Commit the schema/RLS slice after `supabase db reset` and all pgTAP/RLS tests pass.
+- [x] Write pgTAP deny/allow tests for anon, two students, moderator, publisher, suspended student, and staff at AAL1/AAL2; run them before the migration and confirm the expected missing-schema/table failures.
+- [x] Add migration with RLS enabled and forced on every exposed table, column-level grants for public-safe projections, unique/check/foreign-key constraints, and least-privilege RPC grants.
+- [x] Use `security definer` only where required, pin `search_path = ''`, fully qualify names, and revoke default execute grants.
+- [x] Add actual local PostgREST tests proving anon cannot query private mappings/sessions, students are isolated to their own avatars, and roles cannot be changed by students.
+- [x] Add snapshot board constraints for level, semester, cohort, board kind, and module key without storing scores or student IDs in public projections.
+- [x] Commit the schema/RLS slice after `supabase db reset` and all pgTAP/RLS tests pass.
 
 ### Task 3: BFF session, request, and CSRF boundary
 

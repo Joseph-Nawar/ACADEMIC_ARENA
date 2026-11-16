@@ -45,6 +45,16 @@ try {
     ...process.env,
     SUPABASE_TELEMETRY_DISABLED: "1",
   });
+  const databaseTests = await capture("npx", ["--no-install", "supabase", "test", "db"], {
+    ...process.env,
+    SUPABASE_TELEMETRY_DISABLED: "1",
+  });
+  process.stdout.write(databaseTests.stdout);
+  if (databaseTests.code !== 0) {
+    process.stderr.write("Local Supabase pgTAP/RLS tests failed. Provider credentials were not emitted.\n");
+    process.exitCode = databaseTests.code || 1;
+    process.exit();
+  }
   const statusText = await run("npx", ["--no-install", "supabase", "status", "--env", "--output-format", "text"], "Supabase status", {
     ...process.env,
     SUPABASE_TELEMETRY_DISABLED: "1",
