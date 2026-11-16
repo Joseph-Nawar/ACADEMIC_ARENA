@@ -35,6 +35,9 @@ export async function onRequestPost({ request, env }) {
   if (!identity || identity.provider_user_id !== session.providerUserId || identity.account_status !== "active") {
     return jsonResponse({ error: "password_change_failed" }, 400);
   }
+  if (identity.credential_update_pending === true) {
+    return jsonResponse({ error: "password_change_unavailable" }, 409);
+  }
   if (!allowed) return jsonResponse({ error: "password_change_failed" }, 400);
 
   let reauthenticated;

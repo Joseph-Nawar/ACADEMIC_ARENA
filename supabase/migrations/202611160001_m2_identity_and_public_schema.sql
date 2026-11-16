@@ -11,6 +11,7 @@ create table app_private.accounts (
   provider_user_id uuid not null unique references auth.users(id) on delete cascade,
   status text not null default 'active' check (status in ('active', 'suspended')),
   force_password_change boolean not null default true,
+  credential_update_pending boolean not null default false,
   created_at timestamptz not null default pg_catalog.now(),
   updated_at timestamptz not null default pg_catalog.now()
 );

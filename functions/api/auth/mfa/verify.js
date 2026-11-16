@@ -73,19 +73,16 @@ export async function onRequestPost({ request, env }) {
   try {
     const encryptedAccessToken = await encryptSessionSecret(accessToken, env.SESSION_JWE_KEY, "AA-ACCESS");
     const encryptedRefreshToken = await encryptSessionSecret(refreshToken, env.SESSION_JWE_KEY, "AA-REFRESH");
-    const { data, error } = await serviceClient(env).rpc("update_bff_session_provider_tokens", {
+    const { data, error } = await serviceClient(env).rpc("complete_staff_mfa_step_up", {
       p_session_token_hash: session.tokenHash,
+      p_account_id: session.accountId,
       p_provider_session_id: claims.session_id,
       p_provider_access_token_jwe: encryptedAccessToken,
       p_provider_refresh_token_jwe: encryptedRefreshToken,
       p_provider_access_expires_at: new Date(expiresAt).toISOString(),
-    });
-    if (error || data !== true) return jsonResponse({ error: "mfa_session_update_failed" }, 503);
-    const { data: auditRecorded, error: auditError } = await serviceClient(env).rpc("record_staff_mfa_event", {
-      p_account_id: session.accountId,
       p_action_key: pending ? "staff.mfa_enrolled" : "staff.mfa_verified",
     });
-    if (auditError || auditRecorded !== true) return jsonResponse({ error: "mfa_audit_failed" }, 503);
+    if (error || data !== true) return jsonResponse({ error: "mfa_session_update_failed" }, 503);
   } catch {
     return jsonResponse({ error: "mfa_session_update_failed" }, 503);
   }

@@ -13,6 +13,7 @@ returns table (
   provider_email text,
   account_status text,
   force_password_change boolean,
+  credential_update_pending boolean,
   role_names text[]
 )
 language sql
@@ -25,13 +26,15 @@ as $$
          mapping.provider_email,
          account.status,
          account.force_password_change,
+         account.credential_update_pending,
          coalesce(pg_catalog.array_agg(role_grant.role_name order by role_grant.role_name), array[]::text[])
   from app_private.identity_mappings as mapping
   join app_private.accounts as account on account.id = mapping.account_id
   left join app_private.account_role_grants as role_grant on role_grant.account_id = account.id
   where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
     and pg_catalog.lower(pg_catalog.btrim(p_username)) ~ '^[a-z0-9][a-z0-9._-]{2,31}$'
-  group by account.id, account.provider_user_id, mapping.provider_email, account.status, account.force_password_change
+  group by account.id, account.provider_user_id, mapping.provider_email,
+    account.status, account.force_password_change, account.credential_update_pending
 $$;
 
 create or replace function public.create_bff_session(
@@ -69,6 +72,7 @@ begin
   if not exists (
     select 1 from app_private.accounts as account
     where account.id = p_account_id and account.status = 'active'
+      and account.credential_update_pending = false
   ) then
     raise exception using errcode = '42501', message = 'active account required';
   end if;
@@ -131,6 +135,7 @@ begin
       and pg_catalog.octet_length(p_session_token_hash) = 32
       and session.account_id = account.id
       and account.status = 'active'
+      and account.credential_update_pending = false
       and session.revoked_at is null
       and session.expires_at > pg_catalog.clock_timestamp()
       and session.provider_access_expires_at > pg_catalog.clock_timestamp()

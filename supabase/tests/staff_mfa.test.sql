@@ -1,11 +1,19 @@
 begin;
-select plan(15);
+select plan(26);
 
 select ok(to_regprocedure('public.record_staff_mfa_event(uuid,text)') is not null, 'server audit RPC exists');
+select ok(to_regprocedure('public.complete_staff_mfa_step_up(bytea,uuid,uuid,text,text,timestamptz,text)') is not null, 'MFA step-up stores provider tokens and audit atomically');
+select ok(to_regprocedure('public.complete_staff_mfa_reset(uuid,bigint)') is not null, 'server finalizes provider MFA removal');
 select ok(to_regprocedure('public.reset_staff_mfa_for_account(text)') is not null, 'staff MFA recovery RPC exists');
 select ok(has_function_privilege('service_role', 'public.record_staff_mfa_event(uuid,text)', 'execute')
   and not has_function_privilege('authenticated', 'public.record_staff_mfa_event(uuid,text)', 'execute'),
   'only the server can record provider MFA events');
+select ok(has_function_privilege('service_role', 'public.complete_staff_mfa_step_up(bytea,uuid,uuid,text,text,timestamptz,text)', 'execute')
+  and not has_function_privilege('authenticated', 'public.complete_staff_mfa_step_up(bytea,uuid,uuid,text,text,timestamptz,text)', 'execute'),
+  'only the server can atomically complete staff MFA step-up');
+select ok(has_function_privilege('service_role', 'public.complete_staff_mfa_reset(uuid,bigint)', 'execute')
+  and not has_function_privilege('authenticated', 'public.complete_staff_mfa_reset(uuid,bigint)', 'execute'),
+  'only the server can finalize provider MFA removal');
 select ok(has_function_privilege('authenticated', 'public.reset_staff_mfa_for_account(text)', 'execute')
   and not has_function_privilege('anon', 'public.reset_staff_mfa_for_account(text)', 'execute'),
   'MFA recovery RPC requires an authenticated caller');
@@ -33,6 +41,10 @@ insert into app_private.bff_sessions (
   decode(repeat('41', 32), 'hex'), decode(repeat('42', 32), 'hex'), repeat('c', 64),
   '20000000-0000-4000-8000-000000000042', '30000000-0000-4000-8000-000000000042',
   repeat('a', 64), repeat('b', 64), now() + interval '1 hour', now() + interval '1 hour'
+), (
+  decode(repeat('43', 32), 'hex'), decode(repeat('44', 32), 'hex'), repeat('f', 64),
+  '20000000-0000-4000-8000-000000000041', '30000000-0000-4000-8000-000000000041',
+  repeat('g', 64), repeat('h', 64), now() + interval '1 hour', now() + interval '1 hour'
 );
 
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000041', true);
@@ -45,14 +57,26 @@ select ok(public.reset_staff_mfa_for_account('mfa.target'), 'AAL2 administrator 
 reset role;
 
 select ok((select force_password_change from app_private.accounts where id = '20000000-0000-4000-8000-000000000042'), 'MFA recovery requires a fresh password change');
+select ok((select credential_update_pending from app_private.accounts where id = '20000000-0000-4000-8000-000000000042'), 'MFA recovery blocks login until provider factors are removed');
 select ok((select revoked_at is not null and provider_access_token_jwe is null and provider_refresh_token_jwe is null
   from app_private.bff_sessions where account_id = '20000000-0000-4000-8000-000000000042'), 'MFA recovery revokes BFF sessions and clears encrypted provider material');
 select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000042' and action_key = 'staff.mfa_reset'), 1, 'staff MFA reset is audited');
 set local role service_role;
+select ok(public.complete_staff_mfa_reset('20000000-0000-4000-8000-000000000042', 1), 'server finalizes the matching provider factor removal');
+select ok(public.complete_staff_mfa_reset('20000000-0000-4000-8000-000000000042', 1), 'MFA reset finalization safely accepts a retry for the same generation');
+select ok(public.complete_staff_mfa_step_up(
+  decode(repeat('43', 32), 'hex'),
+  '20000000-0000-4000-8000-000000000041',
+  '30000000-0000-4000-8000-000000000041',
+  repeat('d', 64), repeat('e', 64), now() + interval '1 hour', 'staff.mfa_verified'
+), 'server atomically updates an AAL2 session and writes its audit event');
 select ok(public.record_staff_mfa_event('20000000-0000-4000-8000-000000000042', 'staff.mfa_enrolled'), 'server records successful staff MFA enrollment without factor material');
 select is(public.record_staff_mfa_event('20000000-0000-4000-8000-000000000042', 'staff.mfa_secret'), false, 'server audit rejects unapproved MFA event keys');
 select is(public.record_staff_mfa_event('20000000-0000-4000-8000-000000000099', 'staff.mfa_enrolled'), false, 'server audit returns false when actor is no longer an active staff account');
 reset role;
+select is((select credential_update_pending from app_private.accounts where id = '20000000-0000-4000-8000-000000000042'), false, 'MFA reset completion reopens the forced password-change flow');
+select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000042' and action_key = 'staff.mfa_reset_completed'), 1, 'provider MFA removal completion is audited');
+select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000041' and action_key = 'staff.mfa_verified'), 1, 'atomic MFA step-up commits the audit event with the token update');
 select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000042' and action_key = 'staff.mfa_enrolled'), 1, 'MFA audit stores an action key and no authenticator secret');
 
 update app_private.runtime_controls set allow_fictional_account_lifecycle = false where singleton;

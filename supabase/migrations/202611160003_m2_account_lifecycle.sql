@@ -42,6 +42,7 @@ as $$
   where account.provider_user_id = (select auth.uid())
     and account.status = 'active'
     and account.force_password_change = false
+    and account.credential_update_pending = false
   limit 1
 $$;
 
@@ -57,6 +58,7 @@ as $$
     where account.provider_user_id = (select auth.uid())
       and account.status = 'active'
       and account.force_password_change = false
+      and account.credential_update_pending = false
   )
 $$;
 
@@ -75,6 +77,7 @@ as $$
     where account.provider_user_id = (select auth.uid())
       and account.status = 'active'
       and account.force_password_change = false
+      and account.credential_update_pending = false
       and permission.permission_key = p_permission_key
       and (
         role_grant.role_name = 'student'
@@ -98,6 +101,7 @@ begin
   select account.id into actor_account_id
   from app_private.accounts as account
   where account.id = p_account_id and account.status = 'active'
+    and account.credential_update_pending = false
     and account.credential_epoch = p_expected_credential_epoch
   for update;
   if actor_account_id is null then
@@ -109,6 +113,7 @@ begin
       credential_epoch = account.credential_epoch + 1,
       updated_at = pg_catalog.clock_timestamp()
   where account.id = actor_account_id and account.status = 'active'
+    and account.credential_update_pending = false
     and account.credential_epoch = p_expected_credential_epoch;
   if not found then
     return false;
@@ -135,7 +140,8 @@ returns table (
   provider_email text,
   username_normalized text,
   account_status text,
-  credential_epoch bigint
+  credential_epoch bigint,
+  credential_update_pending boolean
 )
 language sql
 stable
@@ -143,7 +149,8 @@ security definer
 set search_path = ''
 as $$
   select account.id, account.provider_user_id, mapping.provider_email,
-         mapping.username_normalized, account.status, account.credential_epoch
+         mapping.username_normalized, account.status, account.credential_epoch,
+         account.credential_update_pending
   from app_private.accounts as account
   join app_private.identity_mappings as mapping on mapping.account_id = account.id
   where account.id = p_account_id
@@ -177,7 +184,8 @@ begin
   normalized_email := pg_catalog.lower(pg_catalog.btrim(p_provider_email));
   if normalized_username !~ '^[a-z0-9][a-z0-9._-]{2,31}$'
     or pg_catalog.length(normalized_email) not between 3 and 254
-    or normalized_email !~ '^[^[:space:]@]+@[^[:space:]@]+$' then
+    or normalized_email !~ '^[^[:space:]@]+@[^[:space:]@]+$'
+    or normalized_email !~ '^[^[:space:]@]+@academic-arena[.]test$' then
     raise exception using errcode = '22023', message = 'invalid provisioned account';
   end if;
 
@@ -225,6 +233,7 @@ begin
   join app_private.accounts as account on account.id = mapping.account_id
   where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
     and account.status = 'active'
+    and account.credential_update_pending = false
     and actor_account_id <> account.id
     and exists (
       select 1 from app_private.account_role_grants as student_role
@@ -241,6 +250,7 @@ begin
 
   update app_private.accounts as account
   set force_password_change = true,
+      credential_update_pending = true,
       credential_epoch = account.credential_epoch + 1,
       updated_at = pg_catalog.clock_timestamp()
   where account.id = target_account_id;
@@ -253,6 +263,49 @@ begin
   where session.account_id = target_account_id and session.revoked_at is null;
   insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
   values (actor_account_id, target_account_id, 'account.recovery_started', 'staff_recovery');
+  return true;
+end
+$$;
+
+create or replace function public.complete_student_password_recovery(
+  p_account_id uuid,
+  p_expected_credential_epoch bigint
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target_account_id uuid;
+  update_pending boolean;
+begin
+  select account.id, account.credential_update_pending
+    into target_account_id, update_pending
+  from app_private.accounts as account
+  where account.id = p_account_id and account.status = 'active'
+    and account.force_password_change = true
+    and account.credential_epoch = p_expected_credential_epoch
+  for update;
+  if target_account_id is null then
+    return false;
+  end if;
+  if not update_pending then
+    return true;
+  end if;
+
+  update app_private.accounts as account
+  set credential_update_pending = false,
+      updated_at = pg_catalog.clock_timestamp()
+  where account.id = target_account_id and account.status = 'active'
+    and account.force_password_change = true
+    and account.credential_update_pending = true
+    and account.credential_epoch = p_expected_credential_epoch;
+  if not found then
+    return false;
+  end if;
+  insert into app_private.audit_events (target_account_id, action_key, reason_code)
+  values (target_account_id, 'account.recovery_completed', 'provider_password_reset');
   return true;
 end
 $$;
@@ -296,6 +349,8 @@ begin
 
   update app_private.accounts as account
   set status = 'suspended',
+      force_password_change = true,
+      credential_update_pending = false,
       credential_epoch = account.credential_epoch + 1,
       updated_at = pg_catalog.clock_timestamp()
   where account.id = target_account_id;
@@ -313,11 +368,13 @@ end
 $$;
 
 revoke all on function public.complete_password_change(uuid, bigint) from public, anon, authenticated;
+revoke all on function public.complete_student_password_recovery(uuid, bigint) from public, anon, authenticated, service_role;
 revoke all on function public.resolve_account_identity(uuid) from public, anon, authenticated;
 revoke all on function public.provision_student_account(uuid, text, text) from public, anon, service_role;
 revoke all on function public.force_password_change_for_account(text) from public, anon, service_role;
 revoke all on function public.suspend_student_account(text) from public, anon, service_role;
 grant execute on function public.complete_password_change(uuid, bigint) to service_role;
+grant execute on function public.complete_student_password_recovery(uuid, bigint) to service_role;
 grant execute on function public.resolve_account_identity(uuid) to service_role;
 grant execute on function public.provision_student_account(uuid, text, text) to authenticated;
 grant execute on function public.force_password_change_for_account(text) to authenticated;

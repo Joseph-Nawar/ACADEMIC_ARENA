@@ -47,7 +47,8 @@ export async function onRequestPost({ request, env }) {
   } catch {
     return jsonResponse({ error: "unavailable" }, 503);
   }
-  if (!identity || identity.account_status !== "active" || !Array.isArray(identity.role_names) || identity.role_names.length === 0) {
+  if (!identity || identity.account_status !== "active" || identity.credential_update_pending === true ||
+      !Array.isArray(identity.role_names) || identity.role_names.length === 0) {
     return genericFailure(startedAt);
   }
 
