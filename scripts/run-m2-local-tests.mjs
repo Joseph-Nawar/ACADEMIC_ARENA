@@ -4,6 +4,8 @@ import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { stopProcessTree } from "./process-cleanup.mjs";
+import { waitForHttpReady } from "./http-readiness.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -87,6 +89,7 @@ async function startPagesPreview(port) {
   ], {
     cwd: root,
     env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" },
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
   let log = "";
@@ -94,27 +97,19 @@ async function startPagesPreview(port) {
   child.stderr.setEncoding("utf8").on("data", (part) => { log += part; });
   child.once("error", () => {});
   const url = `http://127.0.0.1:${port}`;
-  for (let attempt = 0; attempt < 600; attempt += 1) {
-    if (child.exitCode !== null) {
-      const safeLog = log
-        .replace(/eyJ[A-Za-z0-9_.-]{20,}/gu, "[redacted-jwt]")
-        .replace(/(SUPABASE_[A-Z_]+|SESSION_JWE_KEY|RATE_LIMIT_HMAC_KEY)=\S+/gu, "$1=[redacted]")
-        .replace(/[A-Za-z0-9_-]{64,}/gu, "[redacted-value]")
-        .slice(-1200);
-      throw new Error(`Local Cloudflare Pages preview exited before becoming ready (${child.exitCode}): ${safeLog}`);
-    }
-    try {
-      const response = await fetch(url, { redirect: "error" });
-      if (response.ok) return { child, url };
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  child.kill("SIGTERM");
-  const safeLog = log
+  const sanitizedLog = () => log
     .replace(/eyJ[A-Za-z0-9_.-]{20,}/gu, "[redacted-jwt]")
     .replace(/(SUPABASE_[A-Z_]+|SESSION_JWE_KEY|RATE_LIMIT_HMAC_KEY)=\S+/gu, "$1=[redacted]")
     .replace(/[A-Za-z0-9_-]{64,}/gu, "[redacted-value]")
     .slice(-1200);
+  const readiness = await waitForHttpReady(url, { child, timeoutMs: 60_000, intervalMs: 100 });
+  if (readiness === "ready") return { child, url };
+  if (readiness === "exited") {
+    await stopProcessTree(child);
+    throw new Error(`Local Cloudflare Pages preview exited before becoming ready (${child.exitCode ?? child.signalCode}): ${sanitizedLog()}`);
+  }
+  await stopProcessTree(child);
+  const safeLog = sanitizedLog();
   throw new Error(`Local Cloudflare Pages preview did not become ready.${safeLog ? ` ${safeLog}` : ""}`);
 }
 
@@ -284,17 +279,20 @@ async function startProviderFaultProxy(targetUrl, port) {
 
 async function stopServer(server) {
   if (!server?.listening) return;
-  await new Promise((resolve) => server.close(resolve));
-}
-
-async function stopProcess(child) {
-  if (!child || child.exitCode !== null) return;
-  child.kill("SIGTERM");
-  await Promise.race([
-    new Promise((resolve) => child.once("close", resolve)),
-    new Promise((resolve) => setTimeout(resolve, 5000)),
-  ]);
-  if (child.exitCode === null) child.kill("SIGKILL");
+  const closed = new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  server.closeAllConnections();
+  let timeout;
+  try {
+    await Promise.race([
+      closed,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("Provider test proxy did not close within 5 seconds.")), 5000);
+        timeout.unref();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 let pagesProcess;
@@ -431,8 +429,20 @@ try {
   if (!process.exitCode) process.stderr.write(`${error.message}\n`);
   process.exitCode = 1;
 } finally {
-  await stopProcess(pagesProcess);
-  await stopServer(providerProxy);
+  process.stdout.write("Cleanup: stopping local Pages preview process group.\n");
+  try {
+    await stopProcessTree(pagesProcess);
+  } catch {
+    process.stderr.write("Local Pages preview process cleanup failed.\n");
+    process.exitCode = 1;
+  }
+  process.stdout.write("Cleanup: closing local provider proxy.\n");
+  try {
+    await stopServer(providerProxy);
+  } catch {
+    process.stderr.write("Local provider proxy cleanup failed.\n");
+    process.exitCode = 1;
+  }
   if (testEnvironmentFile) {
     if (previousDevVars) {
       await writeFile(testEnvironmentFile, previousDevVars.contents, { mode: previousDevVars.mode });
