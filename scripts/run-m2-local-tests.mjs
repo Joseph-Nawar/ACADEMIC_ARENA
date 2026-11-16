@@ -7,21 +7,42 @@ import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function capture(command, args, env = process.env) {
+function capture(command, args, env = process.env, timeoutMs = 5 * 60 * 1000) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
     child.stdout.setEncoding("utf8").on("data", (part) => { stdout += part; });
     child.stderr.setEncoding("utf8").on("data", (part) => { stderr += part; });
     child.once("error", reject);
-    child.once("close", (code) => resolve({ code, stdout, stderr }));
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      try {
+        if (process.platform === "win32") child.kill("SIGTERM");
+        else process.kill(-child.pid, "SIGTERM");
+      } catch {}
+      setTimeout(() => {
+        try {
+          if (process.platform === "win32") child.kill("SIGKILL");
+          else process.kill(-child.pid, "SIGKILL");
+        } catch {}
+      }, 5000).unref();
+    }, timeoutMs);
+    timeout.unref();
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve({ code: timedOut ? 124 : code, stdout, stderr, timedOut });
+    });
   });
 }
 
-async function run(command, args, label, env = process.env) {
+async function run(command, args, label, env = process.env, timeoutMs = 5 * 60 * 1000) {
   const result = await capture(command, args, env);
-  if (result.code !== 0) throw new Error(`${label} failed (exit ${result.code}).`);
+  if (result.code !== 0) {
+    const detail = result.timedOut ? `timed out after ${timeoutMs / 1000} seconds` : `failed (exit ${result.code})`;
+    throw new Error(`${label} ${detail}.`);
+  }
   return result.stdout;
 }
 
@@ -362,7 +383,7 @@ try {
     AA_SESSION_JWE_KEY: jweKey,
     AA_RATE_LIMIT_HMAC_KEY: rateLimitKey,
   };
-  const result = await capture(process.execPath, ["--test", ...testFiles], testEnv);
+  const result = await capture(process.execPath, ["--test", "--test-concurrency=1", ...testFiles], testEnv);
   process.stdout.write(result.stdout);
   if (result.code !== 0) {
     process.stderr.write("M2 local integration tests failed. Local provider credentials were not emitted.\n");

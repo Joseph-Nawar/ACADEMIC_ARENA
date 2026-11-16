@@ -15,7 +15,7 @@ jobs:
   supabase-local:
     name: Local Supabase Auth, Postgres, and RLS tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,6 +31,8 @@ jobs:
 
       - name: Start local Supabase and test fictional identities
         run: npm run test:m2:local
+        env:
+          AA_SUPABASE_RUNTIME: auto
 
   validate:
     name: Build, security, and baseline tests
