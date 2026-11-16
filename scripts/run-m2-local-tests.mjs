@@ -326,6 +326,11 @@ try {
     if (stackStatus.identity?.project_root !== root || !Array.isArray(stackStatus.services)) {
       throw new Error("Could not verify ownership of the local Supabase stack; refusing to start or reset it.");
     }
+    const requiredServices = new Set(["database", "rest", "auth"]);
+    const reportedServices = new Set(stackStatus.services.map((service) => service.service));
+    if ([...requiredServices].some((service) => !reportedServices.has(service))) {
+      throw new Error("Could not verify the required local Supabase services; refusing to start or reset an unknown stack.");
+    }
     const stoppedStates = new Set(["unavailable", "stopped"]);
     if (stackStatus.services.some((service) => !stoppedStates.has(service.state))) {
       throw new Error("A local Supabase stack is already running or partially available. Stop it before running this test command; the command resets local data.");
