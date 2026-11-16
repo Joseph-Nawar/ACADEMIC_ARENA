@@ -52,7 +52,9 @@ export async function json(response) {
 }
 
 function fetchForTest(label, input, init) {
-  return fetch(input, init).catch((error) => {
+  const request = { ...init, headers: new Headers(init?.headers) };
+  request.headers.set("Connection", "close");
+  return fetch(input, request).catch((error) => {
     throw new Error(`${label} failed.`, { cause: error });
   });
 }
@@ -61,7 +63,8 @@ export function api(path, { method = "GET", token = local.anonKey, body, origin,
   const requestHeaders = { Accept: "application/json", ...headers };
   if (origin) requestHeaders.Origin = origin;
   if (body !== undefined) requestHeaders["Content-Type"] = "application/json";
-  return fetchForTest(`Local BFF ${method} ${path}`, new URL(path, local.pagesUrl), {
+  const url = new URL(path, local.pagesUrl);
+  return fetchForTest(`Local BFF ${method} ${url.pathname}`, url, {
     method,
     headers: requestHeaders,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
