@@ -12,7 +12,7 @@ Students receive staff-provisioned usernames and passwords. There is no public r
 
 Supabase password sign-in accepts email or phone identifiers, not usernames. The admin create-user API is privileged and accepts provider identity data. The actual local Supabase Auth password response includes the user's email and provider access and refresh tokens; the access token also contains an email claim. A server-side username lookup alone does not keep these details private if the browser signs in directly. **Direct client Supabase Auth is therefore rejected.**
 
-The M2 BFF keeps the provider Auth calls and private username-to-email mapping server-side. The browser receives a 256-bit opaque `__Host-aa_session` cookie, a session-bound CSRF value, and a small role/action summary. It never receives the Auth user object, email, provider JWTs, refresh tokens, service-role credential, private account ID, or mapping. A local response scan asserts the provider fields are absent. The TOTP enrollment response contains the one-time authenticator secret and URI because the staff member must transfer the key to an authenticator; the UI clears it after confirmation or close.
+The M2 BFF keeps the provider Auth calls and private username-to-email mapping server-side. The browser receives a 256-bit opaque `__Host-aa_session` cookie, a session-bound CSRF value, and a small role/action summary. It never receives the Auth user object, email, provider JWTs, refresh tokens, service-role credential, private account ID, or mapping. A local response scan asserts the provider fields are absent. TOTP enrollment returns only the one-time authenticator secret; it omits Supabase's raw `otpauth` URI because the URI label can contain the provider email. The UI clears the secret after confirmation or close.
 
 ## Local username/password workflow
 
@@ -40,7 +40,7 @@ V6's custom password and session logic is a pilot reference, not a reviewed prov
 
 ## Development safeguards and remaining gates
 
-Account provisioning, recovery, suspension, and staff-MFA reset BFF routes explicitly refuse requests outside `ENVIRONMENT=test`. No deployment secret or hosted project is configured. This provides a local end-to-end workflow without creating real institutional accounts.
+Account provisioning, recovery, suspension, and staff-MFA reset BFF routes explicitly refuse requests outside `ENVIRONMENT=test`. Their database RPCs additionally require a private lifecycle gate that defaults to false in migrations; the local fictional seed alone turns it on. This also blocks an AAL2 user who attempts to bypass the BFF and call exposed PostgREST RPCs directly. A credential epoch makes stale password-completion requests fail if recovery or suspension has started since the request resolved its account. No deployment secret or hosted project is configured. This provides a local end-to-end workflow without creating real institutional accounts.
 
 Before hosted integration, the university must authorize processing a legitimate roster and institutional email addresses in Supabase, select/approve the project region and terms, name staff custodians, approve the account-recovery process, and authorize the external provider configuration. The initial administrator bootstrap and offline recovery procedure for a sole administrator who loses their factor also need an institution-approved runbook. The hosted Auth session/ban behavior, deployment secret binding, quotas, backups, and production observability remain unverified. No real identity import or public deployment is authorized.
 

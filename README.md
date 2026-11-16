@@ -53,7 +53,7 @@ The pinned Supabase CLI native runtime runs fictional Auth, Postgres, and PostgR
 npm run test:m2:local
 ```
 
-The command starts the local stack, applies migrations and fictional seeds, runs pgTAP/RLS assertions and live BFF/Auth/PostgREST integration tests, then stops the stack and removes temporary local bindings. `npm run supabase:start`, `npm run supabase:reset`, and `npm run supabase:stop` are available for manual local inspection. No hosted project link or credentials are needed.
+The command refuses to reset an already-running local stack, starts Supabase bound to loopback, applies migrations and fictional seeds, runs pgTAP/RLS assertions and live BFF/Auth/PostgREST integration tests, then stops the stack and removes temporary local bindings. The lifecycle RPCs are disabled by default in migrations; only the local fictional seed enables them, and the Pages BFF also requires `ENVIRONMENT=test`. `npm run supabase:start`, `npm run supabase:reset`, and `npm run supabase:stop` are available for manual local inspection. No hosted project link or credentials are needed.
 
 The legacy FastAPI pilot remains a reference for domain behavior; it is not deployed by Pages. Its baseline smoke test is reproducible with Python 3.12:
 
