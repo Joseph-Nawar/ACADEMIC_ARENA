@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(30);
+select plan(36);
 
 select has_schema('app_private', 'private identity schema exists');
 select has_table('app_private', 'accounts', 'private accounts exist');
@@ -70,6 +70,32 @@ select ok(
   and not has_function_privilege('anon', 'public.consume_login_rate_limit(bytea,bytea)', 'execute')
   and not has_function_privilege('authenticated', 'public.consume_login_rate_limit(bytea,bytea)', 'execute'),
   'only the server service role can consume login rate limit buckets'
+);
+select has_column('app_private', 'bff_sessions', 'csrf_token_jwe', 'server-encrypted CSRF token is stored with its session');
+select has_column('app_private', 'bff_sessions', 'provider_refresh_token_jwe', 'provider refresh credential is encrypted while temporarily retained');
+select ok(
+  has_function_privilege('service_role', 'public.resolve_login_identity(text)', 'execute')
+  and not has_function_privilege('anon', 'public.resolve_login_identity(text)', 'execute')
+  and not has_function_privilege('authenticated', 'public.resolve_login_identity(text)', 'execute'),
+  'username mapping lookup is server-only'
+);
+select ok(
+  has_function_privilege('service_role', 'public.create_bff_session(bytea,bytea,text,uuid,uuid,text,text,timestamp with time zone,timestamp with time zone)', 'execute')
+  and not has_function_privilege('anon', 'public.create_bff_session(bytea,bytea,text,uuid,uuid,text,text,timestamp with time zone,timestamp with time zone)', 'execute')
+  and not has_function_privilege('authenticated', 'public.create_bff_session(bytea,bytea,text,uuid,uuid,text,text,timestamp with time zone,timestamp with time zone)', 'execute'),
+  'only the server can create an opaque BFF session'
+);
+select ok(
+  has_function_privilege('service_role', 'public.resolve_bff_session(bytea)', 'execute')
+  and not has_function_privilege('anon', 'public.resolve_bff_session(bytea)', 'execute')
+  and not has_function_privilege('authenticated', 'public.resolve_bff_session(bytea)', 'execute'),
+  'only the server can resolve opaque BFF sessions'
+);
+select ok(
+  has_function_privilege('service_role', 'public.revoke_bff_session(bytea,text)', 'execute')
+  and not has_function_privilege('anon', 'public.revoke_bff_session(bytea,text)', 'execute')
+  and not has_function_privilege('authenticated', 'public.revoke_bff_session(bytea,text)', 'execute'),
+  'only the server can revoke opaque BFF sessions'
 );
 select ok(
   (select count(distinct role_name) = 4 from app_private.role_permissions),

@@ -20,8 +20,13 @@
     "test:security": "python3 -m unittest discover -s tests -p test_check_secrets.py"
   },
   "devDependencies": {
+    "otpauth": "9.4.1",
     "playwright": "1.65.1",
     "supabase": "2.121.0",
     "wrangler": "4.162.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.119.0",
+    "jose": "6.2.17"
   }
 }

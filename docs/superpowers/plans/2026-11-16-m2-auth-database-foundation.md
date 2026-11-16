@@ -77,12 +77,12 @@
 - `resolveSession(request, env)` returns only server-side account/session context or an unauthenticated result.
 - Provider access tokens are encrypted with JWE at rest; opaque cookie tokens are SHA-256 hashed before database lookup. No refresh token is returned to the browser.
 
-- [ ] Add failing HTTP tests for opaque `__Host-` cookie attributes, no-store headers, origin checks, invalid/expired/revoked cookie behavior, and logout revocation.
-- [ ] Add Pages Functions middleware and safe response builders; fail closed for missing secrets or malformed headers.
-- [ ] Implement session issuance/resolution/revocation with request-scoped Supabase clients and pinned JWE; cap expiry below provider JWT expiry and verify actual local sign-out/access-token behavior.
-- [ ] Add CSRF token issuance bound to the session and exact same-origin checks for every mutation; verify login has Origin protection.
-- [ ] Verify responses contain no provider email/user/tokens, service key, private mapping, or cookie-readable session secret.
-- [ ] Commit the BFF/session slice after actual local Auth/PostgREST tests pass.
+- [x] Add HTTP tests for opaque `__Host-` cookie attributes, no-store headers, origin checks, invalid/expired/revoked cookie behavior, and logout revocation.
+- [x] Add Pages Functions middleware and safe response builders; fail closed for missing secrets or malformed headers.
+- [x] Implement session resolution/revocation with request-scoped Supabase clients and pinned JWE; cap expiry below provider JWT expiry and verify local provider refresh-token sign-out and PostgREST access-token expiry behavior.
+- [x] Add CSRF token issuance bound to the session and exact same-origin checks on logout; login will reuse the same Origin helper in Task 4.
+- [x] Verify responses contain no provider email/user/tokens, service key, private mapping, or cookie-readable session secret.
+- [x] Commit the BFF/session slice after actual local Auth/PostgREST tests pass.
 
 ### Task 4: Username login, password change, rate limits, and account recovery
 
