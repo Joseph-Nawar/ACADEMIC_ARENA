@@ -47,13 +47,13 @@ The browser smoke starts Wrangler locally and checks demo interactions at deskto
 
 ## Milestone 2 local provider tests
 
-The pinned Supabase CLI native runtime runs fictional Auth, Postgres, and PostgREST locally without Docker. GitHub Actions uses automatic runtime selection on its Ubuntu runner, which selects the available Docker engine. Both modes bind to loopback, disable public signup, and use test-created random `*.academic-arena.test` identities. The email-confirmation flag is only applied to ephemeral local test users because local password sign-in requires it; it does not verify any external identity.
+The pinned Supabase CLI native runtime runs fictional Auth, Postgres, and PostgREST locally without Docker. GitHub Actions also selects the native runtime on Ubuntu 24.04, which the CLI supports for CI. The Docker runtime's local host proxy binds to wildcard addresses even when reported service URLs use loopback, so it is not used for this loopback-confinement suite. Native mode disables public signup and uses test-created random `*.academic-arena.test` identities. The email-confirmation flag is only applied to ephemeral local test users because local password sign-in requires it; it does not verify any external identity.
 
 ```bash
 npm run test:m2:local
 ```
 
-The command refuses to reset an already-running local stack, starts Supabase bound to loopback, applies migrations and fictional seeds, runs pgTAP/RLS assertions and serial live BFF/Auth/PostgREST integration tests, then stops the stack and removes temporary local bindings. The local default is native runtime; CI sets `AA_SUPABASE_RUNTIME=auto` so the CLI uses Docker when available. CLI subprocesses are bounded to five minutes so failed startup or cleanup cannot hang the job indefinitely. The lifecycle RPCs are disabled by default in migrations; only the local fictional seed enables them, and the Pages BFF also requires `ENVIRONMENT=test`. `npm run supabase:start`, `npm run supabase:reset`, and `npm run supabase:stop` are available for manual local inspection. No hosted project link or credentials are needed.
+The command refuses to reset an already-running local stack, starts Supabase bound to loopback, applies migrations and fictional seeds, runs pgTAP/RLS assertions and serial live BFF/Auth/PostgREST integration tests, then stops the stack and removes temporary local bindings. The local default and CI both use native runtime; set `AA_SUPABASE_RUNTIME=docker` only for isolated experiments, since that mode does not meet the suite's loopback-listener requirement. CLI subprocesses are bounded to five minutes and the Pages preview can take up to 60 seconds to become ready. The lifecycle RPCs are disabled by default in migrations; only the local fictional seed enables them, and the Pages BFF also requires `ENVIRONMENT=test`. `npm run supabase:start`, `npm run supabase:reset`, and `npm run supabase:stop` are available for manual local inspection. No hosted project link or credentials are needed.
 
 The legacy FastAPI pilot remains a reference for domain behavior; it is not deployed by Pages. Its baseline smoke test is reproducible with Python 3.12:
 

@@ -94,7 +94,7 @@ async function startPagesPreview(port) {
   child.stderr.setEncoding("utf8").on("data", (part) => { log += part; });
   child.once("error", () => {});
   const url = `http://127.0.0.1:${port}`;
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  for (let attempt = 0; attempt < 600; attempt += 1) {
     if (child.exitCode !== null) {
       const safeLog = log
         .replace(/eyJ[A-Za-z0-9_.-]{20,}/gu, "[redacted-jwt]")

@@ -32,7 +32,7 @@ jobs:
       - name: Start local Supabase and test fictional identities
         run: npm run test:m2:local
         env:
-          AA_SUPABASE_RUNTIME: auto
+          AA_SUPABASE_RUNTIME: native
 
   validate:
     name: Build, security, and baseline tests

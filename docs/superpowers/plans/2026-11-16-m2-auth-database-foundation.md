@@ -4,7 +4,7 @@
 
 **Goal:** Implement and locally verify the fictional-data Supabase Auth and database foundation behind the existing same-origin frontend contract.
 
-**Architecture:** Cloudflare Pages Functions provide the same-origin BFF. Supabase Auth verifies passwords and TOTP; opaque cookie sessions and private mappings remain server-side; student data calls use provider JWTs and restrictive RLS. The pinned Supabase CLI provides the real local provider/test target (native runtime on developer machines, automatic runtime selection in GitHub Actions), with live loopback-listener checks; no hosted credentials or external identities are used.
+**Architecture:** Cloudflare Pages Functions provide the same-origin BFF. Supabase Auth verifies passwords and TOTP; opaque cookie sessions and private mappings remain server-side; student data calls use provider JWTs and restrictive RLS. The pinned Supabase CLI provides the real local provider/test target (native runtime on developer machines and GitHub Actions), with live loopback-listener checks; no hosted credentials or external identities are used.
 
 **Tech Stack:** Existing vanilla frontend and Node 24 tooling; Cloudflare Pages Functions/Workers runtime; Supabase CLI local stack, Auth, Postgres/PostgREST; `@supabase/supabase-js`, `jose`, `otpauth`, and `qrcode` pinned dependencies; Playwright and Node's built-in test runner.
 
