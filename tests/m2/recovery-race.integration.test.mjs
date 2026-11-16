@@ -79,14 +79,32 @@ test("provider recovery blocks login/password changes until the matching reset i
   const recoveryState = Array.isArray(identityRows) ? identityRows[0] : identityRows;
   assert.equal(recoveryState.credential_epoch, 1);
   assert.equal(recoveryState.credential_update_pending, true);
-  const storedOperation = await serviceRpc("resolve_credential_sync_operation", {
+  const leaseTokenHash = "a".repeat(64);
+  const storedOperation = await serviceRpc("claim_credential_sync_operation", {
     p_account_id: student.accountId,
     p_operation_kind: "student_password_recovery",
+    p_lease_token_hash: leaseTokenHash,
   });
   assert.equal(storedOperation.ok, true);
   const operationRows = await json(storedOperation);
   const operation = Array.isArray(operationRows) ? operationRows[0] : operationRows;
   assert.equal(operation.password_jwe, "a".repeat(64), "retry retains only the first encrypted credential payload");
+  const overlappingClaim = await serviceRpc("claim_credential_sync_operation", {
+    p_account_id: student.accountId,
+    p_operation_kind: "student_password_recovery",
+    p_lease_token_hash: "b".repeat(64),
+  });
+  assert.equal(overlappingClaim.ok, true);
+  assert.deepEqual(await json(overlappingClaim), [], "an overlapping recovery request receives no active provider claim");
+  const retryDuringLease = await postgrestRpc("force_password_change_for_account", {
+    p_username: student.username,
+    p_password_jwe: "c".repeat(64),
+  }, verified.data.access_token);
+  assert.equal(retryDuringLease.status, 200);
+  assert.equal(await json(retryDuringLease), true, "a staff recovery retry does not create a second credential epoch");
+  const stateDuringLease = await serviceRpc("resolve_account_identity", { p_account_id: student.accountId });
+  assert.equal(stateDuringLease.ok, true);
+  assert.equal((await json(stateDuringLease))[0].credential_epoch, recoveryState.credential_epoch);
 
   const revokedPriorSession = await api("/api/auth/session", { headers: { Cookie: oldCookie } });
   assert.deepEqual(await json(revokedPriorSession), { authenticated: false });
@@ -116,6 +134,7 @@ test("provider recovery blocks login/password changes until the matching reset i
   const finalized = await serviceRpc("complete_student_password_recovery", {
     p_account_id: student.accountId,
     p_expected_credential_epoch: recoveryState.credential_epoch,
+    p_lease_token_hash: leaseTokenHash,
   });
   assert.equal(finalized.ok, true);
   assert.equal(await json(finalized), true);

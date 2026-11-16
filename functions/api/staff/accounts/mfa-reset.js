@@ -1,5 +1,6 @@
 import { authorizeStaffMutation } from "../../../lib/authorization.js";
 import { serviceClient, userAuthClient } from "../../../lib/provider.js";
+import { randomOpaqueToken, sha256Bytea } from "../../../lib/secure-crypto.js";
 import { jsonResponse } from "../../../lib/response.js";
 import { findLoginIdentity } from "../../../lib/staff-accounts.js";
 import { hasExactKeys, isFictionalFixtureEmail, normalizeUsername, readJsonBody } from "../../../lib/validation.js";
@@ -38,19 +39,25 @@ export async function onRequestPost({ request, env }) {
   if (reset !== true) return jsonResponse({ error: "account_not_available" }, 404);
 
   let resetState;
+  let leaseTokenHash;
   let provider;
   try {
     provider = serviceClient(env);
-    const { data: operation, error: operationError } = await provider.rpc("resolve_credential_sync_operation", {
+    leaseTokenHash = (await sha256Bytea(randomOpaqueToken())).slice(2);
+    const { data: operation, error: operationError } = await provider.rpc("claim_credential_sync_operation", {
       p_account_id: identity.account_id,
       p_operation_kind: "staff_mfa_reset",
+      p_lease_token_hash: leaseTokenHash,
     });
     resetState = Array.isArray(operation) ? operation[0] || null : operation || null;
     if (operationError) return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   } catch {
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
-  if (!resetState || resetState.provider_user_id !== identity.provider_user_id ||
+  if (!resetState) {
+    return jsonResponse({ error: "mfa_reset_sync_pending" }, 503, { "Retry-After": "300" });
+  }
+  if (resetState.provider_user_id !== identity.provider_user_id ||
       !Number.isSafeInteger(resetState.credential_epoch)) {
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
@@ -75,6 +82,7 @@ export async function onRequestPost({ request, env }) {
     ({ data: finalized, error: finalizeError } = await provider.rpc("complete_staff_mfa_reset", {
       p_account_id: identity.account_id,
       p_expected_credential_epoch: resetState.credential_epoch,
+      p_lease_token_hash: leaseTokenHash,
     }));
   } catch {
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);

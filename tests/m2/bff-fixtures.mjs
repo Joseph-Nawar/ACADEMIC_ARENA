@@ -87,6 +87,52 @@ export async function injectProviderFailure(providerUserId, operation) {
   assert.equal(response.status, 204, "loopback test proxy arms a one-time failure for a fictional provider identity");
 }
 
+export async function pauseNextProviderRequest(providerUserId, operation) {
+  assert.match(providerUserId, /^[0-9a-f-]{36}$/iu);
+  assert.ok(["user-password-update", "mfa-factor-list"].includes(operation));
+  const response = await fetch(new URL("/__local_test__/pause-next-provider-request", local.supabaseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ providerUserId, operation }),
+  });
+  assert.equal(response.status, 204, "loopback test proxy pauses one selected fictional provider request");
+}
+
+export async function providerRequestState(providerUserId, operation) {
+  const url = new URL("/__local_test__/provider-request-state", local.supabaseUrl);
+  url.searchParams.set("providerUserId", providerUserId);
+  url.searchParams.set("operation", operation);
+  const response = await fetch(url);
+  assert.equal(response.status, 200, "loopback test proxy reports selected fictional provider request state");
+  return response.json();
+}
+
+export async function releaseProviderRequest(providerUserId, operation) {
+  const response = await fetch(new URL("/__local_test__/release-provider-request", local.supabaseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ providerUserId, operation }),
+  });
+  assert.equal(response.status, 204, "loopback test proxy releases the selected delayed fictional provider request");
+}
+
+export function expireCredentialSyncLease(accountId, operationKind) {
+  assert.match(accountId, /^[0-9a-f-]{36}$/iu);
+  assert.ok(["student_password_recovery", "staff_mfa_reset"].includes(operationKind));
+  try {
+    execFileSync("npx", [
+      "--no-install", "supabase", "db", "query", "--local",
+      `update app_private.credential_sync_operations set lease_until = now() - interval '1 second' where account_id = '${accountId}' and operation_kind = '${operationKind}'`,
+    ], {
+      cwd: process.cwd(),
+      env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    throw new Error("Local fictional provider-sync lease fixture could not be applied.");
+  }
+}
+
 export function setFictionalAccountStatus(accountId, status) {
   assert.match(accountId, /^[0-9a-f-]{36}$/iu);
   assert.ok(["active", "suspended"].includes(status));

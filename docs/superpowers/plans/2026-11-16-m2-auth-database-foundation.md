@@ -132,7 +132,7 @@
 
 - [x] Add browser tests that inspect response bodies, browser storage, and cookies during fictional login, forced password change, logout, and staff MFA states.
 - [x] Connect existing forms to the BFF with accessible pending/error states, preserving approved V6 styling.
-- [x] Run clean `npm ci`, frontend tests (27/27), secret-scanner tests (4/4), production build and both secret scans, Chromium desktop/mobile browser smoke, local Supabase tests (143 pgTAP/RLS assertions and 29/29 live provider/BFF integration tests, including injected Auth Admin failures followed by recovery/MFA-reset retries, direct PostgREST fictional-domain/lifecycle-gate checks, expired-secret cleanup, and atomic MFA audit), and retained FastAPI baseline smoke.
+- [x] Run clean `npm ci`, frontend tests (27/27), secret-scanner tests (4/4), production build and both secret scans, Chromium desktop/mobile browser smoke, local Supabase tests (155 pgTAP/RLS assertions and 29/29 live provider/BFF integration tests, including exclusive recovery/MFA claims, delayed overlapping Auth Admin requests, injected provider failures and lease-expiry retries, direct PostgREST fictional-domain/lifecycle-gate checks, lease-safe cleanup, and atomic MFA audit), and retained FastAPI baseline smoke.
 - [x] Update threat model, feasibility memo, README, roadmap, and architecture with verified local evidence, exact unverified provider/institutional gates, and residual risks; do not claim hosted-provider verification.
 - [ ] Commit final implementation, push the M2 branch, open a PR, and request independent review. Do not merge or deploy.
 

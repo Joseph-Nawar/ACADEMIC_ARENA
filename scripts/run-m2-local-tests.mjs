@@ -94,6 +94,15 @@ async function startPagesPreview(port) {
 
 async function startProviderFaultProxy(targetUrl, port) {
   let pendingFailure;
+  let pendingPause;
+  let activePause;
+  const providerRequestCounts = new Map();
+  const testInstruction = (body) => {
+    const instruction = JSON.parse(body.toString("utf8"));
+    if (!/^[0-9a-f-]{36}$/iu.test(instruction.providerUserId) ||
+        !["user-password-update", "mfa-factor-list"].includes(instruction.operation)) return null;
+    return { providerUserId: instruction.providerUserId.toLowerCase(), operation: instruction.operation };
+  };
   const server = createHttpServer(async (request, response) => {
     const requestUrl = new URL(request.url || "/", targetUrl);
     const chunks = [];
@@ -120,6 +129,69 @@ async function startProviderFaultProxy(targetUrl, port) {
       return;
     }
 
+    if (requestUrl.pathname === "/__local_test__/pause-next-provider-request" && request.method === "POST") {
+      if (!new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]).has(request.socket.remoteAddress)) {
+        response.writeHead(403).end();
+        return;
+      }
+      try {
+        const instruction = testInstruction(body);
+        if (!instruction) {
+          response.writeHead(400).end();
+          return;
+        }
+        pendingPause = instruction;
+        response.writeHead(204).end();
+      } catch {
+        response.writeHead(400).end();
+      }
+      return;
+    }
+
+    if (requestUrl.pathname === "/__local_test__/provider-request-state" && request.method === "GET") {
+      if (!new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]).has(request.socket.remoteAddress)) {
+        response.writeHead(403).end();
+        return;
+      }
+      const instruction = testInstruction(Buffer.from(JSON.stringify({
+        providerUserId: requestUrl.searchParams.get("providerUserId"),
+        operation: requestUrl.searchParams.get("operation"),
+      })));
+      if (!instruction) {
+        response.writeHead(400).end();
+        return;
+      }
+      const key = `${instruction.providerUserId}:${instruction.operation}`;
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(JSON.stringify({
+          count: providerRequestCounts.get(key) || 0,
+          paused: activePause?.providerUserId === instruction.providerUserId && activePause?.operation === instruction.operation,
+        }));
+      return;
+    }
+
+    if (requestUrl.pathname === "/__local_test__/release-provider-request" && request.method === "POST") {
+      if (!new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]).has(request.socket.remoteAddress)) {
+        response.writeHead(403).end();
+        return;
+      }
+      try {
+        const instruction = testInstruction(body);
+        if (!instruction || activePause?.providerUserId !== instruction.providerUserId ||
+            activePause?.operation !== instruction.operation) {
+          response.writeHead(409).end();
+          return;
+        }
+        const pause = activePause;
+        activePause = undefined;
+        pause.release();
+        response.writeHead(204).end();
+      } catch {
+        response.writeHead(400).end();
+      }
+      return;
+    }
+
     const userUpdateMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})$/iu);
     const factorListMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})\/factors$/iu);
     const shouldFailPassword = pendingFailure?.operation === "user-password-update" &&
@@ -132,6 +204,20 @@ async function startProviderFaultProxy(targetUrl, port) {
       response.writeHead(503, { "content-type": "application/json", "cache-control": "no-store" })
         .end(JSON.stringify({ msg: "Injected one-time local provider failure." }));
       return;
+    }
+
+    const providerUserId = userUpdateMatch?.[1]?.toLowerCase() || factorListMatch?.[1]?.toLowerCase();
+    const providerOperation = userUpdateMatch && ["PUT", "PATCH"].includes(request.method || "")
+      ? "user-password-update"
+      : factorListMatch ? "mfa-factor-list" : null;
+    const operationKey = providerUserId && providerOperation ? `${providerUserId}:${providerOperation}` : null;
+    if (operationKey) providerRequestCounts.set(operationKey, (providerRequestCounts.get(operationKey) || 0) + 1);
+    if (pendingPause && providerUserId === pendingPause.providerUserId && providerOperation === pendingPause.operation) {
+      const pause = pendingPause;
+      pendingPause = undefined;
+      activePause = pause;
+      await new Promise((resolve) => { pause.release = resolve; });
+      if (activePause === pause) activePause = undefined;
     }
 
     try {

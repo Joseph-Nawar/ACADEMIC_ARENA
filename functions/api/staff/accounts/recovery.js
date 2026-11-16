@@ -1,7 +1,7 @@
 import { authorizeStaffMutation } from "../../../lib/authorization.js";
 import { serviceClient, userAuthClient } from "../../../lib/provider.js";
 import { configuration } from "../../../lib/env.js";
-import { decryptSessionSecret, encryptSessionSecret, randomOpaqueToken } from "../../../lib/secure-crypto.js";
+import { decryptSessionSecret, encryptSessionSecret, randomOpaqueToken, sha256Bytea } from "../../../lib/secure-crypto.js";
 import { jsonResponse } from "../../../lib/response.js";
 import { findLoginIdentity } from "../../../lib/staff-accounts.js";
 import { hasExactKeys, isFictionalFixtureEmail, normalizeUsername, readJsonBody } from "../../../lib/validation.js";
@@ -52,15 +52,22 @@ export async function onRequestPost({ request, env }) {
 
   let recoveryState;
   let initialPassword;
+  let leaseTokenHash;
   let provider;
   try {
     provider = serviceClient(env);
-    const { data: operation, error: operationError } = await provider.rpc("resolve_credential_sync_operation", {
+    leaseTokenHash = (await sha256Bytea(randomOpaqueToken())).slice(2);
+    const { data: operation, error: operationError } = await provider.rpc("claim_credential_sync_operation", {
       p_account_id: identity.account_id,
       p_operation_kind: "student_password_recovery",
+      p_lease_token_hash: leaseTokenHash,
     });
     recoveryState = Array.isArray(operation) ? operation[0] || null : operation || null;
-    if (operationError || !recoveryState || recoveryState.provider_user_id !== identity.provider_user_id ||
+    if (operationError) return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
+    if (!recoveryState) {
+      return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503, { "Retry-After": "300" });
+    }
+    if (recoveryState.provider_user_id !== identity.provider_user_id ||
         !Number.isSafeInteger(recoveryState.credential_epoch) || typeof recoveryState.password_jwe !== "string") {
       return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);
     }
@@ -88,6 +95,7 @@ export async function onRequestPost({ request, env }) {
     ({ data: finalized, error: finalizeError } = await provider.rpc("complete_student_password_recovery", {
       p_account_id: identity.account_id,
       p_expected_credential_epoch: recoveryState.credential_epoch,
+      p_lease_token_hash: leaseTokenHash,
     }));
   } catch {
     return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);

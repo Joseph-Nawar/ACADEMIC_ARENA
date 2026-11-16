@@ -1,23 +1,26 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(53);
+select plan(62);
 
 select ok(to_regprocedure('public.complete_password_change(uuid,bigint)') is not null, 'server password completion RPC uses a credential version');
-select ok(to_regprocedure('public.complete_student_password_recovery(uuid,bigint)') is not null, 'server recovery finalization RPC exists');
+select ok(to_regprocedure('public.complete_student_password_recovery(uuid,bigint,text)') is not null, 'server recovery finalization RPC requires a claim token');
+select ok(to_regprocedure('public.claim_credential_sync_operation(uuid,text,text)') is not null, 'provider sync operations have an atomic server claim RPC');
+select ok(to_regprocedure('public.resolve_credential_sync_operation(uuid,text)') is null, 'unclaimed provider sync resolution is removed');
 select ok(to_regprocedure('public.resolve_account_identity(uuid)') is not null, 'private account identity resolution RPC exists');
 select has_column('app_private', 'accounts', 'credential_epoch', 'private accounts track credential changes');
 select has_column('app_private', 'accounts', 'credential_update_pending', 'private accounts block login while provider recovery is in progress');
 select has_table('app_private', 'credential_sync_operations', 'encrypted credential sync intent supports provider retry');
+select has_column('app_private', 'credential_sync_operations', 'lease_token_hash', 'provider retries store only a hash of the claim token');
 select ok(to_regprocedure('public.prune_expired_credential_sync_operations()') is not null, 'expired encrypted retry payloads have a cleanup RPC');
 select has_table('app_private', 'runtime_controls', 'private runtime controls gate local-only staff lifecycle RPCs');
 select is((select allow_fictional_account_lifecycle from app_private.runtime_controls where singleton), true, 'local fictional seed enables lifecycle tests');
 select ok(to_regprocedure('public.provision_student_account(uuid,text,text)') is not null, 'staff student provisioning RPC exists');
 select is(pg_get_function_result('public.provision_student_account(uuid,text,text)'::regprocedure), 'boolean', 'staff provisioning RPC does not return a private account ID');
 select ok(to_regprocedure('public.force_password_change_for_account(text,text)') is not null, 'staff recovery RPC accepts only a server-encrypted retry credential');
-select ok(has_function_privilege('service_role', 'public.resolve_credential_sync_operation(uuid,text)', 'execute')
-  and not has_function_privilege('authenticated', 'public.resolve_credential_sync_operation(uuid,text)', 'execute'),
-  'only the server can resolve encrypted provider-sync intent');
+select ok(has_function_privilege('service_role', 'public.claim_credential_sync_operation(uuid,text,text)', 'execute')
+  and not has_function_privilege('authenticated', 'public.claim_credential_sync_operation(uuid,text,text)', 'execute'),
+  'only the server can claim encrypted provider-sync intent');
 select ok(not has_table_privilege('authenticated', 'app_private.credential_sync_operations', 'select')
   and not has_table_privilege('service_role', 'app_private.credential_sync_operations', 'select'),
   'provider retry credentials are accessible only through the narrow server RPC');
@@ -29,8 +32,8 @@ select ok(to_regprocedure('public.suspend_student_account(text)') is not null, '
 select ok(has_function_privilege('service_role', 'public.complete_password_change(uuid,bigint)', 'execute')
   and not has_function_privilege('authenticated', 'public.complete_password_change(uuid,bigint)', 'execute'),
   'only the server can clear mandatory password-change state');
-select ok(has_function_privilege('service_role', 'public.complete_student_password_recovery(uuid,bigint)', 'execute')
-  and not has_function_privilege('authenticated', 'public.complete_student_password_recovery(uuid,bigint)', 'execute'),
+select ok(has_function_privilege('service_role', 'public.complete_student_password_recovery(uuid,bigint,text)', 'execute')
+  and not has_function_privilege('authenticated', 'public.complete_student_password_recovery(uuid,bigint,text)', 'execute'),
   'only the server can finish a provider password recovery');
 select ok(has_function_privilege('service_role', 'public.resolve_account_identity(uuid)', 'execute')
   and not has_function_privilege('anon', 'public.resolve_account_identity(uuid)', 'execute')
@@ -92,15 +95,37 @@ select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-0000000
 select ok(public.force_password_change_for_account('forced.student', repeat('a', 64)), 'AAL2 admin can initiate credential recovery');
 select is(public.force_password_change_for_account('forced.student', repeat('b', 64)), true, 'a retry can resume the same provider recovery operation');
 reset role;
+set local role service_role;
+select is((select count(*)::integer from public.claim_credential_sync_operation(
+  '20000000-0000-4000-8000-000000000031', 'student_password_recovery', repeat('a', 64)
+)), 1, 'first provider recovery request atomically claims the operation');
+select is((select count(*)::integer from public.claim_credential_sync_operation(
+  '20000000-0000-4000-8000-000000000031', 'student_password_recovery', repeat('b', 64)
+)), 0, 'overlapping provider recovery request cannot claim the active operation');
+select is((select count(*)::integer from public.claim_credential_sync_operation(
+  '20000000-0000-4000-8000-000000000031', 'student_password_recovery', null
+)), 0, 'malformed provider claim token fails closed without updating operation state');
+reset role;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000032', true);
+select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-000000000032","role":"authenticated","aal":"aal2"}', true);
+set local role authenticated;
+select is(public.force_password_change_for_account('forced.student', repeat('c', 64)), true, 'recovery retry during provider sync reuses the active generation');
+reset role;
 select is((select credential_epoch from app_private.accounts where id = '20000000-0000-4000-8000-000000000031'), 2::bigint, 'recovery retry preserves its credential generation');
 select is((select password_jwe from app_private.credential_sync_operations where account_id = '20000000-0000-4000-8000-000000000031'), repeat('a', 64), 'recovery retry reuses the original encrypted temporary password');
 select ok((select force_password_change from app_private.accounts where id = '20000000-0000-4000-8000-000000000031'), 'recovery sets mandatory password change');
 select ok((select credential_update_pending from app_private.accounts where id = '20000000-0000-4000-8000-000000000031'), 'recovery blocks sign-in until the provider reset finishes');
+reset role;
+update app_private.credential_sync_operations
+set created_at = now() - interval '2 minutes', expires_at = now() - interval '1 second'
+where account_id = '20000000-0000-4000-8000-000000000031' and operation_kind = 'student_password_recovery';
 set local role service_role;
+select is(public.prune_expired_credential_sync_operations(), 0, 'cleanup preserves an expired retry payload while its provider lease is live');
 select is(public.complete_password_change('20000000-0000-4000-8000-000000000031', 1), false, 'stale password completion cannot clear a newer staff recovery');
 select is(public.complete_password_change('20000000-0000-4000-8000-000000000031', 2), false, 'password completion cannot clear an active provider recovery');
-select ok(public.complete_student_password_recovery('20000000-0000-4000-8000-000000000031', 2), 'server finalizes the matching provider password recovery');
-select ok(public.complete_student_password_recovery('20000000-0000-4000-8000-000000000031', 2), 'recovery finalization safely accepts a retry for the same generation');
+select is(public.complete_student_password_recovery('20000000-0000-4000-8000-000000000031', 2, repeat('b', 64)), false, 'a different claim token cannot finalize provider recovery');
+select ok(public.complete_student_password_recovery('20000000-0000-4000-8000-000000000031', 2, repeat('a', 64)), 'server finalizes only the matching provider recovery claim');
+select is(public.complete_student_password_recovery('20000000-0000-4000-8000-000000000031', 2, repeat('a', 64)), false, 'a completed claim cannot be replayed');
 reset role;
 select is((select password_jwe from app_private.credential_sync_operations where account_id = '20000000-0000-4000-8000-000000000031'), null, 'successful provider sync erases the encrypted temporary password');
 select is((select credential_update_pending from app_private.accounts where id = '20000000-0000-4000-8000-000000000031'), false, 'provider recovery completion reopens the forced password-change flow');
