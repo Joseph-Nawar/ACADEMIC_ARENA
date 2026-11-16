@@ -32,12 +32,12 @@ export async function onRequestPost({ request, env }) {
     if (error || data?.type !== "totp" || typeof data?.totp?.secret !== "string" || typeof data?.totp?.uri !== "string") {
       return jsonResponse({ error: "mfa_unavailable" }, 503);
     }
-    const { error: auditError } = await serviceClient(env).rpc("record_staff_mfa_event", {
+    const { data: auditRecorded, error: auditError } = await serviceClient(env).rpc("record_staff_mfa_event", {
       p_account_id: session.accountId,
       p_action_key: "staff.mfa_enrollment_started",
     });
-    if (auditError) return jsonResponse({ error: "mfa_unavailable" }, 503);
-    return jsonResponse({ secret: data.totp.secret, totpUri: data.totp.uri });
+    if (auditError || auditRecorded !== true) return jsonResponse({ error: "mfa_unavailable" }, 503);
+    return jsonResponse({ secret: data.totp.secret });
   } catch {
     return jsonResponse({ error: "mfa_unavailable" }, 503);
   }

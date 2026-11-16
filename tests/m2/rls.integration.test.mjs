@@ -73,7 +73,7 @@ async function createFixtureUser(context, label) {
   const passwordChange = await apiRequest("rpc/complete_password_change", {
     method: "POST",
     token: key,
-    body: { p_account_id: accountId },
+    body: { p_account_id: accountId, p_expected_credential_epoch: 0 },
   });
   assert.ok(passwordChange.ok, "fixture completes its initial password setup before RLS ownership checks");
 

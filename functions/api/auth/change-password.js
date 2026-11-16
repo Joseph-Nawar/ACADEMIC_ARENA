@@ -74,6 +74,7 @@ export async function onRequestPost({ request, env }) {
 
   const { data, error } = await serviceClient(env).rpc("complete_password_change", {
     p_account_id: session.accountId,
+    p_expected_credential_epoch: identity.credential_epoch,
   });
   if (error || data !== true) return jsonResponse({ error: "unavailable" }, 503);
 

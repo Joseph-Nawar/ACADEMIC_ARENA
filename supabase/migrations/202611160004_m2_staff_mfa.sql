@@ -39,6 +39,9 @@ declare
   actor_account_id uuid;
   target_account_id uuid;
 begin
+  if not app_private.fictional_account_lifecycle_enabled() then
+    raise exception using errcode = '42501', message = 'fictional account lifecycle is disabled';
+  end if;
   if not app_private.has_permission('accounts.mfa_reset') then
     raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
   end if;
@@ -62,7 +65,9 @@ begin
   end if;
 
   update app_private.accounts as account
-  set force_password_change = true, updated_at = pg_catalog.clock_timestamp()
+  set force_password_change = true,
+      credential_epoch = account.credential_epoch + 1,
+      updated_at = pg_catalog.clock_timestamp()
   where account.id = target_account_id;
   update app_private.bff_sessions as session
   set revoked_at = pg_catalog.clock_timestamp(),

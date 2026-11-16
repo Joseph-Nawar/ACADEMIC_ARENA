@@ -1,23 +1,27 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(24);
+select plan(33);
 
-select ok(to_regprocedure('public.complete_password_change(uuid)') is not null, 'server password completion RPC exists');
+select ok(to_regprocedure('public.complete_password_change(uuid,bigint)') is not null, 'server password completion RPC uses a credential version');
 select ok(to_regprocedure('public.resolve_account_identity(uuid)') is not null, 'private account identity resolution RPC exists');
+select has_column('app_private', 'accounts', 'credential_epoch', 'private accounts track credential changes');
+select has_table('app_private', 'runtime_controls', 'private runtime controls gate local-only staff lifecycle RPCs');
+select is((select allow_fictional_account_lifecycle from app_private.runtime_controls where singleton), true, 'local fictional seed enables lifecycle tests');
 select ok(to_regprocedure('public.provision_student_account(uuid,text,text)') is not null, 'staff student provisioning RPC exists');
+select is(pg_get_function_result('public.provision_student_account(uuid,text,text)'::regprocedure), 'boolean', 'staff provisioning RPC does not return a private account ID');
 select ok(to_regprocedure('public.force_password_change_for_account(text)') is not null, 'staff recovery RPC exists');
 select ok(to_regprocedure('public.suspend_student_account(text)') is not null, 'staff suspension RPC exists');
-select ok(has_function_privilege('service_role', 'public.complete_password_change(uuid)', 'execute')
-  and not has_function_privilege('authenticated', 'public.complete_password_change(uuid)', 'execute'),
+select ok(has_function_privilege('service_role', 'public.complete_password_change(uuid,bigint)', 'execute')
+  and not has_function_privilege('authenticated', 'public.complete_password_change(uuid,bigint)', 'execute'),
   'only the server can clear mandatory password-change state');
 select ok(has_function_privilege('service_role', 'public.resolve_account_identity(uuid)', 'execute')
   and not has_function_privilege('anon', 'public.resolve_account_identity(uuid)', 'execute')
   and not has_function_privilege('authenticated', 'public.resolve_account_identity(uuid)', 'execute'),
   'private account mappings resolve only inside the server boundary');
-select ok(has_function_privilege('authenticated', 'public.provision_student_account(uuid,text,text)', 'execute'), 'staff provisioning RPC is reachable through user JWT authorization');
-select ok(has_function_privilege('authenticated', 'public.force_password_change_for_account(text)', 'execute'), 'staff recovery RPC is reachable through user JWT authorization');
-select ok(has_function_privilege('authenticated', 'public.suspend_student_account(text)', 'execute'), 'staff suspension RPC is reachable through user JWT authorization');
+select ok(has_function_privilege('authenticated', 'public.provision_student_account(uuid,text,text)', 'execute'), 'staff provisioning RPC is reachable through user JWT authorization and DB gate');
+select ok(has_function_privilege('authenticated', 'public.force_password_change_for_account(text)', 'execute'), 'staff recovery RPC is reachable through user JWT authorization and DB gate');
+select ok(has_function_privilege('authenticated', 'public.suspend_student_account(text)', 'execute'), 'staff suspension RPC is reachable through user JWT authorization and DB gate');
 select ok(not has_function_privilege('anon', 'public.provision_student_account(uuid,text,text)', 'execute')
   and not has_function_privilege('anon', 'public.force_password_change_for_account(text)', 'execute')
   and not has_function_privilege('anon', 'public.suspend_student_account(text)', 'execute'),
@@ -50,7 +54,7 @@ select throws_ok(
 );
 reset role;
 set local role service_role;
-select ok(public.complete_password_change('20000000-0000-4000-8000-000000000031'), 'server can complete the password update and revoke prior BFF sessions');
+select ok(public.complete_password_change('20000000-0000-4000-8000-000000000031', 0), 'server can complete the password update and revoke prior BFF sessions');
 reset role;
 set local role authenticated;
 select is((select count(*)::integer from public.student_avatar_configs), 1, 'account-owned data becomes available after password completion');
@@ -70,6 +74,24 @@ select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-0000000
 select ok(public.force_password_change_for_account('forced.student'), 'AAL2 admin can initiate credential recovery');
 reset role;
 select ok((select force_password_change from app_private.accounts where id = '20000000-0000-4000-8000-000000000031'), 'recovery sets mandatory password change');
+set local role service_role;
+select is(public.complete_password_change('20000000-0000-4000-8000-000000000031', 1), false, 'stale password completion cannot clear a newer staff recovery');
+reset role;
+select ok((select force_password_change from app_private.accounts where id = '20000000-0000-4000-8000-000000000031'), 'stale completion leaves the recovery password-change gate active');
+
+update app_private.runtime_controls set allow_fictional_account_lifecycle = false where singleton;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000032', true);
+select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-000000000032","role":"authenticated","aal":"aal2"}', true);
+set local role authenticated;
+select throws_ok(
+  $$select public.provision_student_account('10000000-0000-4000-8000-000000000099', 'disabled.student', 'disabled@academic-arena.test')$$,
+  '42501', null, 'direct authenticated provisioning RPC is blocked when the local-only database gate is off'
+);
+select throws_ok($$select public.force_password_change_for_account('forced.student')$$, '42501', null, 'direct authenticated recovery RPC is blocked when the local-only database gate is off');
+select throws_ok($$select public.suspend_student_account('forced.student')$$, '42501', null, 'direct authenticated suspension RPC is blocked when the local-only database gate is off');
+reset role;
+update app_private.runtime_controls set allow_fictional_account_lifecycle = true where singleton;
+
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000031', true);
 select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-000000000031","role":"authenticated","aal":"aal1"}', true);
 set local role authenticated;

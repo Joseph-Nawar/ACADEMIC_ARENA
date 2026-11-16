@@ -34,13 +34,13 @@ export async function onRequestPost({ request, env }) {
     });
     if (error || !data?.user?.id) return jsonResponse({ error: "account_not_created" }, 409);
     createdUser = data.user;
-    const { error: mappingError } = await userAuthClient(env, authorization.session.providerAccessToken)
+    const { data: provisioned, error: mappingError } = await userAuthClient(env, authorization.session.providerAccessToken)
       .rpc("provision_student_account", {
         p_provider_user_id: createdUser.id,
         p_username: username,
         p_provider_email: email,
       });
-    if (mappingError) {
+    if (mappingError || provisioned !== true) {
       await serviceClient(env).auth.admin.deleteUser(createdUser.id);
       return jsonResponse({ error: "account_not_created" }, 409);
     }

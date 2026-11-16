@@ -145,7 +145,7 @@ try {
     throw new Error("Local Supabase did not report complete loopback-only endpoints.");
   }
   const testFiles = (await readdir(path.join(root, "tests/m2")))
-    .filter((name) => name.endsWith(".test.mjs"))
+    .filter((name) => name.endsWith(".test.mjs") && name !== "lifecycle-gate.integration.test.mjs")
     .sort()
     .map((name) => path.join("tests/m2", name));
   if (testFiles.length === 0) throw new Error("No local M2 integration tests were found.");
@@ -188,6 +188,18 @@ try {
     process.stderr.write("M2 local integration tests failed. Local provider credentials were not emitted.\n");
     process.exitCode = result.code || 1;
   }
+
+  const disabledGate = await capture("npx", [
+    "--no-install", "supabase", "db", "query", "--local",
+    "update app_private.runtime_controls set allow_fictional_account_lifecycle = false where singleton",
+  ], { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" });
+  if (disabledGate.code !== 0) throw new Error("Could not disable the local lifecycle gate for direct PostgREST verification.");
+  const lifecycleGate = await capture(process.execPath, ["--test", "tests/m2/lifecycle-gate.integration.test.mjs"], testEnv);
+  process.stdout.write(lifecycleGate.stdout);
+  if (lifecycleGate.code !== 0) {
+    process.stderr.write("Direct local PostgREST lifecycle-gate tests failed. Provider credentials were not emitted.\n");
+    process.exitCode = lifecycleGate.code || 1;
+  }
 } catch (error) {
   if (!process.exitCode) process.stderr.write(`${error.message}\n`);
   process.exitCode = 1;
@@ -202,6 +214,15 @@ try {
     }
   }
   if (supabaseStarted) {
+    try {
+      await run("npx", [
+        "--no-install", "supabase", "db", "query", "--local",
+        "update app_private.runtime_controls set allow_fictional_account_lifecycle = true where singleton",
+      ], "Lifecycle gate restore", { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" });
+    } catch {
+      process.stderr.write("Local lifecycle gate cleanup failed; reset the Supabase stack before using it.\n");
+      if (process.exitCode === undefined || process.exitCode === 0) process.exitCode = 1;
+    }
     try {
       await run(process.execPath, ["scripts/local-supabase.mjs", "stop"], "Supabase stop", {
         ...process.env,

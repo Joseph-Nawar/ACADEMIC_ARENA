@@ -39,8 +39,8 @@ async function loginStaff(identity, clientIp) {
   return { response, cookie: cookieFrom(response), payload: await json(response) };
 }
 
-async function makeCode(uri) {
-  const totp = OTPAuth.URI.parse(uri);
+async function makeCode(secret) {
+  const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(secret) });
   return totp.generate();
 }
 
@@ -54,12 +54,12 @@ async function enrollStaffFactor(identity, clientIp) {
     body: {},
   });
   assert.equal(enrollment.status, 200);
-  const { totpUri } = await json(enrollment);
+  const { secret } = await json(enrollment);
   const verify = await api("/api/auth/mfa/verify", {
     method: "POST",
     origin,
     headers: staffHeaders(session.cookie, session.payload.csrfToken),
-    body: { code: await makeCode(totpUri) },
+    body: { code: await makeCode(secret) },
   });
   assert.equal(verify.status, 200, JSON.stringify(await json(verify)));
   return session;
@@ -94,8 +94,8 @@ test("staff TOTP enrollment, login step-up, and privileged account provisioning 
   assert.equal(enrollment.status, 200);
   assert.match(enrollment.headers.get("cache-control") || "", /no-store/u);
   const enrollmentPayload = await json(enrollment);
-  assert.deepEqual(Object.keys(enrollmentPayload).sort(), ["secret", "totpUri"].sort());
-  assert.match(enrollmentPayload.totpUri, /^otpauth:\/\/totp\//u);
+  assert.deepEqual(Object.keys(enrollmentPayload), ["secret"]);
+  assert.equal(JSON.stringify(enrollmentPayload).includes(identity.email), false, "TOTP response does not disclose the provider email");
   assert.ok(enrollmentPayload.secret.length >= 16);
 
   const invalidCode = await api("/api/auth/mfa/verify", {
@@ -107,7 +107,7 @@ test("staff TOTP enrollment, login step-up, and privileged account provisioning 
   assert.equal(invalidCode.status, 400);
   assert.deepEqual(await json(invalidCode), { error: "mfa_verification_failed" });
 
-  const enrollmentCode = await makeCode(enrollmentPayload.totpUri);
+  const enrollmentCode = await makeCode(enrollmentPayload.secret);
   const enrollmentVerification = await api("/api/auth/mfa/verify", {
     method: "POST",
     origin,
@@ -139,7 +139,7 @@ test("staff TOTP enrollment, login step-up, and privileged account provisioning 
   assert.equal(secondLogin.response.status, 200);
   assert.equal(secondLogin.payload.user.mfaRequired, true);
   assert.equal(secondLogin.payload.user.mfaSetupRequired, false);
-  const code = await makeCode(enrollmentPayload.totpUri);
+  const code = await makeCode(enrollmentPayload.secret);
   const secondFactor = await api("/api/auth/mfa/verify", {
     method: "POST",
     origin,

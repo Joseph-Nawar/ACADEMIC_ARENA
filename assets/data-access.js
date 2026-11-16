@@ -406,11 +406,10 @@
       async enrollMfa() {
         if (mode === "demo") throw new ArenaDataError("Staff MFA is unavailable in the fictional preview.", "unavailable");
         const payload = await request("POST", "/auth/mfa/enroll", {});
-        if (typeof payload?.secret !== "string" || payload.secret.length < 16 ||
-            typeof payload?.totpUri !== "string" || !payload.totpUri.startsWith("otpauth://totp/")) {
+        if (typeof payload?.secret !== "string" || payload.secret.length < 16) {
           throw new ArenaDataError("Staff security setup is temporarily unavailable.", "unavailable");
         }
-        return { secret: payload.secret, totpUri: payload.totpUri };
+        return { secret: payload.secret };
       },
       async verifyMfa(code) {
         if (mode === "demo") throw new ArenaDataError("Staff MFA is unavailable in the fictional preview.", "unavailable");

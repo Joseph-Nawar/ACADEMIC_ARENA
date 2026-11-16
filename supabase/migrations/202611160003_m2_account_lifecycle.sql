@@ -1,3 +1,34 @@
+-- Staff lifecycle RPCs remain disabled on hosted projects until a separate
+-- reviewed integration step explicitly enables them. Only local seed data
+-- turns this gate on for fictional end-to-end tests.
+create table app_private.runtime_controls (
+  singleton boolean primary key default true check (singleton),
+  allow_fictional_account_lifecycle boolean not null default false
+);
+insert into app_private.runtime_controls (singleton, allow_fictional_account_lifecycle)
+values (true, false);
+alter table app_private.runtime_controls enable row level security;
+alter table app_private.runtime_controls force row level security;
+revoke all on table app_private.runtime_controls from public, anon, authenticated, service_role;
+
+create or replace function app_private.fictional_account_lifecycle_enabled()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select control.allow_fictional_account_lifecycle
+    from app_private.runtime_controls as control
+    where control.singleton
+  ), false)
+$$;
+revoke all on function app_private.fictional_account_lifecycle_enabled() from public, anon, authenticated, service_role;
+
+alter table app_private.accounts
+  add column credential_epoch bigint not null default 0 check (credential_epoch >= 0);
+
 -- Mandatory password setup also gates student-owned data and staff permissions.
 create or replace function app_private.current_account_id()
 returns uuid
@@ -52,7 +83,10 @@ as $$
   )
 $$;
 
-create or replace function public.complete_password_change(p_account_id uuid)
+create or replace function public.complete_password_change(
+  p_account_id uuid,
+  p_expected_credential_epoch bigint
+)
 returns boolean
 language plpgsql
 security definer
@@ -64,14 +98,18 @@ begin
   select account.id into actor_account_id
   from app_private.accounts as account
   where account.id = p_account_id and account.status = 'active'
+    and account.credential_epoch = p_expected_credential_epoch
   for update;
   if actor_account_id is null then
     return false;
   end if;
 
   update app_private.accounts as account
-  set force_password_change = false, updated_at = pg_catalog.clock_timestamp()
-  where account.id = actor_account_id and account.status = 'active';
+  set force_password_change = false,
+      credential_epoch = account.credential_epoch + 1,
+      updated_at = pg_catalog.clock_timestamp()
+  where account.id = actor_account_id and account.status = 'active'
+    and account.credential_epoch = p_expected_credential_epoch;
   if not found then
     return false;
   end if;
@@ -96,7 +134,8 @@ returns table (
   provider_user_id uuid,
   provider_email text,
   username_normalized text,
-  account_status text
+  account_status text,
+  credential_epoch bigint
 )
 language sql
 stable
@@ -104,7 +143,7 @@ security definer
 set search_path = ''
 as $$
   select account.id, account.provider_user_id, mapping.provider_email,
-         mapping.username_normalized, account.status
+         mapping.username_normalized, account.status, account.credential_epoch
   from app_private.accounts as account
   join app_private.identity_mappings as mapping on mapping.account_id = account.id
   where account.id = p_account_id
@@ -115,7 +154,7 @@ create or replace function public.provision_student_account(
   p_username text,
   p_provider_email text
 )
-returns uuid
+returns boolean
 language plpgsql
 security definer
 set search_path = ''
@@ -127,6 +166,9 @@ declare
   confirmed_provider_email text;
   new_account_id uuid;
 begin
+  if not app_private.fictional_account_lifecycle_enabled() then
+    raise exception using errcode = '42501', message = 'fictional account lifecycle is disabled';
+  end if;
   if not app_private.has_permission('accounts.provision') then
     raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
   end if;
@@ -156,7 +198,7 @@ begin
   values (new_account_id, 'student');
   insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
   values (actor_account_id, new_account_id, 'account.provisioned', 'staff_provisioned');
-  return new_account_id;
+  return true;
 end
 $$;
 
@@ -170,6 +212,9 @@ declare
   actor_account_id uuid;
   target_account_id uuid;
 begin
+  if not app_private.fictional_account_lifecycle_enabled() then
+    raise exception using errcode = '42501', message = 'fictional account lifecycle is disabled';
+  end if;
   if not app_private.has_permission('accounts.recover') then
     raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
   end if;
@@ -195,7 +240,9 @@ begin
   end if;
 
   update app_private.accounts as account
-  set force_password_change = true, updated_at = pg_catalog.clock_timestamp()
+  set force_password_change = true,
+      credential_epoch = account.credential_epoch + 1,
+      updated_at = pg_catalog.clock_timestamp()
   where account.id = target_account_id;
   update app_private.bff_sessions as session
   set revoked_at = pg_catalog.clock_timestamp(),
@@ -220,6 +267,9 @@ declare
   actor_account_id uuid;
   target_account_id uuid;
 begin
+  if not app_private.fictional_account_lifecycle_enabled() then
+    raise exception using errcode = '42501', message = 'fictional account lifecycle is disabled';
+  end if;
   if not app_private.has_permission('accounts.suspend') then
     raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
   end if;
@@ -245,7 +295,9 @@ begin
   end if;
 
   update app_private.accounts as account
-  set status = 'suspended', updated_at = pg_catalog.clock_timestamp()
+  set status = 'suspended',
+      credential_epoch = account.credential_epoch + 1,
+      updated_at = pg_catalog.clock_timestamp()
   where account.id = target_account_id;
   update app_private.bff_sessions as session
   set revoked_at = pg_catalog.clock_timestamp(),
@@ -260,12 +312,12 @@ begin
 end
 $$;
 
-revoke all on function public.complete_password_change(uuid) from public, anon, authenticated;
+revoke all on function public.complete_password_change(uuid, bigint) from public, anon, authenticated;
 revoke all on function public.resolve_account_identity(uuid) from public, anon, authenticated;
 revoke all on function public.provision_student_account(uuid, text, text) from public, anon, service_role;
 revoke all on function public.force_password_change_for_account(text) from public, anon, service_role;
 revoke all on function public.suspend_student_account(text) from public, anon, service_role;
-grant execute on function public.complete_password_change(uuid) to service_role;
+grant execute on function public.complete_password_change(uuid, bigint) to service_role;
 grant execute on function public.resolve_account_identity(uuid) to service_role;
 grant execute on function public.provision_student_account(uuid, text, text) to authenticated;
 grant execute on function public.force_password_change_for_account(text) to authenticated;

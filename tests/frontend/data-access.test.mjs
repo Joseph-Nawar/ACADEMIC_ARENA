@@ -245,10 +245,7 @@ test("staff MFA state is allowlisted and factor setup uses only same-origin CSRF
     user: { role: "admin", mustChangePassword: false, mfaRequired: true, mfaSetupRequired: true },
   });
   const enrollment = await api.auth.enrollMfa();
-  assert.deepEqual(enrollment, {
-    secret: "FICTIONAL-BASE32-SECRET",
-    totpUri: "otpauth://totp/Academic%20Arena:staff?secret=FICTIONAL",
-  });
+  assert.deepEqual(enrollment, { secret: "FICTIONAL-BASE32-SECRET" });
   const verified = await api.auth.verifyMfa("123456");
   assert.deepEqual(verified, {
     authenticated: true,

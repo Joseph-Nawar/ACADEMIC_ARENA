@@ -1,5 +1,5 @@
 begin;
-select plan(13);
+select plan(15);
 
 select ok(to_regprocedure('public.record_staff_mfa_event(uuid,text)') is not null, 'server audit RPC exists');
 select ok(to_regprocedure('public.reset_staff_mfa_for_account(text)') is not null, 'staff MFA recovery RPC exists');
@@ -51,8 +51,17 @@ select is((select count(*)::integer from app_private.audit_events where target_a
 set local role service_role;
 select ok(public.record_staff_mfa_event('20000000-0000-4000-8000-000000000042', 'staff.mfa_enrolled'), 'server records successful staff MFA enrollment without factor material');
 select is(public.record_staff_mfa_event('20000000-0000-4000-8000-000000000042', 'staff.mfa_secret'), false, 'server audit rejects unapproved MFA event keys');
+select is(public.record_staff_mfa_event('20000000-0000-4000-8000-000000000099', 'staff.mfa_enrolled'), false, 'server audit returns false when actor is no longer an active staff account');
 reset role;
 select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000042' and action_key = 'staff.mfa_enrolled'), 1, 'MFA audit stores an action key and no authenticator secret');
+
+update app_private.runtime_controls set allow_fictional_account_lifecycle = false where singleton;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000041', true);
+select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-000000000041","role":"authenticated","aal":"aal2"}', true);
+set local role authenticated;
+select throws_ok($$select public.reset_staff_mfa_for_account('mfa.target')$$, '42501', null, 'direct authenticated staff MFA reset RPC is blocked when the local-only database gate is off');
+reset role;
+update app_private.runtime_controls set allow_fictional_account_lifecycle = true where singleton;
 
 select * from finish();
 rollback;

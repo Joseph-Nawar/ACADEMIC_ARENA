@@ -89,7 +89,10 @@ test("parallel requests share one opaque server-side session without exposing pr
 
 test("provider logout revokes refresh credentials while an existing JWT stays acceptable to PostgREST until expiry", async (context) => {
   const identity = await createIdentity(context, "provider-revocation");
-  const completed = await serviceRpc("complete_password_change", { p_account_id: identity.accountId });
+  const completed = await serviceRpc("complete_password_change", {
+    p_account_id: identity.accountId,
+    p_expected_credential_epoch: 0,
+  });
   assert.ok(completed.ok, "local fictional account has completed initial password setup before testing RLS token validity");
   assert.equal(typeof identity.providerSession.refresh_token, "string");
   assert.ok(identity.providerSession.refresh_token.length > 0, "fictional provider returns a nonempty refresh credential");
