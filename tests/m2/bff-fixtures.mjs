@@ -51,11 +51,17 @@ export async function json(response) {
   return text ? JSON.parse(text) : null;
 }
 
+function fetchForTest(label, input, init) {
+  return fetch(input, init).catch((error) => {
+    throw new Error(`${label} failed.`, { cause: error });
+  });
+}
+
 export function api(path, { method = "GET", token = local.anonKey, body, origin, headers = {} } = {}) {
   const requestHeaders = { Accept: "application/json", ...headers };
   if (origin) requestHeaders.Origin = origin;
   if (body !== undefined) requestHeaders["Content-Type"] = "application/json";
-  return fetch(new URL(path, local.pagesUrl), {
+  return fetchForTest(`Local BFF ${method} ${path}`, new URL(path, local.pagesUrl), {
     method,
     headers: requestHeaders,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -64,7 +70,7 @@ export function api(path, { method = "GET", token = local.anonKey, body, origin,
 }
 
 export function serviceRpc(name, args) {
-  return fetch(new URL(`/rest/v1/rpc/${name}`, local.supabaseUrl), {
+  return fetchForTest(`Local database RPC ${name}`, new URL(`/rest/v1/rpc/${name}`, local.supabaseUrl), {
     method: "POST",
     headers: {
       apikey: local.serviceRoleKey,

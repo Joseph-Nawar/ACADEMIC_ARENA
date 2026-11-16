@@ -103,7 +103,7 @@ async function startPagesPreview(port) {
     .replace(/[A-Za-z0-9_-]{64,}/gu, "[redacted-value]")
     .slice(-1200);
   const readiness = await waitForHttpReady(url, { child, timeoutMs: 60_000, intervalMs: 100 });
-  if (readiness === "ready") return { child, url };
+  if (readiness === "ready") return { child, url, safeLog: sanitizedLog };
   if (readiness === "exited") {
     await stopProcessTree(child);
     throw new Error(`Local Cloudflare Pages preview exited before becoming ready (${child.exitCode ?? child.signalCode}): ${sanitizedLog()}`);
@@ -296,6 +296,7 @@ async function stopServer(server) {
 }
 
 let pagesProcess;
+let pagesSafeLog;
 let providerProxy;
 let supabaseStartAttempted = false;
 let lifecycleGateAvailable = false;
@@ -396,6 +397,7 @@ try {
   await chmod(testEnvironmentFile, 0o600);
   const pages = await startPagesPreview(port);
   pagesProcess = pages.child;
+  pagesSafeLog = pages.safeLog;
   const testEnv = {
     ...process.env,
     AA_SUPABASE_URL: proxy.url,
@@ -411,6 +413,8 @@ try {
   process.stdout.write(result.stdout);
   if (result.code !== 0) {
     process.stderr.write("M2 local integration tests failed. Local provider credentials were not emitted.\n");
+    const previewLog = pagesSafeLog?.();
+    if (previewLog) process.stderr.write(`Local Pages preview log excerpt (sensitive values redacted): ${previewLog}\n`);
     process.exitCode = result.code || 1;
   }
 
