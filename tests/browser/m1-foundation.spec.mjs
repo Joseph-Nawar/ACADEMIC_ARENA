@@ -97,8 +97,23 @@ export async function runDemoBrowserTests(browser, baseUrl, root) {
   await page.locator("#approve-demo").click();
   await page.waitForFunction(() => document.querySelectorAll("#wins-feed .win-post").length === 5);
 
-  await page.locator('.nav-link[data-page="leaderboard"]').click();
   await page.setViewportSize({ width: 390, height: 844 });
+  const mobileWins = await page.evaluate(() => ({
+    width: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    postCount: document.querySelectorAll("#wins-feed .win-post").length,
+    reactionVisible: document.querySelector("#wins-feed .react-btn").getBoundingClientRect().width > 0,
+  }));
+  assert.ok(mobileWins.documentWidth <= mobileWins.width + 1, "Campus Wins must not overflow on mobile");
+  assert.equal(mobileWins.postCount, 5);
+  assert.equal(mobileWins.reactionVisible, true);
+  const mobileReaction = page.locator("#wins-feed .win-post").first().locator(".react-btn").first();
+  const oldMobileCount = await mobileReaction.textContent();
+  await mobileReaction.click();
+  await page.waitForFunction((oldValue) =>
+    document.querySelector("#wins-feed .win-post .react-btn").textContent !== oldValue, oldMobileCount);
+
+  await page.locator('.nav-link[data-page="leaderboard"]').click();
   await page.screenshot({ path: join(root, "test-results", "academic-arena-mobile.png"), fullPage: true });
   const mobile = await page.evaluate(() => ({
     width: window.innerWidth,
@@ -106,11 +121,14 @@ export async function runDemoBrowserTests(browser, baseUrl, root) {
     levelVisible: document.getElementById("level-filter").getBoundingClientRect().width > 0,
     podiumVisible: !document.querySelector(".podium-zone").hidden,
     crownVisible: document.querySelector(".crown").getBoundingClientRect().width > 0,
+    demoLabelVisible: document.querySelector(".demo-stamp").getBoundingClientRect().width > 0 &&
+      getComputedStyle(document.querySelector(".demo-stamp")).display !== "none",
   }));
   assert.ok(mobile.documentWidth <= mobile.width + 1, "mobile page must not overflow horizontally");
   assert.equal(mobile.levelVisible, true);
   assert.equal(mobile.podiumVisible, true);
   assert.equal(mobile.crownVisible, true);
+  assert.equal(mobile.demoLabelVisible, true, "fictional demo disclosure must remain visible at phone widths");
   assert.deepEqual(errors, []);
   await page.close();
 }
@@ -130,6 +148,16 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.equal(requested.some((path) => path.includes("/fixtures/demo/")), false);
   assert.equal(requested.some((path) => path.includes("supabase")), false);
   await page.screenshot({ path: join(root, "test-results", "academic-arena-production-unavailable.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = await page.evaluate(() => ({
+    width: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    unavailable: document.getElementById("ranking-status").textContent.includes("temporarily unavailable"),
+    podiumHidden: document.querySelector(".podium-zone").hidden,
+  }));
+  assert.ok(mobile.documentWidth <= mobile.width + 1, "production mobile page must not overflow horizontally");
+  assert.equal(mobile.unavailable, true);
+  assert.equal(mobile.podiumHidden, true);
 
   const response = await page.request.get(baseUrl);
   const headers = await response.headers();
@@ -142,6 +170,36 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.doesNotMatch(appBundle + dataBundle, /sb_secret_|service_role|@supabase\/supabase-js/i);
   assert.deepEqual(errors, []);
   await page.close();
+
+  const redirectPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  let loginPostBody = null;
+  const redirectTargetBodies = [];
+  await redirectPage.route("**/api/auth/login", async (route) => {
+    loginPostBody = route.request().postData();
+    await route.fulfill({
+      status: 307,
+      headers: { location: "https://redirect-capture.example.test/collect" },
+    });
+  });
+  await redirectPage.route("https://redirect-capture.example.test/**", async (route) => {
+    redirectTargetBodies.push(route.request().postData());
+    await route.fulfill({ status: 204 });
+  });
+  await redirectPage.goto(baseUrl);
+  await waitForReady(redirectPage);
+  const loginFailedClosed = await redirectPage.evaluate(async () => {
+    const api = window.AcademicArenaDataAccess.createArenaDataAccess({ mode: "production" });
+    try {
+      await api.auth.signIn({ username: "fictional-student", password: "fictional-only-password" });
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  assert.equal(loginFailedClosed, true, "credential-bearing login must fail on a 307 response");
+  assert.equal(loginPostBody, JSON.stringify({ username: "fictional-student", password: "fictional-only-password" }));
+  assert.deepEqual(redirectTargetBodies, [], "login credentials must not reach the redirect target");
+  await redirectPage.close();
 
   const emptyCatalogPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   let leaderboardRequests = 0;

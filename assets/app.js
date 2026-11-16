@@ -31,6 +31,7 @@
   let session = { authenticated: false };
   let pendingSubmission = null;
   let previewPosts = [];
+  const viewerReactions = new Map();
   let selectedCategory = "all";
   let choices = { base: "amara", style: "ink", tone: "mint", badge: "✦" };
 
@@ -391,7 +392,8 @@
     const reactions = document.createElement("div");
     reactions.className = "win-reactions";
     reactionTypes.forEach((reaction, index) => {
-      const chosen = post.myReaction === reaction;
+      const currentReaction = viewerReactions.has(post.id) ? viewerReactions.get(post.id) : post.myReaction;
+      const chosen = currentReaction === reaction;
       const button = document.createElement("button");
       button.className = `react-btn${chosen ? " chosen" : ""}`;
       button.type = "button";
@@ -404,7 +406,18 @@
           return;
         }
         try {
-          await api.student.setReaction(post.id, reaction);
+          const result = await api.student.setReaction(post.id, reaction);
+          if (result && Object.hasOwn(result, "activeReaction")) {
+            viewerReactions.set(post.id, result.activeReaction);
+            const previewPost = mode === "demo" ? previewPosts.find((item) => item.id === post.id) : null;
+            if (previewPost) {
+              const previousIndex = reactionTypes.indexOf(previewPost.myReaction);
+              const nextIndex = reactionTypes.indexOf(result.activeReaction);
+              if (previousIndex >= 0) previewPost.counts[previousIndex] = Math.max(0, previewPost.counts[previousIndex] - 1);
+              if (nextIndex >= 0) previewPost.counts[nextIndex] += 1;
+              previewPost.myReaction = result.activeReaction;
+            }
+          }
           await loadWins();
         } catch {
           announce("wins-status", "Your reaction could not be saved. Please sign in and try again.", "unavailable");
@@ -561,6 +574,7 @@
           password: $("login-password").value,
         });
         if (!session.authenticated) throw new Error("Sign-in failed");
+        viewerReactions.clear();
         $("login-form").reset();
         $("account-entry").textContent = "ACCOUNT";
         $("login-form").hidden = true;
@@ -587,6 +601,7 @@
       try {
         await api.auth.signOut();
         session = { authenticated: false };
+        viewerReactions.clear();
         $("account-entry").textContent = "SIGN IN";
         $("account-panel").hidden = true;
         $("login-form").hidden = false;

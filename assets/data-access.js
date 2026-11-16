@@ -62,7 +62,7 @@
     return { position, name, avatar, style };
   }
 
-  function sanitizeWin(value) {
+  function sanitizeWin(value, includeViewerReaction = false) {
     if (!value || typeof value !== "object") return null;
     const id = text(value.id);
     const author = text(value.author);
@@ -74,8 +74,9 @@
       ? value.counts.map((count) => Number.isSafeInteger(count) && count >= 0 ? count : 0)
       : [0, 0, 0];
     if (!id || !author || !avatar || !style || !type || !created) return null;
-    const myReaction = REACTIONS.has(value.myReaction) ? value.myReaction : null;
-    return { id, author, avatar, style, type, category: TEMPLATES[type].category, created, counts, myReaction };
+    const win = { id, author, avatar, style, type, category: TEMPLATES[type].category, created, counts };
+    if (includeViewerReaction) win.myReaction = REACTIONS.has(value.myReaction) ? value.myReaction : null;
+    return win;
   }
 
   function sanitizeSession(value) {
@@ -113,11 +114,14 @@
 
   function createArenaDataAccess(options = {}) {
     const runtime = root.ARENA_CONFIG || {};
-    const mode = options.mode === "demo"
+    const requestedMode = options.mode === "demo"
       ? "demo"
       : options.mode === "production"
         ? "production"
         : runtime.mode === "demo" ? "demo" : "production";
+    const hostname = String(options.hostname ?? root.location?.hostname ?? "").toLowerCase();
+    const isLoopbackHost = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname);
+    const mode = requestedMode === "demo" && isLoopbackHost ? "demo" : "production";
     const apiBase = safeApiBase(options.apiBase || runtime.apiBase);
     const fetchImpl = options.fetchImpl || (typeof root.fetch === "function" ? root.fetch.bind(root) : null);
     const storage = options.storage || (() => {
@@ -129,7 +133,7 @@
     async function request(method, route, body, csrf = true) {
       if (!fetchImpl) throw new ArenaDataError("Service unavailable.", "unavailable");
       const headers = { Accept: "application/json" };
-      const options = { method, credentials: "same-origin", headers, cache: "no-store" };
+      const options = { method, mode: "same-origin", redirect: "error", credentials: "same-origin", headers, cache: "no-store" };
       if (body !== undefined) {
         headers["Content-Type"] = "application/json";
         options.body = JSON.stringify(body);
@@ -167,6 +171,8 @@
       try {
         response = await fetchImpl(FIXTURE_PATH, {
           method: "GET",
+          mode: "same-origin",
+          redirect: "error",
           credentials: "same-origin",
           headers: { Accept: "application/json" },
           cache: "no-store",
@@ -323,7 +329,7 @@
                 const myReaction = REACTIONS.has(own[post.id]) ? own[post.id] : null;
                 const counts = copyCounts(post.counts);
                 if (myReaction) counts[["heart", "clap", "fire"].indexOf(myReaction)] += 1;
-                return sanitizeWin({ ...post, counts, myReaction });
+                return sanitizeWin({ ...post, counts, myReaction }, true);
               })
               .filter(Boolean);
             return { state: posts.length ? "ok" : "empty", posts };
@@ -442,7 +448,8 @@
           }
           return { activeReaction: reactions[id] || null };
         }
-        return request("PUT", "/public/campus-wins/" + encodeURIComponent(id) + "/reaction", { reaction });
+        const payload = await request("PUT", "/public/campus-wins/" + encodeURIComponent(id) + "/reaction", { reaction });
+        return { activeReaction: REACTIONS.has(payload.activeReaction) ? payload.activeReaction : null };
       },
     };
 

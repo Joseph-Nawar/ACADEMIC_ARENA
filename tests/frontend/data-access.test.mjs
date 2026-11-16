@@ -150,6 +150,7 @@ test("campus_wins_public_shape_excludes_private_and_free_text_fields", async () 
         type: "project",
         created: "2026-11-15",
         counts: [2, 3, 4],
+        myReaction: "fire",
         note: "unapproved free text",
         status: "pending",
         author_id: "private-account-id",
@@ -169,7 +170,6 @@ test("campus_wins_public_shape_excludes_private_and_free_text_fields", async () 
     category: "academic",
     created: "2026-11-15",
     counts: [2, 3, 4],
-    myReaction: null,
   }]);
 });
 
@@ -196,6 +196,8 @@ test("login_uses_same_origin_and_returns_only_sanitized_session", async () => {
   });
 
   assert.equal(observed.url, "/api/auth/login");
+  assert.equal(observed.options.mode, "same-origin");
+  assert.equal(observed.options.redirect, "error");
   assert.equal(observed.options.credentials, "same-origin");
   assert.deepEqual(JSON.parse(observed.options.body), {
     username: "fictional-student",
@@ -208,6 +210,19 @@ test("login_uses_same_origin_and_returns_only_sanitized_session", async () => {
   assert.equal(JSON.stringify(result).includes("email"), false);
   assert.equal(JSON.stringify(result).includes("token"), false);
   assert.equal(JSON.stringify(observed).includes("@"), false);
+});
+
+test("production_reaction_mutation_returns_only_the_allowlisted_active_reaction", async () => {
+  const api = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async () => response({
+      activeReaction: "heart",
+      author_id: "private-account-id",
+      email: "private@example.invalid",
+    }),
+  });
+
+  assert.deepEqual(await api.student.setReaction("post-1", "heart"), { activeReaction: "heart" });
 });
 
 test("login_uses_the_same_generic_error_for_unknown_and_throttled_accounts", async () => {
@@ -274,6 +289,7 @@ test("demo_avatar_settings_are_owned_by_the_current_preview_account", async () =
   };
   const api = createArenaDataAccess({
     mode: "demo",
+    hostname: "127.0.0.1",
     fetchImpl: async () => response(demoFixture),
     storage,
   });
@@ -285,7 +301,7 @@ test("demo_avatar_settings_are_owned_by_the_current_preview_account", async () =
 });
 
 test("demo_leaderboard_fixture_changes_with_level_semester_and_module_filters", async () => {
-  const api = createArenaDataAccess({ mode: "demo", fetchImpl: async () => response(demoFixture) });
+  const api = createArenaDataAccess({ mode: "demo", hostname: "127.0.0.1", fetchImpl: async () => response(demoFixture) });
   const filters = { level: "5", semester: "1", group: "core", kind: "semester", module: "" };
   const names = async (overrides = {}) => (await api.public.getLeaderboard({ ...filters, ...overrides }))
     .rows.map((row) => row.name).join(",");
@@ -309,6 +325,7 @@ test("demo_reactions_toggle_one_active_reaction_and_update_counts", async () => 
   };
   const api = createArenaDataAccess({
     mode: "demo",
+    hostname: "localhost",
     fetchImpl: async () => response(demoFixture),
     storage,
   });
@@ -329,4 +346,23 @@ test("demo_reactions_toggle_one_active_reaction_and_update_counts", async () => 
   const cleared = (await api.public.getWins("all")).posts[0];
   assert.deepEqual(cleared.counts, [42, 18, 11]);
   assert.equal(cleared.myReaction, null);
+});
+
+test("demo_runtime_mode_is_disabled_outside_loopback_hosts", async () => {
+  const requests = [];
+  const api = createArenaDataAccess({
+    mode: "demo",
+    hostname: "academic-arena.pages.dev",
+    fetchImpl: async (url) => {
+      requests.push(String(url));
+      throw new Error("backend unavailable");
+    },
+  });
+  assert.equal(api.mode, "production");
+  const result = await api.public.getLeaderboard({
+    level: "5", semester: "1", group: "core", kind: "semester", module: "",
+  });
+  assert.equal(result.state, "unavailable");
+  assert.equal(requests.every((url) => url.startsWith("/api/")), true);
+  assert.equal(requests.some((url) => url.includes("fixtures/demo")), false);
 });

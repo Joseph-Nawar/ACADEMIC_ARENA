@@ -21,7 +21,7 @@ To preview the fictional demo through Wrangler Pages:
 npm run preview
 ```
 
-The demo is clearly marked, reads only `fixtures/demo/academic-arena.json`, and stores character edits and reactions in local browser storage. Its fictional rankings and posts never become production fallback data.
+The demo build is explicitly opt-in, reads only `fixtures/demo/academic-arena.json`, and stores character edits and reactions in local browser storage. It is rejected when Cloudflare Pages sets `CF_PAGES`, and the browser enables demo mode only on loopback hosts. Its fictional rankings and posts never become production fallback data.
 
 For an explicit local production-mode preview:
 
@@ -43,7 +43,7 @@ npm run test:security
 npm run check:security
 ```
 
-The browser smoke starts Wrangler locally and checks both demo and production modes at desktop and mobile sizes. It does not publish or deploy anything.
+The browser smoke starts Wrangler locally and checks demo interactions at desktop width, demo disclosure/layout at 390 pixels, and production unavailable states at desktop and mobile sizes. It does not publish or deploy anything.
 
 The legacy FastAPI pilot remains a reference for domain behavior; it is not deployed by Pages. Its baseline smoke test is reproducible with Python 3.12:
 
@@ -70,7 +70,7 @@ The interface offers only approved milestone templates, with ❤️, 👏, and �
 
 ## Deployment and operations
 
-`npm run build:production` creates the Pages static artifact. `_headers` sets restrictive same-origin security headers, a no-index directive, short asset revalidation, and no-store caching for demo fixtures. Pages Function/API responses will need to set their own headers when those functions are introduced.
+`npm run build:production` creates the Pages static artifact. `npm run build:demo` is for local preview only and is rejected by the builder on Cloudflare Pages. `_headers` sets restrictive same-origin security headers, a no-index directive, short asset revalidation, and no-store caching for demo fixtures. Pages Function/API responses will need to set their own headers when those functions are introduced.
 
 GitHub Actions CI runs checks only; the workflow has read-only repository permissions and no deployment credentials. No public deployment is authorized. See [`docs/roadmap.md`](docs/roadmap.md) for the milestone sequence and remaining launch decisions.
 

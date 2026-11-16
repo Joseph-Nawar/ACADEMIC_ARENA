@@ -8,10 +8,14 @@ import test from "node:test";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const buildScript = join(root, "scripts", "build.mjs");
 
-function build(mode) {
+function build(mode, { allowDemo = false, env = process.env } = {}) {
   const outDir = mkdtempSync(join(root, ".test-build-"));
-  const result = spawnSync(process.execPath, [buildScript, "--mode=" + mode, "--out-dir", outDir], {
+  const args = [buildScript, "--mode=" + mode];
+  if (allowDemo) args.push("--allow-demo-output");
+  args.push("--out-dir", outDir);
+  const result = spawnSync(process.execPath, args, {
     cwd: root,
+    env,
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -70,13 +74,30 @@ test("production_static_assets_exclude_fictional_student_records", () => {
 
 test("build_modes_write_explicit_runtime_config", () => {
   for (const mode of ["demo", "production"]) {
-    const result = build(mode);
+    const result = build(mode, { allowDemo: mode === "demo" });
     try {
       assert.deepEqual(result.config(), { mode, apiBase: "/api" });
     } finally {
       rmSync(result.outDir, { recursive: true, force: true });
     }
   }
+});
+
+test("demo_build_requires_explicit_opt_in_and_is_rejected_by_cloudflare_pages", () => {
+  const local = spawnSync(process.execPath, [buildScript, "--mode=demo"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert.notEqual(local.status, 0, "demo output must require an explicit local opt-in");
+  assert.match(local.stderr, /explicit local demo opt-in/i);
+
+  const cloudflare = spawnSync(process.execPath, [buildScript, "--mode=demo", "--allow-demo-output"], {
+    cwd: root,
+    env: { ...process.env, CF_PAGES: "1" },
+    encoding: "utf8",
+  });
+  assert.notEqual(cloudflare.status, 0, "Cloudflare Pages must reject demo output even with the local opt-in");
+  assert.match(cloudflare.stderr, /demo builds are disabled on cloudflare pages/i);
 });
 
 test("pages_headers_set_security_and_revalidation", () => {

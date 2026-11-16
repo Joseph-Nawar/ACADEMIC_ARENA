@@ -16,6 +16,12 @@ const outDir = resolve(root, option("--out-dir", join(root, "dist")));
 if (!["demo", "production"].includes(mode)) {
   throw new Error("Build mode must be demo or production.");
 }
+if (mode === "demo" && process.env.CF_PAGES) {
+  throw new Error("Demo builds are disabled on Cloudflare Pages.");
+}
+if (mode === "demo" && !args.includes("--allow-demo-output")) {
+  throw new Error("Demo output requires an explicit local demo opt-in.");
+}
 if (outDir === root || outDir.startsWith(root + sep) === false) {
   throw new Error("Build output must be a child of the project root.");
 }
