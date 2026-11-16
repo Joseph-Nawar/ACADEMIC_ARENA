@@ -299,7 +299,8 @@ async function stopProcess(child) {
 
 let pagesProcess;
 let providerProxy;
-let supabaseStarted = false;
+let supabaseStartAttempted = false;
+let lifecycleGateAvailable = false;
 let testEnvironmentFile;
 let previousDevVars;
 
@@ -311,12 +312,13 @@ try {
   if (existingStack.code === 0) {
     throw new Error("A local Supabase stack is already running. Stop it before running this test command; the command resets its local database.");
   }
+  supabaseStartAttempted = true;
   await run(process.execPath, ["scripts/local-supabase.mjs", "start"], "Supabase start");
-  supabaseStarted = true;
   await run("npx", ["--no-install", "supabase", "db", "reset"], "Supabase reset", {
     ...process.env,
     SUPABASE_TELEMETRY_DISABLED: "1",
   });
+  lifecycleGateAvailable = true;
   const databaseTests = await capture("npx", ["--no-install", "supabase", "test", "db"], {
     ...process.env,
     SUPABASE_TELEMETRY_DISABLED: "1",
@@ -415,7 +417,7 @@ try {
       await rm(testEnvironmentFile, { force: true });
     }
   }
-  if (supabaseStarted) {
+  if (lifecycleGateAvailable) {
     try {
       await run("npx", [
         "--no-install", "supabase", "db", "query", "--local",
@@ -425,6 +427,8 @@ try {
       process.stderr.write("Local lifecycle gate cleanup failed; reset the Supabase stack before using it.\n");
       if (process.exitCode === undefined || process.exitCode === 0) process.exitCode = 1;
     }
+  }
+  if (supabaseStartAttempted) {
     try {
       await run(process.execPath, ["scripts/local-supabase.mjs", "stop"], "Supabase stop", {
         ...process.env,
