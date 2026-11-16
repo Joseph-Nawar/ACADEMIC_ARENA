@@ -97,6 +97,7 @@
 .eue-identity-copy strong{font-size:10px;letter-spacing:.8px;font-weight:750}
 .identity-note{margin-left:auto;font-size:10px;font-weight:900;letter-spacing:2px;color:#67716c}
 .account-entry{border:2px solid #182526;background:transparent;padding:8px 12px;font-size:11px;font-weight:900;white-space:nowrap}
+.mfa-panel{margin:12px 0 20px;padding:15px;border:2px solid var(--ink);background:var(--paper)}.mfa-panel[hidden],#mfa-enroll-form[hidden],#mfa-secret-panel[hidden],#mfa-code-form[hidden]{display:none}.mfa-panel h3{font-size:14px;letter-spacing:.8px;margin:0 0 6px}.mfa-panel p{margin:7px 0}.mfa-panel code{display:block;overflow-wrap:anywhere;background:#f1e7d7;border:1px dashed var(--ink);padding:12px;font-size:14px;font-weight:850;user-select:all}
 .dialog input{width:100%;min-height:43px;border:2px solid #182526;background:#fffdf7;padding:9px;margin:6px 0 14px;font-size:15px}
 .studio-stage[data-style="cartoon3d"] .studio-art{filter:drop-shadow(0 9px 7px rgba(31,30,27,.18))}
 .style-options{grid-template-columns:repeat(2,minmax(0,1fr))}

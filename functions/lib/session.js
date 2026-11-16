@@ -2,6 +2,7 @@ import { decodeJwt } from "jose";
 import { configuration } from "./env.js";
 import { decryptSessionSecret, sha256Bytea } from "./secure-crypto.js";
 import { serviceClient, verifyProviderUser } from "./provider.js";
+import { isStaffRoleSet, listSessionMfaFactors } from "./staff-mfa.js";
 
 const SESSION_COOKIE = "__Host-aa_session";
 const TOKEN_FORMAT = /^[A-Za-z0-9_-]{43}$/u;
@@ -49,6 +50,22 @@ export async function resolveSession(request, env) {
       return { session: null, hadCookie: true };
     }
 
+    let hasVerifiedTotp = false;
+    if (isStaffRoleSet(row.role_names)) {
+      let factors;
+      try {
+        factors = await listSessionMfaFactors(env, accessToken, refreshToken);
+      } catch (factorError) {
+        if ([0, 429].includes(factorError?.status) || factorError?.status >= 500) {
+          throw new Error("Identity provider is temporarily unavailable.");
+        }
+        await revokeSession(env, tokenHash, "provider_error");
+        return { session: null, hadCookie: true };
+      }
+      hasVerifiedTotp = factors.verifiedTotp.length > 0;
+    }
+    const assuranceLevel = claims.aal === "aal2" && hasVerifiedTotp ? "aal2" : "aal1";
+
     return {
       hadCookie: true,
       session: {
@@ -65,7 +82,9 @@ export async function resolveSession(request, env) {
         csrfTokenHash: row.csrf_token_hash,
         roleNames: row.role_names,
         mustChangePassword: row.force_password_change === true,
-        assuranceLevel: typeof claims.aal === "string" ? claims.aal : "aal1",
+        assuranceLevel,
+        mfaRequired: isStaffRoleSet(row.role_names) && assuranceLevel !== "aal2",
+        mfaSetupRequired: isStaffRoleSet(row.role_names) && !hasVerifiedTotp,
       },
     };
   } catch (error) {

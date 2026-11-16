@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { CompactEncrypt } from "jose";
 
 export const local = Object.freeze({
@@ -75,6 +76,62 @@ export function serviceRpc(name, args) {
   });
 }
 
+export function setFictionalAccountStatus(accountId, status) {
+  assert.match(accountId, /^[0-9a-f-]{36}$/iu);
+  assert.ok(["active", "suspended"].includes(status));
+  try {
+    execFileSync("npx", [
+      "--no-install", "supabase", "db", "query", "--local",
+      `update app_private.accounts set status = '${status}' where id = '${accountId}'`,
+    ], {
+      cwd: process.cwd(),
+      env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    throw new Error("Local fictional account state fixture could not be applied.");
+  }
+}
+
+export function setFictionalAccountRole(accountId, role) {
+  assert.match(accountId, /^[0-9a-f-]{36}$/iu);
+  assert.ok(["student", "moderator", "publisher", "admin"].includes(role));
+  try {
+    for (const sql of [
+      `update app_private.accounts set force_password_change = false where id = '${accountId}'`,
+      `delete from app_private.account_role_grants where account_id = '${accountId}'`,
+      `insert into app_private.account_role_grants (account_id, role_name) values ('${accountId}', '${role}')`,
+    ]) {
+      execFileSync("npx", ["--no-install", "supabase", "db", "query", "--local", sql], {
+        cwd: process.cwd(),
+        env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" },
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    }
+  } catch {
+    throw new Error("Local fictional account role fixture could not be applied.");
+  }
+}
+
+export async function cleanupProvisionedIdentity(context, username) {
+  const lookup = await serviceRpc("resolve_login_identity", { p_username: username });
+  assert.ok(lookup.ok, "test runner can resolve only its fictional provisioned account through the private RPC");
+  const rows = await json(lookup);
+  const identity = Array.isArray(rows) ? rows[0] : rows;
+  assert.ok(identity?.provider_user_id, "the fictional provisioned account has a provider user for cleanup");
+  context.after(async () => {
+    const deleted = await fetch(new URL(`/auth/v1/admin/users/${encodeURIComponent(identity.provider_user_id)}`, local.supabaseUrl), {
+      method: "DELETE",
+      headers: {
+        apikey: local.serviceRoleKey,
+        Authorization: `Bearer ${local.serviceRoleKey}`,
+      },
+    });
+    assert.ok(deleted.ok, `local fictional provisioned identity cleanup failed with HTTP ${deleted.status}`);
+  });
+  return identity;
+}
+
 export async function createIdentity(context, label = "bff-fixture") {
   const email = `${label}-${crypto.randomUUID()}@academic-arena.test`;
   const password = `${crypto.randomUUID()}Aa!`;
@@ -100,9 +157,10 @@ export async function createIdentity(context, label = "bff-fixture") {
     assert.ok(deleted.ok, `local fictional identity cleanup failed with HTTP ${deleted.status}`);
   });
 
+  const username = `${label}.${crypto.randomUUID().slice(0, 8)}`;
   const provision = await serviceRpc("provision_account", {
     p_provider_user_id: user.id,
-    p_username: `${label}.${crypto.randomUUID().slice(0, 8)}`,
+    p_username: username,
     p_provider_email: email,
   });
   assert.ok(provision.ok, `local private account provisioning failed with HTTP ${provision.status}`);
@@ -115,7 +173,7 @@ export async function createIdentity(context, label = "bff-fixture") {
   assert.ok(passwordLogin.ok, `local fictional password login failed with HTTP ${passwordLogin.status}`);
   const providerSession = await json(passwordLogin);
   assert.equal(providerSession.user.id, user.id);
-  return { user, email, password, accountId, providerSession };
+  return { user, email, password, username, accountId, providerSession };
 }
 
 export async function createServerSession(context, identity, { expiresInMs = 600_000, retainProviderRefreshToken = false } = {}) {
@@ -149,6 +207,8 @@ export async function createServerSession(context, identity, { expiresInMs = 600
 function toPostgresBytea(value) {
   return `\\x${[...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
+
+export { toPostgresBytea };
 
 export function sessionCookie(sessionToken) {
   return `__Host-aa_session=${sessionToken}`;

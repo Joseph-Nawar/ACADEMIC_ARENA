@@ -12,6 +12,9 @@ export async function onRequestGet({ request, env }) {
     user: {
       role: safeRole(session.roleNames),
       mustChangePassword: session.mustChangePassword,
+      ...(session.roleNames.some((role) => ["moderator", "publisher", "admin"].includes(role))
+        ? { mfaRequired: session.mfaRequired, mfaSetupRequired: session.mfaSetupRequired }
+        : {}),
     },
     csrfToken: session.csrfToken,
   });

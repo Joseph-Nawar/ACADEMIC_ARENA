@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(36);
+select plan(40);
 
 select has_schema('app_private', 'private identity schema exists');
 select has_table('app_private', 'accounts', 'private accounts exist');
@@ -29,11 +29,17 @@ select ok(
   and has_column_privilege('authenticated', 'public.student_avatar_configs', 'family', 'select')
   and has_column_privilege('authenticated', 'public.student_avatar_configs', 'tone', 'select')
   and has_column_privilege('authenticated', 'public.student_avatar_configs', 'badge', 'select')
-  and has_column_privilege('authenticated', 'public.student_avatar_configs', 'character_key', 'insert')
-  and has_column_privilege('authenticated', 'public.student_avatar_configs', 'character_key', 'update')
+  and not has_table_privilege('authenticated', 'public.student_avatar_configs', 'insert')
+  and not has_table_privilege('authenticated', 'public.student_avatar_configs', 'update')
   and not has_column_privilege('authenticated', 'public.student_avatar_configs', 'account_id', 'select')
   and not has_table_privilege('authenticated', 'public.student_avatar_configs', 'delete'),
-  'authenticated role has only the required avatar table operations'
+  'authenticated role can read only avatar fields and must use the owner-derived write RPC'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.save_own_avatar_config(text,text,text,text)', 'execute')
+  and not has_function_privilege('anon', 'public.save_own_avatar_config(text,text,text,text)', 'execute')
+  and not has_function_privilege('service_role', 'public.save_own_avatar_config(text,text,text,text)', 'execute'),
+  'only authenticated users can call the owner-derived avatar write RPC'
 );
 select ok(
   not has_schema_privilege('anon', 'app_private', 'usage')
@@ -115,7 +121,7 @@ insert into auth.users (
 
 insert into app_private.accounts (id, provider_user_id, status, force_password_change)
 values
-  ('20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'active', true),
+  ('20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'active', false),
   ('20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000002', 'active', false),
   ('20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000003', 'active', false),
   ('20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000004', 'active', false),
@@ -171,6 +177,12 @@ select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-0000000
 set local role authenticated;
 select is((select count(*)::integer from public.student_avatar_configs), 1, 'student sees only the owned avatar row');
 select is((select count(*)::integer from public.student_avatar_configs where character_key = 'amara'), 1, 'student sees own avatar details');
+select throws_ok(
+  $$insert into public.student_avatar_configs (account_id, character_key, family, tone, badge) values ('20000000-0000-4000-8000-000000000002', 'omar', 'ink', 'coral', '⚡')$$,
+  '42501', null, 'student cannot directly choose or write an avatar owner'
+);
+select ok(public.save_own_avatar_config('nour2', 'cartoon3d', 'lilac', '✦'), 'student can save through the authenticated owner-derived RPC');
+select is((select character_key from public.student_avatar_configs), 'nour2', 'owner-derived RPC updates only the caller avatar');
 select ok(not app_private.has_permission('accounts.provision'), 'student cannot obtain a staff permission');
 select ok(not app_private.has_permission('leaderboards.publish'), 'AAL1 student cannot obtain publisher permission');
 reset role;

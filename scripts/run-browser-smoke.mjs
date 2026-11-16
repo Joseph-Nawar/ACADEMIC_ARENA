@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { runDemoBrowserTests, runProductionBrowserTests } from "../tests/browser/m1-foundation.spec.mjs";
+import { runM2AuthBrowserTests } from "../tests/browser/m2-auth.spec.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const wrangler = join(root, "node_modules", "wrangler", "bin", "wrangler.js");
@@ -75,7 +76,8 @@ try {
   build("production");
   server = await startPages();
   await runProductionBrowserTests(browser, server.baseUrl, root);
-  console.log("PASS: Wrangler Pages demo, production-unavailable, filters, avatar, Campus Wins, headers, and desktop/mobile checks.");
+  await runM2AuthBrowserTests(browser, server.baseUrl);
+  console.log("PASS: Wrangler Pages demo, production-unavailable, filters, avatar, Campus Wins, authentication states, headers, and desktop/mobile checks.");
 } finally {
   await stopPages(server);
   await browser.close();

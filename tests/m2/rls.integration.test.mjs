@@ -70,6 +70,12 @@ async function createFixtureUser(context, label) {
   assert.ok(provisioned.ok, `local server-only account provisioning failed with HTTP ${provisioned.status}`);
   const accountId = await json(provisioned);
   assert.match(accountId, /^[0-9a-f-]{36}$/i, "internal account ID remains in test/server code");
+  const passwordChange = await apiRequest("rpc/complete_password_change", {
+    method: "POST",
+    token: key,
+    body: { p_account_id: accountId },
+  });
+  assert.ok(passwordChange.ok, "fixture completes its initial password setup before RLS ownership checks");
 
   const login = await fetch(new URL("/auth/v1/token?grant_type=password", baseUrl), {
     method: "POST",
@@ -90,13 +96,13 @@ test("local PostgREST enforces avatar ownership and exposes only public projecti
   const first = await createFixtureUser(context, "rls-first");
   const second = await createFixtureUser(context, "rls-second");
 
-  const created = await apiRequest("student_avatar_configs?select=character_key,family,tone,badge", {
+  const created = await apiRequest("rpc/save_own_avatar_config", {
     method: "POST",
     token: first.accessToken,
-    body: { character_key: "amara", family: "ink", tone: "mint", badge: "✦" },
+    body: { p_character_key: "amara", p_family: "ink", p_tone: "mint", p_badge: "✦" },
   });
-  const avatarCreateError = created.ok ? null : await json(created.clone());
-  assert.equal(created.status, 201, `owner can create their avatar without supplying an account ID (database code: ${avatarCreateError?.code || "none"})`);
+  assert.equal(created.status, 200, "owner can save an avatar without supplying an account ID");
+  assert.equal(await json(created), true);
 
   const firstRowsResponse = await apiRequest("student_avatar_configs?select=character_key,family,tone,badge", {
     token: first.accessToken,
@@ -120,8 +126,7 @@ test("local PostgREST enforces avatar ownership and exposes only public projecti
     token: second.accessToken,
     body: { character_key: "omar" },
   });
-  assert.ok(crossAccountUpdate.ok || [401, 403].includes(crossAccountUpdate.status),
-    "a cross-account avatar update is rejected or filtered to zero rows");
+  assert.equal(crossAccountUpdate.status, 403, "direct avatar writes are unavailable to browser roles");
   const afterCrossAccountUpdate = await apiRequest("student_avatar_configs?select=character_key,family,tone,badge", {
     token: first.accessToken,
   });
@@ -147,6 +152,16 @@ test("local PostgREST enforces avatar ownership and exposes only public projecti
     },
   });
   assert.ok(!escalation.ok, "student JWT cannot invoke the service-only provisioning function");
+  const roleEscalation = await apiRequest("rpc/provision_student_account", {
+    method: "POST",
+    token: first.accessToken,
+    body: {
+      p_provider_user_id: crypto.randomUUID(),
+      p_username: `student.elevation.${crypto.randomUUID().slice(0, 8)}`,
+      p_provider_email: `elevation-${crypto.randomUUID()}@academic-arena.test`,
+    },
+  });
+  assert.ok(!roleEscalation.ok, "student JWT cannot use the staff-only account provisioning RPC");
 
   const snapshotId = crypto.randomUUID();
   const version = 800000 + Math.floor(Math.random() * 100000);

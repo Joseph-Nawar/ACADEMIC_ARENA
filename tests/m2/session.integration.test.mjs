@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sessionCookie as formatSessionCookie } from "../../functions/lib/response.js";
 import { revokeProviderRefreshToken } from "../../functions/lib/provider.js";
-import { api, createIdentity, createServerSession, json, local, randomOpaqueToken, sessionCookie } from "./bff-fixtures.mjs";
+import { api, createIdentity, createServerSession, json, local, randomOpaqueToken, serviceRpc, sessionCookie } from "./bff-fixtures.mjs";
 
 function assertNoProviderSecrets(payload, identity) {
   const serialized = JSON.stringify(payload);
@@ -89,20 +89,21 @@ test("parallel requests share one opaque server-side session without exposing pr
 
 test("provider logout revokes refresh credentials while an existing JWT stays acceptable to PostgREST until expiry", async (context) => {
   const identity = await createIdentity(context, "provider-revocation");
+  const completed = await serviceRpc("complete_password_change", { p_account_id: identity.accountId });
+  assert.ok(completed.ok, "local fictional account has completed initial password setup before testing RLS token validity");
   assert.equal(typeof identity.providerSession.refresh_token, "string");
   assert.ok(identity.providerSession.refresh_token.length > 0, "fictional provider returns a nonempty refresh credential");
-  const avatar = await fetch(new URL("/rest/v1/student_avatar_configs", local.supabaseUrl), {
+  const avatarWrite = await fetch(new URL("/rest/v1/rpc/save_own_avatar_config", local.supabaseUrl), {
     method: "POST",
     headers: {
       apikey: local.anonKey,
       Authorization: `Bearer ${identity.providerSession.access_token}`,
       "Content-Type": "application/json",
-      "Accept-Profile": "public",
-      "Content-Profile": "public",
     },
-    body: JSON.stringify({ character_key: "amara", family: "ink", tone: "mint", badge: "✦" }),
+    body: JSON.stringify({ p_character_key: "amara", p_family: "ink", p_tone: "mint", p_badge: "✦" }),
   });
-  assert.equal(avatar.status, 201, "provider JWT can access its own RLS-controlled row before sign-out");
+  assert.equal(avatarWrite.status, 200, "provider JWT can invoke the authenticated owner-derived write before sign-out");
+  assert.equal(await avatarWrite.json(), true);
 
   const providerRevoked = await revokeProviderRefreshToken({
     ENVIRONMENT: "test",

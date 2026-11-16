@@ -212,6 +212,63 @@ test("login_uses_same_origin_and_returns_only_sanitized_session", async () => {
   assert.equal(JSON.stringify(observed).includes("@"), false);
 });
 
+test("staff MFA state is allowlisted and factor setup uses only same-origin CSRF-protected routes", async () => {
+  const requests = [];
+  const api = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      if (url === "/api/auth/login") return response({
+        authenticated: true,
+        user: { role: "admin", mustChangePassword: false, mfaRequired: true, mfaSetupRequired: true },
+        csrfToken: "fictional-csrf-token",
+        email: "private@academic-arena.test",
+        access_token: "provider-access-token",
+      });
+      if (url === "/api/auth/mfa/enroll") return response({
+        secret: "FICTIONAL-BASE32-SECRET",
+        totpUri: "otpauth://totp/Academic%20Arena:staff?secret=FICTIONAL",
+        access_token: "provider-access-token",
+      });
+      if (url === "/api/auth/mfa/verify") return response({
+        authenticated: true,
+        user: { role: "admin", mustChangePassword: false, mfaRequired: false, mfaSetupRequired: false },
+        refresh_token: "provider-refresh-token",
+      });
+      return response({}, 404);
+    },
+  });
+
+  const initial = await api.auth.signIn({ username: "fictional-admin", password: "fictional-password" });
+  assert.deepEqual(initial, {
+    authenticated: true,
+    user: { role: "admin", mustChangePassword: false, mfaRequired: true, mfaSetupRequired: true },
+  });
+  const enrollment = await api.auth.enrollMfa();
+  assert.deepEqual(enrollment, {
+    secret: "FICTIONAL-BASE32-SECRET",
+    totpUri: "otpauth://totp/Academic%20Arena:staff?secret=FICTIONAL",
+  });
+  const verified = await api.auth.verifyMfa("123456");
+  assert.deepEqual(verified, {
+    authenticated: true,
+    user: { role: "admin", mustChangePassword: false, mfaRequired: false, mfaSetupRequired: false },
+  });
+  assert.deepEqual(requests.slice(1).map(({ url, options }) => ({
+    url,
+    method: options.method,
+    csrf: options.headers["X-CSRF-Token"],
+    credentials: options.credentials,
+    body: options.body,
+  })), [
+    { url: "/api/auth/mfa/enroll", method: "POST", csrf: "fictional-csrf-token", credentials: "same-origin", body: "{}" },
+    { url: "/api/auth/mfa/verify", method: "POST", csrf: "fictional-csrf-token", credentials: "same-origin", body: JSON.stringify({ code: "123456" }) },
+  ]);
+  assert.equal(JSON.stringify([initial, enrollment, verified]).includes("provider-access-token"), false);
+  assert.equal(JSON.stringify([initial, enrollment, verified]).includes("provider-refresh-token"), false);
+  assert.equal(JSON.stringify([initial, enrollment, verified]).includes("private@academic-arena.test"), false);
+});
+
 test("production_reaction_mutation_returns_only_the_allowlisted_active_reaction", async () => {
   const api = createArenaDataAccess({
     mode: "production",
