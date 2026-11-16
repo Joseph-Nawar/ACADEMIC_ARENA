@@ -1,0 +1,2 @@
+-- Deliberately contains no student, staff, identity, or academic data.
+-- Integration tests create fictional .test identities with runtime-generated passwords.
