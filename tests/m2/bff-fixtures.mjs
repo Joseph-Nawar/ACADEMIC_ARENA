@@ -85,7 +85,7 @@ export function serviceRpc(name, args) {
 export async function injectProviderFailure(providerUserId, operation) {
   assert.match(providerUserId, /^[0-9a-f-]{36}$/iu);
   assert.ok(["user-password-update", "mfa-factor-list"].includes(operation));
-  const response = await fetch(new URL("/__local_test__/fail-next-provider-request", local.supabaseUrl), {
+  const response = await fetchForTest("Local fault proxy failure injection", new URL("/__local_test__/fail-next-provider-request", local.supabaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ providerUserId, operation }),
@@ -96,7 +96,7 @@ export async function injectProviderFailure(providerUserId, operation) {
 export async function pauseNextProviderRequest(providerUserId, operation) {
   assert.match(providerUserId, /^[0-9a-f-]{36}$/iu);
   assert.ok(["user-password-update", "mfa-factor-list"].includes(operation));
-  const response = await fetch(new URL("/__local_test__/pause-next-provider-request", local.supabaseUrl), {
+  const response = await fetchForTest("Local fault proxy request pause", new URL("/__local_test__/pause-next-provider-request", local.supabaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ providerUserId, operation }),
@@ -108,13 +108,13 @@ export async function providerRequestState(providerUserId, operation) {
   const url = new URL("/__local_test__/provider-request-state", local.supabaseUrl);
   url.searchParams.set("providerUserId", providerUserId);
   url.searchParams.set("operation", operation);
-  const response = await fetch(url);
+  const response = await fetchForTest("Local fault proxy request state", url);
   assert.equal(response.status, 200, "loopback test proxy reports selected fictional provider request state");
   return response.json();
 }
 
 export async function releaseProviderRequest(providerUserId, operation) {
-  const response = await fetch(new URL("/__local_test__/release-provider-request", local.supabaseUrl), {
+  const response = await fetchForTest("Local fault proxy request release", new URL("/__local_test__/release-provider-request", local.supabaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ providerUserId, operation }),
@@ -166,7 +166,7 @@ export async function cleanupProvisionedIdentity(context, username) {
   const identity = Array.isArray(rows) ? rows[0] : rows;
   assert.ok(identity?.provider_user_id, "the fictional provisioned account has a provider user for cleanup");
   context.after(async () => {
-    const deleted = await fetch(new URL(`/auth/v1/admin/users/${encodeURIComponent(identity.provider_user_id)}`, local.supabaseUrl), {
+    const deleted = await fetchForTest("Local fictional identity cleanup", new URL(`/auth/v1/admin/users/${encodeURIComponent(identity.provider_user_id)}`, local.supabaseUrl), {
       method: "DELETE",
       headers: {
         apikey: local.serviceRoleKey,
@@ -181,7 +181,7 @@ export async function cleanupProvisionedIdentity(context, username) {
 export async function createIdentity(context, label = "bff-fixture") {
   const email = `${label}-${crypto.randomUUID()}@academic-arena.test`;
   const password = `${crypto.randomUUID()}Aa!`;
-  const adminResponse = await fetch(new URL("/auth/v1/admin/users", local.supabaseUrl), {
+  const adminResponse = await fetchForTest("Local fictional identity provisioning", new URL("/auth/v1/admin/users", local.supabaseUrl), {
     method: "POST",
     headers: {
       apikey: local.serviceRoleKey,
@@ -193,7 +193,7 @@ export async function createIdentity(context, label = "bff-fixture") {
   assert.ok(adminResponse.ok, `local fictional identity creation failed with HTTP ${adminResponse.status}`);
   const user = await json(adminResponse);
   context.after(async () => {
-    const deleted = await fetch(new URL(`/auth/v1/admin/users/${encodeURIComponent(user.id)}`, local.supabaseUrl), {
+    const deleted = await fetchForTest("Local fictional identity cleanup", new URL(`/auth/v1/admin/users/${encodeURIComponent(user.id)}`, local.supabaseUrl), {
       method: "DELETE",
       headers: {
         apikey: local.serviceRoleKey,
@@ -221,7 +221,7 @@ export async function createIdentity(context, label = "bff-fixture") {
   } catch {
     throw new Error("Local fictional account fixture could not be provisioned.");
   }
-  const passwordLogin = await fetch(new URL("/auth/v1/token?grant_type=password", local.supabaseUrl), {
+  const passwordLogin = await fetchForTest("Local fictional provider password sign-in", new URL("/auth/v1/token?grant_type=password", local.supabaseUrl), {
     method: "POST",
     headers: { apikey: local.anonKey, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),

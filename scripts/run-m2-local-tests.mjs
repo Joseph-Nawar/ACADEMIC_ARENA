@@ -81,7 +81,7 @@ function availableLoopbackPort() {
   });
 }
 
-async function startPagesPreview(port) {
+async function startPagesPreview(port, secretsToRedact = []) {
   await run("npm", ["run", "build:production"], "production Pages build");
   const child = spawn("npx", [
     "--no-install", "wrangler", "pages", "dev", "dist",
@@ -97,11 +97,17 @@ async function startPagesPreview(port) {
   child.stderr.setEncoding("utf8").on("data", (part) => { log += part; });
   child.once("error", () => {});
   const url = `http://127.0.0.1:${port}`;
-  const sanitizedLog = () => log
-    .replace(/eyJ[A-Za-z0-9_.-]{20,}/gu, "[redacted-jwt]")
-    .replace(/(SUPABASE_[A-Z_]+|SESSION_JWE_KEY|RATE_LIMIT_HMAC_KEY)=\S+/gu, "$1=[redacted]")
-    .replace(/[A-Za-z0-9_-]{64,}/gu, "[redacted-value]")
-    .slice(-1200);
+  const sanitizedLog = () => {
+    let safe = log;
+    for (const secret of secretsToRedact) {
+      if (secret?.length >= 12) safe = safe.split(secret).join("[redacted-generated-secret]");
+    }
+    return safe
+      .replace(/eyJ[A-Za-z0-9_.-]{20,}/gu, "[redacted-jwt]")
+      .replace(/(SUPABASE_[A-Z_]+|SESSION_JWE_KEY|RATE_LIMIT_HMAC_KEY)=\S+/gu, "$1=[redacted]")
+      .replace(/[A-Za-z0-9_-]{32,}/gu, "[redacted-value]")
+      .slice(-1200);
+  };
   const readiness = await waitForHttpReady(url, { child, timeoutMs: 60_000, intervalMs: 100 });
   if (readiness === "ready") return { child, url, safeLog: sanitizedLog };
   if (readiness === "exited") {
@@ -395,7 +401,7 @@ try {
   ].join("\n");
   await writeFile(testEnvironmentFile, envFile, { encoding: "utf8", mode: 0o600, flag: "wx" });
   await chmod(testEnvironmentFile, 0o600);
-  const pages = await startPagesPreview(port);
+  const pages = await startPagesPreview(port, [anonKey, serviceRoleKey, jweKey, rateLimitKey]);
   pagesProcess = pages.child;
   pagesSafeLog = pages.safeLog;
   const testEnv = {
