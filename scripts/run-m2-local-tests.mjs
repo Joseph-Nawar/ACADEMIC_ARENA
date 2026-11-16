@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { chmod, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -91,6 +92,85 @@ async function startPagesPreview(port) {
   throw new Error("Local Cloudflare Pages preview did not become ready.");
 }
 
+async function startProviderFaultProxy(targetUrl, port) {
+  let pendingFailure;
+  const server = createHttpServer(async (request, response) => {
+    const requestUrl = new URL(request.url || "/", targetUrl);
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = Buffer.concat(chunks);
+
+    if (requestUrl.pathname === "/__local_test__/fail-next-provider-request" && request.method === "POST") {
+      if (!new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]).has(request.socket.remoteAddress)) {
+        response.writeHead(403).end();
+        return;
+      }
+      try {
+        const instruction = JSON.parse(body.toString("utf8"));
+        if (!/^[0-9a-f-]{36}$/iu.test(instruction.providerUserId) ||
+            !["user-password-update", "mfa-factor-list"].includes(instruction.operation)) {
+          response.writeHead(400).end();
+          return;
+        }
+        pendingFailure = instruction;
+        response.writeHead(204).end();
+      } catch {
+        response.writeHead(400).end();
+      }
+      return;
+    }
+
+    const userUpdateMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})$/iu);
+    const factorListMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})\/factors$/iu);
+    const shouldFailPassword = pendingFailure?.operation === "user-password-update" &&
+      userUpdateMatch?.[1]?.toLowerCase() === pendingFailure.providerUserId.toLowerCase() &&
+      ["PUT", "PATCH"].includes(request.method || "");
+    const shouldFailFactors = pendingFailure?.operation === "mfa-factor-list" &&
+      factorListMatch?.[1]?.toLowerCase() === pendingFailure.providerUserId.toLowerCase();
+    if (shouldFailPassword || shouldFailFactors) {
+      pendingFailure = undefined;
+      response.writeHead(503, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(JSON.stringify({ msg: "Injected one-time local provider failure." }));
+      return;
+    }
+
+    try {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(request.headers)) {
+        if (["host", "connection", "content-length"].includes(name) || value === undefined) continue;
+        headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+      }
+      const upstream = await fetch(requestUrl, {
+        method: request.method,
+        headers,
+        ...(request.method === "GET" || request.method === "HEAD" ? {} : { body }),
+        redirect: "manual",
+      });
+      response.statusCode = upstream.status;
+      for (const [name, value] of upstream.headers) {
+        if (["connection", "content-encoding", "content-length", "transfer-encoding", "set-cookie"].includes(name)) continue;
+        response.setHeader(name, value);
+      }
+      const cookies = upstream.headers.getSetCookie?.();
+      if (cookies?.length) response.setHeader("set-cookie", cookies);
+      response.end(request.method === "HEAD" ? undefined : Buffer.from(await upstream.arrayBuffer()));
+    } catch {
+      response.writeHead(502, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(JSON.stringify({ msg: "Local provider proxy unavailable." }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", resolve);
+  });
+  return { server, url: `http://127.0.0.1:${port}` };
+}
+
+async function stopServer(server) {
+  if (!server?.listening) return;
+  await new Promise((resolve) => server.close(resolve));
+}
+
 async function stopProcess(child) {
   if (!child || child.exitCode !== null) return;
   child.kill("SIGTERM");
@@ -102,6 +182,7 @@ async function stopProcess(child) {
 }
 
 let pagesProcess;
+let providerProxy;
 let supabaseStarted = false;
 let testEnvironmentFile;
 let previousDevVars;
@@ -144,6 +225,9 @@ try {
       !isLoopback(new URL(apiUrl).hostname) || !isLoopback(new URL(dbUrl).hostname)) {
     throw new Error("Local Supabase did not report complete loopback-only endpoints.");
   }
+  const proxyPort = await availableLoopbackPort();
+  const proxy = await startProviderFaultProxy(apiUrl, proxyPort);
+  providerProxy = proxy.server;
   const testFiles = (await readdir(path.join(root, "tests/m2")))
     .filter((name) => name.endsWith(".test.mjs") && name !== "lifecycle-gate.integration.test.mjs")
     .sort()
@@ -160,7 +244,7 @@ try {
     if (error.code !== "ENOENT") throw error;
   }
   const envFile = [
-    `SUPABASE_URL=${apiUrl}`,
+    `SUPABASE_URL=${proxy.url}`,
     `SUPABASE_ANON_KEY=${anonKey}`,
     `SUPABASE_SERVICE_ROLE_KEY=${serviceRoleKey}`,
     `SESSION_JWE_KEY=${jweKey}`,
@@ -174,7 +258,8 @@ try {
   pagesProcess = pages.child;
   const testEnv = {
     ...process.env,
-    AA_SUPABASE_URL: apiUrl,
+    AA_SUPABASE_URL: proxy.url,
+    AA_SUPABASE_TARGET_URL: apiUrl,
     AA_SUPABASE_DB_URL: dbUrl,
     AA_SUPABASE_ANON_KEY: anonKey,
     AA_SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
@@ -205,6 +290,7 @@ try {
   process.exitCode = 1;
 } finally {
   await stopProcess(pagesProcess);
+  await stopServer(providerProxy);
   if (testEnvironmentFile) {
     if (previousDevVars) {
       await writeFile(testEnvironmentFile, previousDevVars.contents, { mode: previousDevVars.mode });

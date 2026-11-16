@@ -10,13 +10,18 @@ const serviceRoleKey = process.env.AA_SUPABASE_SERVICE_ROLE_KEY;
 test("local Supabase Auth endpoint is bound to loopback", () => {
   assert.ok(url, "run this test through npm run test:m2:local");
   assert.ok(["127.0.0.1", "[::1]"].includes(new URL(url).hostname));
+  const targetUrl = process.env.AA_SUPABASE_TARGET_URL;
+  assert.ok(targetUrl, "the local provider target URL must be supplied only to the test process");
+  assert.ok(["127.0.0.1", "[::1]"].includes(new URL(targetUrl).hostname));
 });
 
 test("local Supabase API and database listeners are loopback-only", () => {
   assert.ok(url, "run this test through npm run test:m2:local");
   const dbUrl = process.env.AA_SUPABASE_DB_URL;
+  const targetUrl = process.env.AA_SUPABASE_TARGET_URL;
   assert.ok(dbUrl, "local database URL must be supplied only to the test process");
-  const ports = new Set([new URL(url).port, new URL(dbUrl).port]);
+  assert.ok(targetUrl, "local provider target must be supplied only to the test process");
+  const ports = new Set([new URL(url).port, new URL(targetUrl).port, new URL(dbUrl).port]);
   const output = os.platform() === "darwin"
     ? execFileSync("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"], { encoding: "utf8" })
     : execFileSync("ss", ["-ltnH"], { encoding: "utf8" });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createIdentity, setFictionalAccountRole } from "./bff-fixtures.mjs";
 
 const baseUrl = process.env.AA_SUPABASE_URL;
 const anonKey = process.env.AA_SUPABASE_ANON_KEY;
@@ -33,62 +34,9 @@ function apiRequest(path, { method = "GET", token = anonKey, body, prefer, profi
 }
 
 async function createFixtureUser(context, label) {
-  const email = `${label}-${crypto.randomUUID()}@academic-arena.test`;
-  const password = `${crypto.randomUUID()}Aa!`;
-  const key = required(serviceRoleKey, "local service role key");
-  const adminHeaders = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
-  };
-  const response = await fetch(new URL("/auth/v1/admin/users", baseUrl), {
-    method: "POST",
-    headers: adminHeaders,
-    body: JSON.stringify({ email, password, email_confirm: true }),
-  });
-  assert.ok(response.ok, `local fictional Auth user creation failed with HTTP ${response.status}`);
-  const providerUser = await response.json();
-  assert.equal(providerUser.email, email);
-  context.after(async () => {
-    const deleted = await fetch(new URL(`/auth/v1/admin/users/${encodeURIComponent(providerUser.id)}`, baseUrl), {
-      method: "DELETE",
-      headers: adminHeaders,
-    });
-    assert.ok(deleted.ok, `local fictional Auth identity cleanup failed with HTTP ${deleted.status}`);
-  });
-
-  const username = `${label}.${crypto.randomUUID().slice(0, 8)}`;
-  const provisioned = await apiRequest("rpc/provision_account", {
-    method: "POST",
-    token: key,
-    body: {
-      p_provider_user_id: providerUser.id,
-      p_username: username,
-      p_provider_email: email,
-    },
-  });
-  assert.ok(provisioned.ok, `local server-only account provisioning failed with HTTP ${provisioned.status}`);
-  const accountId = await json(provisioned);
-  assert.match(accountId, /^[0-9a-f-]{36}$/i, "internal account ID remains in test/server code");
-  const passwordChange = await apiRequest("rpc/complete_password_change", {
-    method: "POST",
-    token: key,
-    body: { p_account_id: accountId, p_expected_credential_epoch: 0 },
-  });
-  assert.ok(passwordChange.ok, "fixture completes its initial password setup before RLS ownership checks");
-
-  const login = await fetch(new URL("/auth/v1/token?grant_type=password", baseUrl), {
-    method: "POST",
-    headers: { apikey: anonKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  assert.ok(login.ok, `local fictional password sign-in failed with HTTP ${login.status}`);
-  const providerSession = await login.json();
-  assert.equal(providerSession.user.email, email);
-  assert.equal(typeof providerSession.access_token, "string");
-  assert.equal(typeof providerSession.refresh_token, "string");
-
-  return { accountId, accessToken: providerSession.access_token };
+  const identity = await createIdentity(context, label);
+  setFictionalAccountRole(identity.accountId, "student");
+  return { accountId: identity.accountId, accessToken: identity.providerSession.access_token };
 }
 
 test("local PostgREST enforces avatar ownership and exposes only public projection fields", async (context) => {

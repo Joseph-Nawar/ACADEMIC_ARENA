@@ -41,7 +41,7 @@ test("AAL2 staff cannot bypass the disabled hosted account-lifecycle gate throug
       p_username: "direct.bypass",
       p_provider_email: identity.email,
     }],
-    ["force_password_change_for_account", { p_username: identity.username }],
+    ["force_password_change_for_account", { p_username: identity.username, p_password_jwe: "x".repeat(64) }],
     ["suspend_student_account", { p_username: identity.username }],
     ["reset_staff_mfa_for_account", { p_username: identity.username }],
   ]) {

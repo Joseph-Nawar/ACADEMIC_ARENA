@@ -2,7 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 import { configuration } from "./env.js";
 
 async function safeFetch(input, init = {}) {
-  const response = await fetch(input, { ...init, redirect: "manual" });
+  const timeoutSignal = AbortSignal.timeout(15_000);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
+  const response = await fetch(input, { ...init, signal, redirect: "manual" });
   if (response.status >= 300 && response.status < 400) {
     throw new TypeError("Upstream redirects are not accepted.");
   }

@@ -1,5 +1,5 @@
 begin;
-select plan(26);
+select plan(29);
 
 select ok(to_regprocedure('public.record_staff_mfa_event(uuid,text)') is not null, 'server audit RPC exists');
 select ok(to_regprocedure('public.complete_staff_mfa_step_up(bytea,uuid,uuid,text,text,timestamptz,text)') is not null, 'MFA step-up stores provider tokens and audit atomically');
@@ -54,7 +54,9 @@ select throws_ok($$select public.reset_staff_mfa_for_account('mfa.target')$$, '4
 select set_config('request.jwt.claims', '{"sub":"10000000-0000-4000-8000-000000000041","role":"authenticated","aal":"aal2"}', true);
 select is(public.reset_staff_mfa_for_account('mfa.admin'), false, 'administrator cannot use recovery to remove their own MFA');
 select ok(public.reset_staff_mfa_for_account('mfa.target'), 'AAL2 administrator can reset a different staff member MFA');
+select ok(public.reset_staff_mfa_for_account('mfa.target'), 'AAL2 administrator can retry a pending provider MFA reset');
 reset role;
+select is((select credential_epoch from app_private.accounts where id = '20000000-0000-4000-8000-000000000042'), 1::bigint, 'MFA reset retry preserves its credential generation');
 
 select ok((select force_password_change from app_private.accounts where id = '20000000-0000-4000-8000-000000000042'), 'MFA recovery requires a fresh password change');
 select ok((select credential_update_pending from app_private.accounts where id = '20000000-0000-4000-8000-000000000042'), 'MFA recovery blocks login until provider factors are removed');
@@ -76,6 +78,7 @@ select is(public.record_staff_mfa_event('20000000-0000-4000-8000-000000000099', 
 reset role;
 select is((select credential_update_pending from app_private.accounts where id = '20000000-0000-4000-8000-000000000042'), false, 'MFA reset completion reopens the forced password-change flow');
 select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000042' and action_key = 'staff.mfa_reset_completed'), 1, 'provider MFA removal completion is audited');
+select ok((select completed_at is not null from app_private.credential_sync_operations where account_id = '20000000-0000-4000-8000-000000000042' and operation_kind = 'staff_mfa_reset'), 'completed MFA reset remains idempotent for a short retry window');
 select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000041' and action_key = 'staff.mfa_verified'), 1, 'atomic MFA step-up commits the audit event with the token update');
 select is((select count(*)::integer from app_private.audit_events where target_account_id = '20000000-0000-4000-8000-000000000042' and action_key = 'staff.mfa_enrolled'), 1, 'MFA audit stores an action key and no authenticator secret');
 

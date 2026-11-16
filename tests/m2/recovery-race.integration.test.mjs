@@ -62,14 +62,16 @@ test("provider recovery blocks login/password changes until the matching reset i
 
   const started = await postgrestRpc("force_password_change_for_account", {
     p_username: student.username,
+    p_password_jwe: "a".repeat(64),
   }, verified.data.access_token);
   assert.equal(started.status, 200);
   assert.equal(await json(started), true);
   const concurrentRecovery = await postgrestRpc("force_password_change_for_account", {
     p_username: student.username,
+    p_password_jwe: "b".repeat(64),
   }, verified.data.access_token);
   assert.equal(concurrentRecovery.status, 200);
-  assert.equal(await json(concurrentRecovery), false, "another recovery cannot overlap the provider reset");
+  assert.equal(await json(concurrentRecovery), true, "a retry resumes the existing provider reset");
 
   const identityResponse = await serviceRpc("resolve_account_identity", { p_account_id: student.accountId });
   assert.equal(identityResponse.ok, true);
@@ -77,6 +79,14 @@ test("provider recovery blocks login/password changes until the matching reset i
   const recoveryState = Array.isArray(identityRows) ? identityRows[0] : identityRows;
   assert.equal(recoveryState.credential_epoch, 1);
   assert.equal(recoveryState.credential_update_pending, true);
+  const storedOperation = await serviceRpc("resolve_credential_sync_operation", {
+    p_account_id: student.accountId,
+    p_operation_kind: "student_password_recovery",
+  });
+  assert.equal(storedOperation.ok, true);
+  const operationRows = await json(storedOperation);
+  const operation = Array.isArray(operationRows) ? operationRows[0] : operationRows;
+  assert.equal(operation.password_jwe, "a".repeat(64), "retry retains only the first encrypted credential payload");
 
   const revokedPriorSession = await api("/api/auth/session", { headers: { Cookie: oldCookie } });
   assert.deepEqual(await json(revokedPriorSession), { authenticated: false });

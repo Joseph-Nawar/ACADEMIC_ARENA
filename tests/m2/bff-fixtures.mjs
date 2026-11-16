@@ -76,6 +76,17 @@ export function serviceRpc(name, args) {
   });
 }
 
+export async function injectProviderFailure(providerUserId, operation) {
+  assert.match(providerUserId, /^[0-9a-f-]{36}$/iu);
+  assert.ok(["user-password-update", "mfa-factor-list"].includes(operation));
+  const response = await fetch(new URL("/__local_test__/fail-next-provider-request", local.supabaseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ providerUserId, operation }),
+  });
+  assert.equal(response.status, 204, "loopback test proxy arms a one-time failure for a fictional provider identity");
+}
+
 export function setFictionalAccountStatus(accountId, status) {
   assert.match(accountId, /^[0-9a-f-]{36}$/iu);
   assert.ok(["active", "suspended"].includes(status));
@@ -158,13 +169,23 @@ export async function createIdentity(context, label = "bff-fixture") {
   });
 
   const username = `${label}.${crypto.randomUUID().slice(0, 8)}`;
-  const provision = await serviceRpc("provision_account", {
-    p_provider_user_id: user.id,
-    p_username: username,
-    p_provider_email: email,
-  });
-  assert.ok(provision.ok, `local private account provisioning failed with HTTP ${provision.status}`);
-  const accountId = await json(provision);
+  const accountId = crypto.randomUUID();
+  try {
+    for (const sql of [
+      `insert into app_private.accounts (id, provider_user_id, status, force_password_change) values ('${accountId}', '${user.id}', 'active', true)`,
+      `insert into app_private.identity_mappings (account_id, username_normalized, provider_email) values ('${accountId}', '${username}', '${email}')`,
+      `insert into app_private.account_role_grants (account_id, role_name) values ('${accountId}', 'student')`,
+      `insert into app_private.audit_events (target_account_id, action_key, reason_code) values ('${accountId}', 'account.provisioned', 'test_fixture')`,
+    ]) {
+      execFileSync("npx", ["--no-install", "supabase", "db", "query", "--local", sql], {
+        cwd: process.cwd(),
+        env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" },
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    }
+  } catch {
+    throw new Error("Local fictional account fixture could not be provisioned.");
+  }
   const passwordLogin = await fetch(new URL("/auth/v1/token?grant_type=password", local.supabaseUrl), {
     method: "POST",
     headers: { apikey: local.anonKey, "Content-Type": "application/json" },

@@ -41,8 +41,13 @@ export async function onRequestPost({ request, env }) {
 
   let identity;
   try {
-    const { data, error } = await serviceClient(env).rpc("resolve_login_identity", { p_username: username });
-    if (error) return jsonResponse({ error: "unavailable" }, 503);
+    const provider = serviceClient(env);
+    const [cleanup, resolution] = await Promise.all([
+      provider.rpc("prune_expired_credential_sync_operations"),
+      provider.rpc("resolve_login_identity", { p_username: username }),
+    ]);
+    if (cleanup.error || resolution.error) return jsonResponse({ error: "unavailable" }, 503);
+    const { data } = resolution;
     identity = loginIdentityRow(data);
   } catch {
     return jsonResponse({ error: "unavailable" }, 503);

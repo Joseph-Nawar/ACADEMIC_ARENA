@@ -5,8 +5,10 @@ import {
   api,
   cleanupProvisionedIdentity,
   createIdentity,
+  injectProviderFailure,
   json,
   local,
+  serviceRpc,
   setFictionalAccountRole,
 } from "./bff-fixtures.mjs";
 
@@ -206,6 +208,19 @@ test("staff TOTP enrollment, login step-up, and privileged account provisioning 
   const activeStudentPayload = await json(activeStudentLogin);
   assert.equal(activeStudentPayload.user.mustChangePassword, false);
 
+  await injectProviderFailure(provisionedIdentity.provider_user_id, "user-password-update");
+  const interruptedRecovery = await api("/api/staff/accounts/recovery", {
+    method: "POST", origin,
+    headers: staffHeaders(secondLogin.cookie, secondLogin.payload.csrfToken),
+    body: { username: provisioned.username },
+  });
+  assert.equal(interruptedRecovery.status, 503, "a temporary Auth Admin error keeps recovery pending");
+  assert.deepEqual(await json(interruptedRecovery), { error: "recovery_applied_password_sync_pending" });
+  const recoveryIdentity = await serviceRpc("resolve_account_identity", { p_account_id: provisionedIdentity.account_id });
+  assert.equal(recoveryIdentity.ok, true);
+  assert.equal((await json(recoveryIdentity))[0].credential_update_pending, true,
+    "the account remains blocked after the injected provider failure");
+
   const recovery = await api("/api/staff/accounts/recovery", {
     method: "POST", origin,
     headers: staffHeaders(secondLogin.cookie, secondLogin.payload.csrfToken),
@@ -215,6 +230,10 @@ test("staff TOTP enrollment, login step-up, and privileged account provisioning 
   const recoveryPayload = await json(recovery);
   assert.deepEqual(Object.keys(recoveryPayload).sort(), ["initialPassword", "recovered", "username"].sort());
   assert.equal(recoveryPayload.recovered, true);
+  assert.equal(recoveryPayload.initialPassword.length >= 43, true);
+  for (const value of [provisionedIdentity.provider_email, local.serviceRoleKey]) {
+    assert.equal(JSON.stringify(recoveryPayload).includes(value), false);
+  }
   assert.deepEqual(await json(await api("/api/auth/session", { headers: { Cookie: activeStudentCookie } })), { authenticated: false });
 
   const recoveredLogin = await api("/api/auth/login", {
@@ -315,6 +334,20 @@ test("AAL2 administrator can recover another staff MFA and revoke that account's
   const target = await staffIdentity(context, "mfa-reset-target");
   const targetSession = await enrollStaffFactor(target, "192.0.2.45");
 
+  await injectProviderFailure(target.user.id, "mfa-factor-list");
+  const interruptedReset = await api("/api/staff/accounts/mfa-reset", {
+    method: "POST",
+    origin,
+    headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
+    body: { username: target.username },
+  });
+  assert.equal(interruptedReset.status, 503, "a temporary Auth Admin error leaves staff MFA reset pending");
+  assert.deepEqual(await json(interruptedReset), { error: "mfa_reset_sync_pending" });
+  const targetIdentity = await serviceRpc("resolve_account_identity", { p_account_id: target.accountId });
+  assert.equal(targetIdentity.ok, true);
+  assert.equal((await json(targetIdentity))[0].credential_update_pending, true,
+    "staff login stays blocked after the injected provider failure");
+
   const reset = await api("/api/staff/accounts/mfa-reset", {
     method: "POST",
     origin,
@@ -324,6 +357,14 @@ test("AAL2 administrator can recover another staff MFA and revoke that account's
   const resetPayload = await json(reset);
   assert.equal(reset.status, 200, JSON.stringify(resetPayload));
   assert.deepEqual(resetPayload, { mfaReset: true, username: target.username });
+  const retriedReset = await api("/api/staff/accounts/mfa-reset", {
+    method: "POST",
+    origin,
+    headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
+    body: { username: target.username },
+  });
+  assert.equal(retriedReset.status, 200);
+  assert.deepEqual(await json(retriedReset), resetPayload, "a retry safely repeats provider factor removal");
 
   const oldSession = await api("/api/auth/session", { headers: { Cookie: targetSession.cookie } });
   assert.deepEqual(await json(oldSession), { authenticated: false });

@@ -65,12 +65,7 @@ select ok(
   and not has_table_privilege('authenticated', 'app_private.bff_sessions', 'delete'),
   'authenticated role cannot read or mutate private identity, role, or session tables'
 );
-select ok(
-  has_function_privilege('service_role', 'public.provision_account(uuid,text,text)', 'execute')
-  and not has_function_privilege('anon', 'public.provision_account(uuid,text,text)', 'execute')
-  and not has_function_privilege('authenticated', 'public.provision_account(uuid,text,text)', 'execute'),
-  'only the server service role can provision a student account'
-);
+select is(to_regprocedure('public.provision_account(uuid,text,text)')::text, null, 'legacy account-ID-returning provisioning RPC is removed');
 select ok(
   has_function_privilege('service_role', 'public.consume_login_rate_limit(bytea,bytea)', 'execute')
   and not has_function_privilege('anon', 'public.consume_login_rate_limit(bytea,bytea)', 'execute')
