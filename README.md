@@ -76,7 +76,7 @@ The conditional Supabase architecture is approved for fictional development. Rea
 
 ## Campus Wins limits
 
-The interface offers only approved milestone templates, with ❤️, 👏, and 🔥 reactions. It has no free-text posts, comments, messaging, public-name editing, or image upload. Production submissions need a student account with a staff-approved public name. Limits: one pending submission, and one new submission per seven days. Each submission waits for moderator approval. Each student gets one reaction per post and cannot react to their own posts. Demo submissions stay local to the fictional preview.
+The interface offers only approved milestone templates, with ❤️, 👏, and 🔥 reactions. It has no free-text posts, comments, messaging, public-name editing, or image upload. Once student accounts are enabled on hosted sites, submissions need a student account with a staff-approved public name. Limits: one pending submission, and one new submission per seven days. Each submission waits for moderator approval. Each student gets one reaction per post and cannot react to their own posts. Demo submissions stay local to the fictional preview.
 
 ## Deployment and operations
 

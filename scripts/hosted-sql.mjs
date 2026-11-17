@@ -1,11 +1,11 @@
-// Apply committed migrations / run read-only checks on a hosted Supabase
+// Apply committed migrations / run checks on a hosted Supabase
 // project over the HTTPS Management API. For networks that block the Postgres
 // protocol (where `supabase db push` cannot connect). Uses the CLI login from
 // `npx supabase login` (macOS keychain or SUPABASE_ACCESS_TOKEN); the token is
 // kept in memory and never printed or passed in argv. Never applies seed.sql.
 //
 //   node scripts/hosted-sql.mjs <project-ref> migrate [--dry-run]
-//   node scripts/hosted-sql.mjs <project-ref> query "<sql>"
+//   node scripts/hosted-sql.mjs <project-ref> query "<sql>"   (runs the SQL as given; use for checks)
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -18,8 +18,12 @@ if (!/^[a-z0-9]{20}$/u.test(ref || "") || !["migrate", "query"].includes(command
 }
 
 function accessToken() {
-  if (process.env.SUPABASE_ACCESS_TOKEN) return process.env.SUPABASE_ACCESS_TOKEN;
-  let value = execFileSync("security", ["find-generic-password", "-s", "Supabase CLI", "-w"], {
+  let value = process.env.SUPABASE_ACCESS_TOKEN;
+  if (value) {
+    if (!/^sbp_[A-Za-z0-9_]{20,}$/u.test(value)) throw new Error("SUPABASE_ACCESS_TOKEN has an unexpected format.");
+    return value;
+  }
+  value = execFileSync("security", ["find-generic-password", "-s", "Supabase CLI", "-w"], {
     encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
   }).trim();
   if (value.startsWith("go-keyring-base64:")) value = Buffer.from(value.slice(18), "base64").toString("utf8").trim();
@@ -45,10 +49,18 @@ if (command === "query") {
 }
 
 const dryRun = arg === "--dry-run";
-await sql(`create schema if not exists supabase_migrations;
+const allSql = readdirSync(path.join(root, "supabase/migrations")).filter((name) => name.endsWith(".sql"));
+const files = allSql.filter((name) => /^\d{12,14}_[a-z0-9_]+\.sql$/u.test(name)).sort();
+const misnamed = allSql.filter((name) => !files.includes(name));
+if (misnamed.length) throw new Error(`Misnamed migration files: ${misnamed.join(", ")}`);
+const [{ exists }] = await sql("select to_regclass('supabase_migrations.schema_migrations') is not null as exists");
+if (!exists && !dryRun) {
+  await sql(`create schema if not exists supabase_migrations;
 create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);`);
-const applied = new Set((await sql("select version from supabase_migrations.schema_migrations")).map((row) => row.version));
-const files = readdirSync(path.join(root, "supabase/migrations")).filter((name) => /^\d{12,14}_[a-z0-9_]+\.sql$/u.test(name)).sort();
+}
+const applied = new Set(exists
+  ? (await sql("select version from supabase_migrations.schema_migrations")).map((row) => row.version)
+  : []);
 for (const file of files) {
   const [version, ...nameParts] = file.replace(/\.sql$/u, "").split("_");
   if (applied.has(version)) {
@@ -60,8 +72,11 @@ for (const file of files) {
     continue;
   }
   const body = readFileSync(path.join(root, "supabase/migrations", file), "utf8");
+  if (/^\s*(begin|commit|rollback|start\s+transaction|end)\s*;/imu.test(body) || /\bconcurrently\b/iu.test(body)) {
+    throw new Error(`${file} controls transactions itself; apply it manually.`);
+  }
   const tag = `aa_mig_${Math.random().toString(36).slice(2)}`;
-  // One request = one implicit transaction: the migration and its history row commit together.
-  await sql(`${body}\n;\ninsert into supabase_migrations.schema_migrations (version, name, statements) values ($${tag}$${version}$${tag}$, $${tag}$${nameParts.join("_")}$${tag}$, array[]::text[]);`);
+  // Explicit transaction: the migration and its history row commit together or not at all.
+  await sql(`begin;\n${body}\n;\ninsert into supabase_migrations.schema_migrations (version, name, statements) values ($${tag}$${version}$${tag}$, $${tag}$${nameParts.join("_")}$${tag}$, array[]::text[]);\ncommit;`);
   console.log(`applied          ${file}`);
 }
