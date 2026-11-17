@@ -15,6 +15,7 @@
    <button class="nav-link active" data-page="leaderboard" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 20h18M5 17V9h4v8M10 17V4h4v13M15 17v-6h4v6"/></svg>Leaderboards</button>
    <button class="nav-link" data-page="wins"><span class="nav-emoji" aria-hidden="true">✦</span>Campus Wins</button>
    <button class="nav-link" data-page="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2c0-5 16-5 16 0v2"/></svg>My Character</button>
+   <button class="nav-link" data-page="staff" id="staff-nav" hidden><span class="nav-emoji" aria-hidden="true">★</span>Staff Desk</button>
    <button class="nav-link" data-page="about"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v2"/></svg>How it works</button>
   </nav>
   <div class="rail-bottom"><strong>NO PHOTOS. NO GRADES.</strong><br/>JUST CHARACTERS AND CLASSROOM BRAGGING RIGHTS.<span class="eue-caption">EUE identity · Official logo file pending approval</span></div>
@@ -64,7 +65,7 @@
     <div class="wins-guardrail">Approved templates · positive reactions only · every submission requires staff review before publication.</div>
     <div class="wins-toolbar"><div class="wins-filters" role="group" aria-label="Filter achievements"><button class="wins-filter current" data-filter="all" aria-pressed="true">All wins</button><button class="wins-filter" data-filter="academic" aria-pressed="false">Academic</button><button class="wins-filter" data-filter="consistency" aria-pressed="false">Consistency</button><button class="wins-filter" data-filter="community" aria-pressed="false">Community</button></div><button id="open-composer" class="button-solid">+ SHARE A WIN</button></div>
     <p id="wins-status" class="data-status" role="status" aria-live="polite">Loading approved Campus Wins…</p>
-    <div class="pending-panel" id="pending-panel" hidden><h3>SUBMITTED FOR REVIEW</h3><p id="pending-description"></p><button id="approve-demo" class="outline-btn">APPROVE IN DEMO</button><p class="pending-demo-note">This preview control is local to fictional demo data. Production moderation is staff-only.</p></div>
+    <div class="pending-panel" id="pending-panel" hidden><h3>SUBMITTED FOR REVIEW</h3><p id="pending-description"></p><ul id="my-submissions" class="staff-list"></ul><button id="approve-demo" class="outline-btn">APPROVE IN DEMO</button><p class="pending-demo-note">This preview control is local to fictional demo data. Production moderation is staff-only.</p></div>
     <div id="wins-feed" class="wins-feed"></div>
    </section>
    <section id="page-avatar" class="page" hidden aria-labelledby="avatar-title">
@@ -79,6 +80,46 @@
       <div class="studio-actions"><button class="button-solid" id="save-character">SAVE CHARACTER ↗</button><div class="save-note" id="save-note">Fictional demo changes stay in this browser. Production saves require your staff-issued account.</div></div><div class="save-status" id="save-status" role="status" aria-live="polite"></div>
      </div>
     </div>
+   </section>
+   <section id="page-staff" class="page staff-page" hidden aria-labelledby="staff-title">
+    <div class="section-prelude"><span class="prelude-swatch"></span>STAFF ONLY / VERIFIED SESSION</div>
+    <h1 class="hero-title" id="staff-title">STAFF<br/><span>DESK.</span></h1>
+    <p id="staff-status" class="data-status" role="status" aria-live="polite"></p>
+    <section class="staff-panel" id="staff-rankings" hidden aria-labelledby="rankings-heading">
+     <h2 class="sheet-title" id="rankings-heading">PUBLISH <em>RANKINGS</em></h2>
+     <p class="staff-note">Upload the approved CSV (template in the staff guide). Only position, approved public name, and character are accepted. Nothing is public until you publish.</p>
+     <form id="ranking-upload-form" class="staff-form">
+      <div class="staff-field"><label for="ranking-year">Academic year</label><input id="ranking-year" required pattern="20[0-9]{2}-[0-9]{2}" placeholder="2026-27" maxlength="7" /></div>
+      <div class="staff-field"><label for="ranking-file">Ranking CSV</label><input id="ranking-file" type="file" accept=".csv,text/csv" required /></div>
+      <button class="button-solid" type="submit">VALIDATE &amp; PREVIEW</button>
+     </form>
+     <div id="ranking-preview" class="staff-preview" hidden>
+      <h3>PREVIEW</h3>
+      <ul id="ranking-diff"></ul>
+      <button class="button-solid" type="button" id="publish-draft">PUBLISH THIS VERSION</button>
+     </div>
+     <ul id="ranking-errors" class="staff-errors"></ul>
+     <h3>PUBLICATION HISTORY</h3>
+     <ul id="publication-history" class="staff-list"></ul>
+     <button class="outline-btn" type="button" id="withdraw-rankings">WITHDRAW LIVE RANKINGS</button>
+    </section>
+    <section class="staff-panel" id="staff-moderation" hidden aria-labelledby="moderation-heading">
+     <h2 class="sheet-title" id="moderation-heading">CAMPUS WINS <em>REVIEW</em></h2>
+     <div class="wins-filters" role="group" aria-label="Moderation queue">
+      <button class="wins-filter current" data-queue="pending" aria-pressed="true">Pending</button><button class="wins-filter" data-queue="approved" aria-pressed="false">Published</button><button class="wins-filter" data-queue="hidden" aria-pressed="false">Hidden</button><button class="wins-filter" data-queue="rejected" aria-pressed="false">Rejected</button><button class="wins-filter" data-queue="removed" aria-pressed="false">Removed</button>
+     </div>
+     <ul id="moderation-list" class="staff-list"></ul>
+    </section>
+    <section class="staff-panel" id="staff-accounts" hidden aria-labelledby="names-heading">
+     <h2 class="sheet-title" id="names-heading">APPROVED <em>PUBLIC NAMES</em></h2>
+     <p class="staff-note">Students cannot choose or edit their public name. Set the approved display name used on Campus Wins.</p>
+     <form id="public-name-form" class="staff-form">
+      <div class="staff-field"><label for="public-name-username">Student username</label><input id="public-name-username" required minlength="3" maxlength="32" autocomplete="off" /></div>
+      <div class="staff-field"><label for="public-name-value">Approved public name</label><input id="public-name-value" required maxlength="60" autocomplete="off" /></div>
+      <button class="button-solid" type="submit">SAVE NAME</button>
+     </form>
+     <p id="public-name-status" role="status"></p>
+    </section>
    </section>
    <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>THE IDEA</div><h1 id="about-title">BIG ENERGY.<br/>SMALL SCOPE.</h1><p>Academic Arena starts with one thing: a visually exciting home for the university's approved top-ten rankings. Students get comic-style characters instead of personal photographs. Everyone can view the standings; only authorized students will be able to update their assigned characters when the production account system is built.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your competition</h3><p>Choose a level, semester, and module. Groups match university-approved cohorts and module enrollments.</p></div></div><div class="about-step"><b>02</b><div><h3>Own your character</h3><p>Personalize an illustrated look. No personal images and no free-form image uploads.</p></div></div><div class="about-step"><b>03</b><div><h3>See who tops the board</h3><p>Show approved names and ranked positions, never individual grades, scores, or attendance records.</p></div></div></div><p class="illustration-credit">V6 is an offline visual prototype containing fictional names and results. The avatar studio is a local demonstration, not a real authentication feature. Public rankings still require a university-approved disclosure policy.</p></section>
   </main>
@@ -117,7 +158,7 @@
     <label for="new-password">New password (15–128 characters)</label><input id="new-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />
     <button type="submit" class="button-solid">CHANGE PASSWORD</button>
    </form>
-   <div class="dialog-footer"><button type="button" class="outline-btn" id="logout-btn">SIGN OUT</button></div>
+   <div class="dialog-footer"><button type="button" class="outline-btn" id="close-account">CLOSE</button><button type="button" class="outline-btn" id="logout-btn">SIGN OUT</button></div>
   </div>
  </div>
 </div>
@@ -125,5 +166,6 @@
 <script src="assets/runtime-config.js" defer></script>
 <script src="assets/data-access.js" defer></script>
 <script src="assets/app.js" defer></script>
+<script src="assets/staff.js" defer></script>
 </body>
 </html>

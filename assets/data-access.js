@@ -23,12 +23,18 @@
   const DEFAULT_API_BASE = "/api";
 
   class ArenaDataError extends Error {
-    constructor(message, code = "request_failed") {
+    constructor(message, code = "request_failed", details = []) {
       super(message);
       this.name = "ArenaDataError";
       this.code = code;
+      this.details = details;
     }
   }
+
+  const SERVER_ERROR_CODE = /^[a-z_]{2,40}$/;
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const SUBMISSION_STATES = new Set(["pending", "approved", "rejected", "not_shown"]);
+  const PUBLICATION_STATES = new Set(["live", "draft", "previous", "withdrawn"]);
 
   function text(value, fallback = "") {
     return typeof value === "string" ? value.trim().slice(0, 120) : fallback;
@@ -156,7 +162,15 @@
           throw new ArenaDataError("Could not sign you in. Check your details or try again later.",
             response.status === 429 ? "rate_limited" : "invalid_credentials");
         }
-        throw new ArenaDataError("Request could not be completed.", response.status === 401 ? "unauthorized" : "request_failed");
+        const serverCode = typeof payload?.error === "string" && SERVER_ERROR_CODE.test(payload.error) ? payload.error : "";
+        const details = Array.isArray(payload?.errors)
+          ? payload.errors.slice(0, 25).map((item) => ({
+              line: Number.isSafeInteger(item?.line) ? item.line : 0,
+              message: text(item?.message, "Invalid value."),
+            }))
+          : [];
+        throw new ArenaDataError("Request could not be completed.",
+          response.status === 401 ? "unauthorized" : serverCode || "request_failed", details);
       }
       return payload;
     }
@@ -461,6 +475,26 @@
         }
         return request("POST", "/me/achievements", { type });
       },
+      async getMySubmissions() {
+        if (mode === "demo") return [];
+        const payload = await request("GET", "/me/achievements");
+        return Array.isArray(payload?.submissions)
+          ? payload.submissions
+              .filter((item) => item && UUID.test(item.id) && Object.hasOwn(TEMPLATES, item.type) && SUBMISSION_STATES.has(item.status))
+              .map((item) => ({ id: item.id, type: item.type, status: item.status, created: text(item.created) }))
+          : [];
+      },
+      async getMyReactions() {
+        if (mode === "demo") return {};
+        const payload = await request("GET", "/me/campus-win-reactions");
+        const result = {};
+        if (payload?.reactions && typeof payload.reactions === "object") {
+          for (const [id, reaction] of Object.entries(payload.reactions)) {
+            if (UUID.test(id) && REACTIONS.has(reaction)) result[id] = reaction;
+          }
+        }
+        return result;
+      },
       async setReaction(postId, reaction) {
         const id = text(postId);
         if (!id || !REACTIONS.has(reaction)) throw new ArenaDataError("Choose a valid reaction.", "invalid_reaction");
@@ -480,6 +514,33 @@
     };
 
     const staff = {
+      async uploadRankings(academicYear, csv) {
+        if (mode === "demo") throw new ArenaDataError("Staff publishing is unavailable in the fictional preview.", "unauthorized");
+        if (typeof academicYear !== "string" || typeof csv !== "string" || csv.length > 262144) {
+          throw new ArenaDataError("Choose a CSV file of at most 256 KB.", "invalid_upload");
+        }
+        return request("POST", "/staff/leaderboards/drafts", { academicYear, csv });
+      },
+      async publicationHistory() {
+        if (mode === "demo") return [];
+        const payload = await request("GET", "/staff/leaderboards/history");
+        return Array.isArray(payload?.publications)
+          ? payload.publications.filter((item) => item && UUID.test(item.id) && PUBLICATION_STATES.has(item.state))
+          : [];
+      },
+      async withdrawLeaderboard() {
+        if (mode === "demo") throw new ArenaDataError("Staff publishing is unavailable in the fictional preview.", "unauthorized");
+        return request("POST", "/staff/leaderboards/withdraw", {});
+      },
+      async listCampusWinHistory(status) {
+        if (mode === "demo" || !["approved", "hidden", "rejected", "removed"].includes(status)) return { posts: [] };
+        const payload = await request("GET", "/staff/campus-wins/history?" + new URLSearchParams({ status }).toString());
+        return { posts: Array.isArray(payload.posts) ? payload.posts.map(sanitizeWin).filter(Boolean) : [] };
+      },
+      async setPublicName(username, publicName) {
+        if (mode === "demo") throw new ArenaDataError("Account management is unavailable in the fictional preview.", "unauthorized");
+        return request("POST", "/staff/accounts/public-name", { username, publicName });
+      },
       async publishLeaderboard(publicationId) {
         const id = text(publicationId);
         if (!id) throw new ArenaDataError("Choose a validated publication.", "invalid_publication");
