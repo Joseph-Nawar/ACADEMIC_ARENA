@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(68);
+select plan(69);
 
 create function pg_temp.as_user(p_uid text, p_aal text) returns void language sql as $$
   select set_config('request.jwt.claim.sub', p_uid, true);
@@ -94,6 +94,8 @@ select throws_ok($$select * from public.create_leaderboard_draft('2026-27', '[{"
   '23505', null, 'duplicate rank within a board is rejected');
 select throws_ok($$select * from public.create_leaderboard_draft('2026-27', '[{"level":5,"semester":1,"cohort_key":"core","cohort_label":"Core","board_kind":"semester","position":1,"public_name":"Same","avatar_key":"omar","avatar_family":"ink"},{"level":5,"semester":1,"cohort_key":"core","cohort_label":"Core","board_kind":"semester","position":2,"public_name":"same ","avatar_key":"omar","avatar_family":"ink"}]')$$,
   '22023', null, 'duplicate student within a board is rejected');
+select throws_ok($$select * from public.create_leaderboard_draft('2026-27', '[{"level":5,"semester":1,"cohort_key":"core","cohort_label":"=cmd()","board_kind":"semester","position":1,"public_name":"A","avatar_key":"omar","avatar_family":"ink"}]')$$,
+  '23514', null, 'formula-prefixed labels are rejected by the database');
 select throws_ok($$select * from public.create_leaderboard_draft('2026-27', '[{"level":7,"semester":1,"cohort_key":"core","cohort_label":"Core","board_kind":"semester","position":1,"public_name":"A","avatar_key":"omar","avatar_family":"ink"}]')$$,
   '23514', null, 'unsupported level is rejected');
 select throws_ok($$select * from public.create_leaderboard_draft('2026-27', '[{"level":5,"semester":1,"cohort_key":"core","cohort_label":"Core","board_kind":"semester","position":1,"public_name":"<script>","avatar_key":"omar","avatar_family":"ink"}]')$$,
@@ -226,8 +228,12 @@ select is((select array_agg(reaction_key) from public.my_campus_win_reactions())
 reset role;
 select pg_temp.as_user('10000000-0000-4000-8000-000000000083', 'aal1');
 set local role authenticated;
-select is(public.set_campus_win_reaction((select id from post_one), 'fire'), 'fire', 'second student reacts');
+select throws_ok($$select public.set_campus_win_reaction((select id from post_one), 'fire')$$, 'AAW06', null,
+  'a student cannot react to their own post');
 reset role;
+insert into app_private.campus_wins_reactions (post_id, owner_account_id, reaction_key)
+select id, '20000000-0000-4000-8000-000000000085', 'fire' from post_one;
+update public.campus_wins_public set fire_count = fire_count + 1;
 select is((select array[heart_count, clap_count, fire_count] from public.campus_wins_public), array[0, 0, 2],
   'aggregate counts follow changes exactly');
 select pg_temp.as_user('10000000-0000-4000-8000-000000000084', 'aal1');

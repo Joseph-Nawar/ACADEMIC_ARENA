@@ -22,9 +22,9 @@ alter table public.published_leaderboard_snapshots
 
 alter table public.published_leaderboard_rows
   add column cohort_label text not null
-    check (pg_catalog.length(pg_catalog.btrim(cohort_label)) between 1 and 80 and cohort_label !~ '[[:cntrl:]<>"`\\]'),
+    check (pg_catalog.length(pg_catalog.btrim(cohort_label)) between 1 and 80 and cohort_label !~ '[[:cntrl:]<>"`\\]' and cohort_label !~ '^[=+@-]'),
   add column module_label text
-    check (module_label is null or (pg_catalog.length(pg_catalog.btrim(module_label)) between 1 and 80 and module_label !~ '[[:cntrl:]<>"`\\]')),
+    check (module_label is null or (pg_catalog.length(pg_catalog.btrim(module_label)) between 1 and 80 and module_label !~ '[[:cntrl:]<>"`\\]' and module_label !~ '^[=+@-]')),
   add constraint published_leaderboard_rows_module_label_kind_check
     check ((board_kind = 'semester' and module_label is null) or (board_kind = 'module' and module_label is not null)),
   add constraint published_leaderboard_rows_public_name_chars_check
@@ -487,10 +487,12 @@ begin
     raise exception using errcode = '42501', message = 'authorized AAL2 moderator required';
   end if;
   actor_account_id := app_private.current_account_id();
+  -- NO KEY UPDATE does not conflict with the KEY SHARE lock a concurrent
+  -- reaction insert takes through its foreign key, so the two cannot deadlock.
   select submission.* into current_submission
   from app_private.campus_wins_submissions as submission
   where submission.id = p_submission_id
-  for update;
+  for no key update;
   if not found then
     raise exception using errcode = 'AAW05', message = 'submission not found';
   end if;
@@ -573,6 +575,12 @@ begin
   perform 1 from public.campus_wins_public as public_post where public_post.post_id = p_post_id for update;
   if not found then
     raise exception using errcode = 'AAW05', message = 'post not found';
+  end if;
+  if exists (
+    select 1 from app_private.campus_wins_submissions as submission
+    where submission.id = p_post_id and submission.owner_account_id = actor_account_id
+  ) then
+    raise exception using errcode = 'AAW06', message = 'students cannot react to their own post';
   end if;
   select reaction.reaction_key into previous_reaction
   from app_private.campus_wins_reactions as reaction

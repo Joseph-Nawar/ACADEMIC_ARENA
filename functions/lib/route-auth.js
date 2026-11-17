@@ -35,6 +35,7 @@ const RPC_ERRORS = Object.freeze({
   AAW03: [409, "public_name_required"],
   AAW04: [409, "invalid_transition"],
   AAW05: [404, "not_found"],
+  AAW06: [409, "own_post"],
   22023: [400, "invalid_request"],
   "22P02": [400, "invalid_request"],
   23502: [400, "invalid_request"],

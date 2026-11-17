@@ -9,7 +9,8 @@ import { hasExactKeys, readJsonBody } from "../../../lib/validation.js";
 export async function onRequestPost({ request, env }) {
   const auth = await requireStaff(request, env, "leaderboards.publish", { mutation: true });
   if (auth.response) return auth.response;
-  const body = await readJsonBody(request, MAX_CSV_BYTES + 4096);
+  // JSON escaping can roughly double a CSV's size; the parser re-checks 256 KB.
+  const body = await readJsonBody(request, MAX_CSV_BYTES * 2 + 4096);
   if (!hasExactKeys(body, ["academicYear", "csv"]) || typeof body.csv !== "string") {
     return jsonResponse({ error: "invalid_upload", errors: [{ line: 0, message: "Upload a CSV file of at most 256 KB." }] }, 400);
   }
