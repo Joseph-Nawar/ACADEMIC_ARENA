@@ -16,7 +16,8 @@ select ok(
   'all public projection tables have enabled and forced RLS'
 );
 select ok(
-  has_table_privilege('anon', 'public.published_leaderboard_snapshots', 'select')
+  has_column_privilege('anon', 'public.published_leaderboard_snapshots', 'version_number', 'select')
+  and has_column_privilege('anon', 'public.published_leaderboard_snapshots', 'published_at', 'select')
   and has_table_privilege('anon', 'public.published_leaderboard_rows', 'select')
   and has_table_privilege('anon', 'public.campus_wins_public', 'select'),
   'anonymous users can read the three allowlisted public projections'
@@ -66,21 +67,21 @@ select ok(
   'Campus Wins projection exposes templates and aggregate reactions without arbitrary content'
 );
 
-insert into public.published_leaderboard_snapshots (version_number, academic_year, published_at, is_current)
+insert into public.published_leaderboard_snapshots (version_number, academic_year, published_at, first_published_at, is_current)
 values
-  (100, 'fictional-2026', now(), true),
-  (99, 'fictional-2025', now() - interval '1 year', false);
+  (100, 'fictional-2026', now(), now(), true),
+  (99, 'fictional-2025', now() - interval '1 year', now() - interval '1 year', false);
 insert into public.published_leaderboard_rows (
-  snapshot_id, level, semester, cohort_key, board_kind, module_key,
+  snapshot_id, level, semester, cohort_key, cohort_label, board_kind, module_key,
   position, public_name, avatar_key, avatar_family
 )
-select id, 5, 1, 'core', 'semester', null, 1, 'Fictional Current', 'amara', 'ink'
+select id, 5, 1, 'core', 'Core', 'semester', null, 1, 'Fictional Current', 'amara', 'ink'
 from public.published_leaderboard_snapshots where version_number = 100;
 insert into public.published_leaderboard_rows (
-  snapshot_id, level, semester, cohort_key, board_kind, module_key,
+  snapshot_id, level, semester, cohort_key, cohort_label, board_kind, module_key,
   position, public_name, avatar_key, avatar_family
 )
-select id, 5, 1, 'core', 'semester', null, 1, 'Fictional Retired', 'omar', 'cartoon3d'
+select id, 5, 1, 'core', 'Core', 'semester', null, 1, 'Fictional Retired', 'omar', 'cartoon3d'
 from public.published_leaderboard_snapshots where version_number = 99;
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -135,12 +136,12 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$insert into public.published_leaderboard_rows (snapshot_id, level, semester, cohort_key, board_kind, module_key, position, public_name, avatar_key, avatar_family) select id, 3, 1, 'core', 'semester', null, 1, 'Invalid Level', 'amara', 'ink' from public.published_leaderboard_snapshots where version_number = 100$$,
+  $$insert into public.published_leaderboard_rows (snapshot_id, level, semester, cohort_key, cohort_label, board_kind, module_key, position, public_name, avatar_key, avatar_family) select id, 3, 1, 'core', 'Core', 'semester', null, 1, 'Invalid Level', 'amara', 'ink' from public.published_leaderboard_snapshots where version_number = 100$$,
   '23514', null,
   'leaderboard constraints reject levels outside 4, 5, and 6'
 );
 select throws_ok(
-  $$insert into public.published_leaderboard_rows (snapshot_id, level, semester, cohort_key, board_kind, module_key, position, public_name, avatar_key, avatar_family) select id, 5, 1, 'core', 'semester', 'module-x', 2, 'Invalid Module Shape', 'amara', 'ink' from public.published_leaderboard_snapshots where version_number = 100$$,
+  $$insert into public.published_leaderboard_rows (snapshot_id, level, semester, cohort_key, cohort_label, board_kind, module_key, position, public_name, avatar_key, avatar_family) select id, 5, 1, 'core', 'Core', 'semester', 'module-x', 2, 'Invalid Module Shape', 'amara', 'ink' from public.published_leaderboard_snapshots where version_number = 100$$,
   '23514', null,
   'semester boards cannot carry a module key'
 );
