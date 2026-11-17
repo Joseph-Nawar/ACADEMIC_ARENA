@@ -343,6 +343,63 @@
   }
 
   function renderAccountPanel() {
+    renderAccountForms();
+    void onSessionChanged();
+  }
+
+  const submissionLabels = Object.freeze({
+    pending: "awaiting staff review",
+    approved: "published",
+    rejected: "not approved",
+    not_shown: "no longer shown",
+  });
+
+  function renderSubmissions(submissions) {
+    const list = $("my-submissions");
+    list.replaceChildren();
+    for (const item of submissions.slice(0, 5)) {
+      const entry = document.createElement("li");
+      const title = document.createElement("strong");
+      title.textContent = templates[item.type].title;
+      const state = document.createElement("span");
+      state.className = "staff-state";
+      state.dataset.state = item.status;
+      state.textContent = submissionLabels[item.status];
+      const date = document.createElement("span");
+      date.textContent = item.created;
+      entry.append(title, state, date);
+      list.append(entry);
+    }
+    $("pending-description").textContent = submissions.length
+      ? "Your recent milestones and their review status."
+      : "";
+    $("pending-panel").hidden = submissions.length === 0;
+  }
+
+  // Runs after every session change: account button, student-private data, staff desk.
+  async function onSessionChanged() {
+    $("account-entry").textContent = session.authenticated ? "ACCOUNT" : "SIGN IN";
+    window.dispatchEvent(new CustomEvent("arena:session", { detail: { session, api, showPage } }));
+    if (mode !== "production") return;
+    const user = session.user || {};
+    const student = session.authenticated && user.role === "student" && !user.mustChangePassword;
+    viewerReactions.clear();
+    if (!student) {
+      renderSubmissions([]);
+      if (currentPage === "wins") void loadWins();
+      return;
+    }
+    try {
+      const [reactions, submissions] = await Promise.all([api.student.getMyReactions(), api.student.getMySubmissions()]);
+      for (const [id, reaction] of Object.entries(reactions)) viewerReactions.set(id, reaction);
+      renderSubmissions(submissions);
+    } catch {
+      renderSubmissions([]);
+    }
+    if (currentPage === "wins") void loadWins();
+  }
+
+  function renderAccountForms() {
     const authenticated = session.authenticated === true;
     $("login-form").hidden = authenticated;
     $("account-panel").hidden = !authenticated;
@@ -394,7 +451,7 @@
     } catch {
       session = { authenticated: false };
     }
-    $("account-entry").textContent = session.authenticated ? "ACCOUNT" : "SIGN IN";
+    await onSessionChanged();
   }
 
   function renderWinCard(post) {
@@ -521,13 +578,24 @@
       const result = await api.student.submitAchievement({ type });
       pendingSubmission = { type, id: result.id };
       $("composer-backdrop").hidden = true;
-      $("pending-description").textContent = `${templates[type].title} · awaiting staff review.`;
+      if (mode === "demo") {
+        $("pending-description").textContent = `${templates[type].title} · awaiting staff review.`;
+        $("pending-panel").hidden = false;
+      } else {
+        renderSubmissions(await api.student.getMySubmissions().catch(() => []));
+      }
       $("approve-demo").hidden = mode !== "demo";
-      $("pending-panel").hidden = false;
       showPage("wins");
       announce("wins-status", "Your milestone was submitted for staff review.", "ready");
-    } catch {
-      $("composer-status").textContent = "The submission could not be saved. Please sign in and try again.";
+    } catch (error) {
+      const messages = {
+        submission_pending: "You already have a milestone waiting for staff review.",
+        weekly_limit: "You can share one milestone every seven days. Please try again later.",
+        public_name_required: "Staff need to approve your public name before you can share a milestone.",
+        password_change_required: "Change your temporary password before sharing a milestone.",
+        forbidden: "Only student accounts can share milestones.",
+      };
+      $("composer-status").textContent = messages[error?.code] || "The submission could not be saved. Please sign in and try again.";
     }
   }
 
@@ -675,6 +743,7 @@
         $("account-status").textContent = "Password change could not be completed. Check the new password or try again later.";
       }
     });
+    $("close-account").addEventListener("click", closeLogin);
     $("logout-btn").addEventListener("click", async () => {
       try {
         await api.auth.signOut();

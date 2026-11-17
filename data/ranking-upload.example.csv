@@ -1,0 +1,24 @@
+level,semester,cohort_key,cohort_label,board_kind,module_key,module_label,rank,public_name,avatar_key,avatar_family
+5,1,core,Core cohort,semester,,,1,Laila Farouk,mariam,ink
+5,1,core,Core cohort,semester,,,2,Karim Saad,omar,cartoon3d
+5,1,core,Core cohort,semester,,,3,Nadia Ezz,amara,ink
+5,1,core,Core cohort,semester,,,4,Hany Fathy,tariq,cartoon3d
+5,1,core,Core cohort,semester,,,5,Rana Adel,habiba2,ink
+5,1,core,Core cohort,semester,,,6,Tamer Lotfy,malek,cartoon3d
+5,1,core,Core cohort,semester,,,7,Salma Wahba,nour2,ink
+5,1,core,Core cohort,semester,,,8,Youssef Nabil,youssef,cartoon3d
+5,1,core,Core cohort,semester,,,9,Mona Rizk,zein,ink
+5,1,core,Core cohort,semester,,,10,Adam Sherif,mariam,cartoon3d
+5,1,core,Core cohort,module,cm2005,Object-oriented programming,1,Hany Fathy,tariq,cartoon3d
+5,1,core,Core cohort,module,cm2005,Object-oriented programming,2,Rana Adel,habiba2,ink
+5,1,core,Core cohort,module,cm2005,Object-oriented programming,3,Tamer Lotfy,malek,cartoon3d
+5,1,core,Core cohort,module,cm2005,Object-oriented programming,4,Salma Wahba,nour2,ink
+5,1,core,Core cohort,module,cm2005,Object-oriented programming,5,Youssef Nabil,youssef,cartoon3d
+5,1,core,Core cohort,module,cm2010,Software design,1,Salma Wahba,nour2,ink
+5,1,core,Core cohort,module,cm2010,Software design,2,Youssef Nabil,youssef,cartoon3d
+5,1,core,Core cohort,module,cm2010,Software design,3,Mona Rizk,zein,ink
+5,1,core,Core cohort,module,cm2010,Software design,4,Adam Sherif,mariam,cartoon3d
+5,1,core,Core cohort,module,cm2010,Software design,5,Dina Kamel,omar,ink
+4,1,foundation,Foundation cohort,module,cm1005,Introduction to programming,1,Nadia Ezz,amara,ink
+4,1,foundation,Foundation cohort,module,cm1005,Introduction to programming,2,Hany Fathy,tariq,cartoon3d
+4,1,foundation,Foundation cohort,module,cm1005,Introduction to programming,3,Rana Adel,habiba2,ink

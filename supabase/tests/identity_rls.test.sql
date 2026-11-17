@@ -144,13 +144,13 @@ values
   ('20000000-0000-4000-8000-000000000002', 'omar', 'cartoon3d', 'coral', '⚡'),
   ('20000000-0000-4000-8000-000000000005', 'zein', 'ink', 'blue', '★');
 
-insert into public.published_leaderboard_snapshots (version_number, academic_year, published_at, is_current)
-values (10, 'fictional-2026', now(), true);
+insert into public.published_leaderboard_snapshots (version_number, academic_year, published_at, first_published_at, is_current)
+values (10, 'fictional-2026', now(), now(), true);
 insert into public.published_leaderboard_rows (
-  snapshot_id, level, semester, cohort_key, board_kind, module_key,
+  snapshot_id, level, semester, cohort_key, cohort_label, board_kind, module_key,
   position, public_name, avatar_key, avatar_family
 )
-select id, 5, 1, 'core', 'semester', null, 1, 'Fictional Learner', 'amara', 'ink'
+select id, 5, 1, 'core', 'Core', 'semester', null, 1, 'Fictional Learner', 'amara', 'ink'
 from public.published_leaderboard_snapshots where version_number = 10;
 insert into app_private.campus_wins_submissions (
   id, owner_account_id, template_key, status, public_author_name, approved_avatar_key,

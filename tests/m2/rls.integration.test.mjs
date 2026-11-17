@@ -125,7 +125,10 @@ test("local PostgREST enforces avatar ownership and exposes only public projecti
   const snapshotInsert = await apiRequest("published_leaderboard_snapshots", {
     method: "POST",
     token: serviceKey,
-    body: { id: snapshotId, version_number: version, academic_year: "fictional-2026", published_at: new Date().toISOString(), is_current: true },
+    body: {
+      id: snapshotId, version_number: version, academic_year: "fictional-2026", published_at: new Date().toISOString(),
+      first_published_at: new Date().toISOString(), row_count: 1, board_count: 1, is_current: true,
+    },
   });
   assert.equal(snapshotInsert.status, 201, "local server fixture can add an approved public snapshot");
   const boardInsert = await apiRequest("published_leaderboard_rows", {
@@ -136,6 +139,7 @@ test("local PostgREST enforces avatar ownership and exposes only public projecti
       level: 5,
       semester: 1,
       cohort_key: "core",
+      cohort_label: "Core cohort",
       board_kind: "semester",
       module_key: null,
       position: 1,
@@ -150,8 +154,8 @@ test("local PostgREST enforces avatar ownership and exposes only public projecti
   const publicRows = await json(publicRowsResponse);
   assert.equal(publicRows.length, 1);
   assert.deepEqual(Object.keys(publicRows[0]).sort(), [
-    "avatar_family", "avatar_key", "board_kind", "cohort_key", "level", "module_key",
-    "position", "public_name", "semester", "snapshot_id",
+    "avatar_family", "avatar_key", "board_kind", "cohort_key", "cohort_label", "level", "module_key",
+    "module_label", "position", "public_name", "semester", "snapshot_id",
   ]);
   assert.equal(JSON.stringify(publicRows).includes("Fictional Learner"), true);
   for (const forbidden of ["account_id", "student_id", "provider_email", "grade", "score", "attendance", "access_token", "refresh_token"]) {

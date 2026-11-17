@@ -14,5 +14,11 @@
   Cache-Control: no-cache
 /assets/*
   Cache-Control: public, max-age=3600, must-revalidate
+/assets/*.js
+  ! Cache-Control
+  Cache-Control: no-cache
+/assets/*.css
+  ! Cache-Control
+  Cache-Control: no-cache
 /fixtures/demo/*
   Cache-Control: no-store

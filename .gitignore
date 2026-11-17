@@ -21,3 +21,5 @@ test-results/
 .test-build-*/
 data/*
 !data/sample-approved-ranks.example.csv
+!data/ranking-upload.template.csv
+!data/ranking-upload.example.csv
