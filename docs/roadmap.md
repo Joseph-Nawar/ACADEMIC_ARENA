@@ -8,7 +8,7 @@
 | 1. Deployable frontend foundation | **Complete** — merged as `01a4808097b545523cd653b39b3c8fa7e397b3cd`; PR #2 reviewed independently and hosted CI passed | Pages build modes with a Cloudflare demo-build guard, fictional-only demo fixtures, production fail-closed states, same-origin data/auth contract, security headers, CI, and local desktop/mobile checks. No public deployment is authorized. |
 | 2. Authentication and database | **Complete (development foundation)** — PR #3 merged `47bc13a` | Same-origin BFF, private username mapping, opaque sessions, rate limits, fail-closed credential sync with operator release, staff TOTP/AAL2, restrictive RLS. Account-lifecycle routes stay disabled outside the local test environment. |
 | 3. Publishing and moderation | **Complete** — PR #4 merged `eb526df` | Strict CSV validation, draft preview, atomic versioned publish/rollback/withdraw, public catalog/board/feed APIs, Campus Wins templates with transactional limits, moderation, atomic reactions, staff desk UI. |
-| 4. Security and operational readiness | **In progress** — branch `m4/ops-and-deploy` | Encrypted backup/restore (local drill passed), deployment/rotation/outage/takedown runbooks, staff guide. Hosted deployment waits for owner logins; real data waits for university approval. |
+| 4. Security and operational readiness | **Complete (read-only release deployed)** — PR #5 merged `3aacb8c` | Encrypted backup/restore drill passed. Runbooks are written. Production https://academic-arena.pages.dev and staging https://academic-arena-staging.pages.dev are deployed and fail closed. Hosted migrations await an owner action (the network blocks Postgres), and real data awaits university approval. |
 
 ## Approved decisions
 
