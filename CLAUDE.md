@@ -31,7 +31,8 @@ npm run check:security      # production build + secret scans
 npm run test:browser        # Chromium desktop/mobile smoke
 npm run supabase:start && npm run supabase:reset   # local stack for iterating
 npx --no-install supabase test db                  # pgTAP/RLS only (stack running)
-npm run supabase:stop && npm run test:m2:local     # full live M2 suite (needs stack stopped; slow)
+npm run supabase:stop && npm run test:m2:local     # full live M2+M3 suite (needs stack stopped; slow)
+node scripts/local-live-preview.mjs /abs/path/outside/repo.json  # manual QA (stack running)
 ```
 
 ## Layout and docs
@@ -41,7 +42,7 @@ npm run supabase:stop && npm run test:m2:local     # full live M2 suite (needs s
 - `functions/lib/` — session, CSRF, authorization, provider clients.
 - Architecture: `docs/architecture/m2-auth-database.md`; threat model:
   `docs/security/threat-model.md`; roadmap: `docs/roadmap.md`;
-  operator procedures: `docs/operations/identity-runbook.md`.
+  operations: `docs/operations/` (identity runbook, deployment, backup-restore, staff guide).
 
 ## Working style
 

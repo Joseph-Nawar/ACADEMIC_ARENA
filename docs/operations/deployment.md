@@ -51,11 +51,11 @@ until they are verified on staging and separately approved.
   this* on the last good version (atomic). Or **Withdraw live rankings** to show
   the empty state immediately. API responses are `no-store`, so no CDN copy
   outlives the change.
-- **Takedown / temporary withdrawal:** Withdraw (rankings) or Hide/Remove
-  (Campus Wins). For an emergency site-wide takedown, deploy the production
-  build with no Supabase secrets? No — instead roll the Pages production
-  deployment back (below) or set the project's production deployment to an
-  earlier build; to hide all data at once, withdraw rankings and hide posts.
+- **Takedown / temporary withdrawal:** Staff Desk → *Withdraw live rankings*
+  (all standings) and Campus Wins → *Hide* (individual posts). Both take effect
+  on the next request. For a full-site emergency, roll the Pages production
+  deployment back to an earlier build or pause the Supabase project from its
+  dashboard (the site then shows unavailable states, never stale data).
 - **Bad application deployment:** Cloudflare dashboard → Pages → academic-arena
   → Deployments → previous production deployment → *Rollback to this
   deployment* (instant). JS/CSS use `Cache-Control: no-cache`, so browsers

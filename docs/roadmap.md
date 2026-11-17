@@ -1,14 +1,14 @@
 # Academic Arena V1 roadmap
 
-## Status as of 16 November 2026
+## Status as of 17 November 2026
 
 | Milestone | Status | Scope / exit gate |
 | --- | --- | --- |
 | 0. Audit and architecture | Complete | V6 audited; baseline FastAPI smoke flow passed; free-tier and auth feasibility documented; threat model and migration diff recorded. |
 | 1. Deployable frontend foundation | **Complete** — merged as `01a4808097b545523cd653b39b3c8fa7e397b3cd`; PR #2 reviewed independently and hosted CI passed | Pages build modes with a Cloudflare demo-build guard, fictional-only demo fixtures, production fail-closed states, same-origin data/auth contract, security headers, CI, and local desktop/mobile checks. No public deployment is authorized. |
-| 2. Authentication and database | **Owner review corrections applied; independent re-review and owner approval pending** on `m2/auth-database-foundation`; fictional local development only | Same-origin BFF, private username mapping, opaque/revocable sessions, persistent rate limits, encrypted provider-sync retries, non-expiring fail-closed recovery/MFA claims, account lifecycle, owner-derived avatar writes, restrictive RLS, staff TOTP/AAL2. Local Supabase verification covers 207 pgTAP/RLS assertions and 32 live integration tests, including delayed Auth Admin completion after the BFF timeout without allowing an overlapping credential generation. A timeout can strand a pending account because operator reconciliation is not implemented; physical retry-payload deletion can also be unbounded during inactivity. These operational gates, hosted provider configuration, external identity authorization, initial admin bootstrap, and sole-admin factor recovery remain open. No real identity import or public deployment. |
-| 3. Publishing and moderation | Not started | Staff account management, sanitized CSV validation/preview, complete versioned atomic publication, omission retirement and rollback; fixed Campus Wins templates, approval/moderation actions, server limits, and atomic reactions. |
-| 4. Security and operational readiness | Not started | Independent security and privacy review, mobile/accessibility QA, secret/abuse checks, manual encrypted backup and restore drill, quota/outage runbooks, CDN snapshot revocation where approved, deployment docs, and separate release authorization. |
+| 2. Authentication and database | **Complete (development foundation)** — PR #3 merged `47bc13a` | Same-origin BFF, private username mapping, opaque sessions, rate limits, fail-closed credential sync with operator release, staff TOTP/AAL2, restrictive RLS. Account-lifecycle routes stay disabled outside the local test environment. |
+| 3. Publishing and moderation | **Complete** — PR #4 merged `eb526df` | Strict CSV validation, draft preview, atomic versioned publish/rollback/withdraw, public catalog/board/feed APIs, Campus Wins templates with transactional limits, moderation, atomic reactions, staff desk UI. |
+| 4. Security and operational readiness | **In progress** — branch `m4/ops-and-deploy` | Encrypted backup/restore (local drill passed), deployment/rotation/outage/takedown runbooks, staff guide. Hosted deployment waits for owner logins; real data waits for university approval. |
 
 ## Approved decisions
 
