@@ -2,6 +2,20 @@
 
 Keep short. Newest first.
 
+## 2026-11-17 — Hosted deployment (branch `m5/hosted-deployment`)
+
+- **Deployed:** production https://academic-arena.pages.dev and staging https://academic-arena-staging.pages.dev. Each is a separate Pages project with its own 6 encrypted settings. Hosted checks are in `docs/operations/deployment-status.md`.
+- **Fixed:** unknown `/api/*` paths returned the HTML shell with status 200; they now return a JSON 404.
+- **Blocked:** this machine's network resets Postgres connections to the Supabase pooler, so `db push` fails. `scripts/hosted-sql.mjs` applies migrations over HTTPS instead, but needs the owner's keychain approval. Until then both sites fail closed ("temporarily unavailable").
+- **Owner checklist (in order):**
+  1. In Terminal in this repo, run `node scripts/hosted-sql.mjs cynfnxlbmthjxgivllkg migrate`. Allow the keychain prompt. Expect 10 "applied" lines.
+  2. Check staging: `node scripts/hosted-sql.mjs cynfnxlbmthjxgivllkg query "select count(*) from supabase_migrations.schema_migrations"` should return 10. Then open https://academic-arena-staging.pages.dev; the empty state should read "No cohorts are available…".
+     Also check object ownership: `node scripts/hosted-sql.mjs cynfnxlbmthjxgivllkg query "select tableowner, count(*) from pg_tables where schemaname in ('public','app_private') group by 1"` should show `postgres` only.
+  3. Repeat steps 1–2 with `jhukafyrdredfkzyzggw` (production).
+  4. Staging admin: in the dashboard, Auth → Add user. Use a mailbox you control, with a generated password and auto-confirm. Then in the SQL editor run `select app_private.operator_bootstrap_initial_admin('<uuid>','<username>');`.
+  5. Sign in at staging, change the password, and enroll TOTP. Then upload `data/ranking-upload.example.csv`, publish, roll back, and withdraw. Leave staging withdrawn afterwards so fictional names are not left public.
+  6. Repeat step 4 on production only with an identity the university approves for external processing.
+
 ## 2026-11-17 — M3 merged, M4 in progress
 
 - **M3** merged as PR #4 (`eb526df`). The migration is `202611170001_m3_publication_and_campus_wins.sql`. The independent review found no blockers; its medium/low findings were fixed: deadlock-safe locking, formula-prefix label checks, no self-reactions, CSV headroom.

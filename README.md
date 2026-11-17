@@ -1,6 +1,6 @@
-# Academic Arena — frontend and M2 local foundation
+# Academic Arena
 
-**Status:** M1 is merged. M2 BFF/authentication/database work is a feature-branch review candidate. Local and automated preview only: no hosted provider project, real university identities, real academic records, or public deployment is configured.
+**Status:** M1–M4 merged. A read-only release is deployed at https://academic-arena.pages.dev, with fictional-only staging at https://academic-arena-staging.pages.dev. Hosted database migrations are pending an owner action. Student accounts and real data stay disabled until the university approves them. See [`docs/operations/deployment-status.md`](docs/operations/deployment-status.md).
 
 Academic Arena preserves the approved vanilla HTML, CSS, JavaScript, and V6 artwork: the illustrated leaderboard and podium, crown, EUE draft identity, level/semester/module filters, Comic Original and separate 3D Cartoon character families, character customization, Campus Wins, and responsive layouts.
 
@@ -76,13 +76,13 @@ The conditional Supabase architecture is approved for fictional development. Rea
 
 ## Campus Wins limits
 
-The interface offers only approved milestone templates, with ❤️, 👏, and 🔥 reactions. It has no free-text posts, comments, messaging, public-name editing, or image upload. Demo submissions remain local to the fictional preview; a demo approval button is not a production moderation control.
+The interface offers only approved milestone templates, with ❤️, 👏, and 🔥 reactions. It has no free-text posts, comments, messaging, public-name editing, or image upload. Once student accounts are enabled on hosted sites, submissions need a student account with a staff-approved public name. Limits: one pending submission, and one new submission per seven days. Each submission waits for moderator approval. Each student gets one reaction per post and cannot react to their own posts. Demo submissions stay local to the fictional preview.
 
 ## Deployment and operations
 
 `npm run build:production` creates the Pages static artifact. `npm run build:demo` is for local preview only and is rejected by the builder on Cloudflare Pages. `_headers` sets restrictive same-origin security headers, a no-index directive, short asset revalidation, and no-store caching for demo fixtures. M2 Pages Functions set their own no-store API headers. No provider secret is part of the static build.
 
-GitHub Actions CI runs checks only; the workflow has read-only repository permissions and no deployment credentials. No public deployment is authorized. See [`docs/roadmap.md`](docs/roadmap.md) for the milestone sequence and remaining launch decisions.
+GitHub Actions CI runs checks only; the workflow has read-only repository permissions and no deployment credentials. Deployment uses Wrangler direct upload (see [`docs/operations/deployment.md`](docs/operations/deployment.md)), with separate Pages projects and encrypted secrets for staging and production. See [`docs/roadmap.md`](docs/roadmap.md) for the milestone sequence and remaining launch decisions.
 
 The draft EUE wordmark remains clearly identified as draft artwork. Replace it only when an approved official asset is supplied.
 

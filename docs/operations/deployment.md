@@ -27,6 +27,10 @@ until they are verified on staging and separately approved.
 2. ★ `npx supabase login` and `npx wrangler login` on the deploy machine.
 3. Apply migrations (never the local seed):
    `npx supabase link --project-ref <ref>` then `npx supabase db push`.
+   If the network blocks the Postgres protocol (as on the 17 Nov deploy
+   machine), use the HTTPS Management API instead:
+   `node scripts/hosted-sql.mjs <ref> migrate --dry-run`, then without `--dry-run`.
+   It uses your CLI login from the keychain; approve the keychain prompt yourself.
    Verify: `select count(*) from cron.job` = 2 and
    `select allow_fictional_account_lifecycle from app_private.runtime_controls` = `false`.
 4. Create each Pages project once:
