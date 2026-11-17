@@ -24,8 +24,12 @@ hosted) as follows:
   prunes. Expired payloads, including those of held claims, are erased. This
   is not a guarantee while a project is paused.
 
-Results: 203 pgTAP, 31 live integration, 1 lifecycle-gate, and 33 unit tests
-pass locally.
+Fresh independent review: no blockers, safe as a development foundation.
+Fixed from it: finish now requires staff role plus the lock step's audit
+marker; cron history purge; doc contradictions; weak test assertions; a new
+late-stale-write integration test. **Open:** the in-app staff MFA reset does
+not issue a fresh password, so it must stay disabled for hosted identities
+(use the runbook break-glass for every lost-factor case).
 
 ## 2026-11-17 — M2 final review fixes (superseded above)
 

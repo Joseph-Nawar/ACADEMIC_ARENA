@@ -584,3 +584,60 @@ test("an ambiguous password-update failure stays fail-closed until an explicit o
   assert.equal(freshLogin.status, 200);
   assert.deepEqual((await json(freshLogin)).user, { role: "student", mustChangePassword: true });
 });
+
+test("a stale password write landing after operator release only locks the account and recovery still works", async (context) => {
+  const administrator = await staffIdentity(context, "late-write-admin");
+  const adminSession = await enrollStaffFactor(administrator, "198.51.100.71");
+  const student = await createIdentity(context, "late-write-student");
+  const recover = () => api("/api/staff/accounts/recovery", {
+    method: "POST",
+    origin,
+    headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
+    body: { username: student.username },
+  });
+  const login = (password, ip) => api("/api/auth/login", {
+    method: "POST", origin,
+    headers: { "CF-Connecting-IP": ip },
+    body: { username: student.username, password },
+  });
+
+  await pauseNextProviderRequest(student.user.id, "user-password-update");
+  const staleRequest = recover();
+  let paused = false;
+  try {
+    for (let attempt = 0; attempt < 120 && !paused; attempt += 1) {
+      paused = (await providerRequestState(student.user.id, "user-password-update")).paused;
+      if (!paused) await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(paused, true, "the original provider password update is held in the loopback proxy");
+    const staleResponse = await staleRequest;
+    assert.equal(staleResponse.status, 503, "the BFF times out and fails closed");
+
+    operatorReleaseStuckCredentialSync(student.username, "student_password_recovery");
+    const fresh = await recover();
+    assert.equal(fresh.status, 200, "staff start a fresh generation after the explicit release");
+    const freshPassword = (await json(fresh)).initialPassword;
+    assert.equal((await login(freshPassword, "198.51.100.72")).status, 200);
+
+    const before = await providerRequestState(student.user.id, "user-password-update");
+    assert.equal(before.paused, true, "the stale write is still held while the fresh recovery completes");
+    await releaseProviderRequest(student.user.id, "user-password-update");
+    paused = false;
+    let state;
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      state = await providerRequestState(student.user.id, "user-password-update");
+      if (state.completedCount > before.completedCount) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(state.completedCount > before.completedCount, "the stale provider write lands after the fresh recovery");
+    assert.equal((await login(freshPassword, "198.51.100.73")).status, 401,
+      "documented residual risk: the stale write leaves a password nobody was shown");
+  } finally {
+    if (paused) await releaseProviderRequest(student.user.id, "user-password-update");
+    await staleRequest.catch(() => undefined);
+  }
+
+  const again = await recover();
+  assert.equal(again.status, 200, "an ordinary recovery restores access; no operator step is needed");
+  assert.equal((await login((await json(again)).initialPassword, "198.51.100.74")).status, 200);
+});

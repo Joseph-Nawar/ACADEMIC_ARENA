@@ -107,6 +107,12 @@ select cron.schedule(
   '* * * * *',
   'select public.prune_expired_credential_sync_operations()'
 );
+-- Keep pg_cron's own run history small on the Free tier.
+select cron.schedule(
+  'academic-arena-purge-cron-history',
+  '17 3 * * *',
+  $$delete from cron.job_run_details where end_time < pg_catalog.now() - interval '2 days'$$
+);
 
 -- Operator-only: clear a held provider claim after following the runbook.
 -- The account stays blocked (forced change + pending) until staff start a new
@@ -291,10 +297,23 @@ begin
     and account.force_password_change = true
     and account.credential_update_pending = true
     and account.credential_epoch = p_expected_credential_epoch
+    and exists (
+      select 1 from app_private.account_role_grants as role_grant
+      where role_grant.account_id = account.id
+        and role_grant.role_name in ('moderator', 'publisher', 'admin')
+    )
     and not exists (
       select 1 from app_private.credential_sync_operations as operation
       where operation.account_id = account.id
     )
+    -- Only finish what the lock step started: its audit event must be the
+    -- latest event for this account.
+    and (
+      select event.action_key from app_private.audit_events as event
+      where event.target_account_id = account.id
+      order by event.id desc
+      limit 1
+    ) = 'staff.mfa_operator_recovery_started'
   for update of account;
   if target_account_id is null then
     raise exception using errcode = '22023', message = 'no matching locked staff recovery';

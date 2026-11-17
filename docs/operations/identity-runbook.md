@@ -38,8 +38,10 @@ auth() { curl -sS -w '\nHTTP %{http_code}\n' -H "apikey: $SERVICE_KEY" -H "Autho
 
 ## 2. Staff member (including a sole administrator) lost their TOTP factor
 
-Normal path: a different AAL2 administrator uses MFA reset in the app.
-Break-glass, when no other AAL2 administrator exists:
+The in-app MFA reset (a different AAL2 administrator) deletes factors and
+forces a password change, but it does not issue a fresh password, so it does
+not meet the fresh-password policy. Until it does, use this procedure for every
+lost-factor case:
 
 1. Verify identity through the institution-approved channel; record who
    approved it and the ticket reference.
@@ -95,8 +97,11 @@ acts. Elapsed time alone never releases it.
 4. Residual risk: the original update may still apply at some later time.
    Its password was never shown and is now destroyed, so the worst case is an
    account whose password nobody knows — the student's new temporary (or
-   later self-chosen) password stops working. Repeat steps 2–3 if that
-   happens. No credential is disclosed.
+   later self-chosen) password stops working. If that happens, staff simply run
+   recovery again in the app (no claim is held any more, so no operator step
+   is needed). No credential is disclosed. Optionally, before step 2, check the
+   user's `updated_at` in the dashboard or the Auth audit logs to see whether
+   the original update already applied; this is informative, not proof.
 
 **Staff MFA reset.** The BFF releases its claim after any failure: listing
 factors is a read, and each delete names one existing factor ID, so a delayed
@@ -110,10 +115,12 @@ Cleanup is not on-request only: a `pg_cron` job
 (`academic-arena-prune-credential-sync`, every minute; pg_cron is included in
 Supabase Free) deletes expired unclaimed operations and erases the payload of
 expired held ones, and each login runs the same cleanup (500 rows per step).
-Operations expire 15 minutes after creation, so while the database runs a
-payload is erased within about 16 minutes. This is not a hard deletion
-guarantee: if the project is paused for inactivity or the job fails, erasure
-waits until the database runs again, and erased bytes persist in Postgres
+Operations expire 15 minutes after creation, so while the database runs and
+there is no backlog beyond 500 rows a minute, a payload is erased within about
+16 minutes. This is not a hard deletion guarantee: if the project is paused for
+inactivity or the job fails, erasure waits until the database runs again, and erased bytes persist in Postgres
 storage/WAL until vacuum and in any backup taken before erasure. Payloads are
 JWE-encrypted with `SESSION_JWE_KEY`, which is never stored in the database.
-Check job health: `select status, count(*) from cron.job_run_details group by status;`
+A second job (`academic-arena-purge-cron-history`, daily) deletes pg_cron run
+history older than two days. Check job health:
+`select status, count(*) from cron.job_run_details group by status;`

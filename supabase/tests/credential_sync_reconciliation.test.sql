@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(42);
+select plan(46);
 
 -- Operator functions are unreachable from every API role.
 select ok(not has_function_privilege('anon', 'app_private.operator_bootstrap_initial_admin(uuid,text)', 'execute')
@@ -15,14 +15,15 @@ select ok(not has_function_privilege('anon', 'app_private.operator_release_stuck
 select ok(not has_function_privilege('anon', 'app_private.operator_lock_staff_for_mfa_recovery(text)', 'execute')
   and not has_function_privilege('authenticated', 'app_private.operator_lock_staff_for_mfa_recovery(text)', 'execute')
   and not has_function_privilege('service_role', 'app_private.operator_lock_staff_for_mfa_recovery(text)', 'execute')
+  and not has_function_privilege('anon', 'app_private.operator_finish_staff_mfa_recovery(text,bigint)', 'execute')
   and not has_function_privilege('service_role', 'app_private.operator_finish_staff_mfa_recovery(text,bigint)', 'execute')
   and not has_function_privilege('authenticated', 'app_private.operator_finish_staff_mfa_recovery(text,bigint)', 'execute'),
   'break-glass lock/finish is executable only by the database owner');
 select is((select count(*)::integer from pg_catalog.pg_proc as proc
   join pg_catalog.pg_namespace as ns on ns.oid = proc.pronamespace
-  where ns.nspname = 'app_private' and proc.proname like 'operator\_%'
-    and proc.prosrc ~* '(insert\s+into|update|delete\s+from)\s+auth\.'), 0,
-  'operator functions never write provider-managed auth tables');
+  where ns.nspname in ('app_private', 'public')
+    and proc.prosrc ~* '(insert\s+into|update|delete\s+from|truncate(\s+table)?|merge\s+into)\s+(only\s+)?"?auth"?\s*\.'), 0,
+  'no application function writes provider-managed auth tables');
 select is((select count(*)::integer from cron.job
   where jobname = 'academic-arena-prune-credential-sync' and command like '%prune_expired_credential_sync_operations%'), 1,
   'expired encrypted payloads are pruned by a database schedule');
@@ -111,6 +112,10 @@ select is((select count(*)::integer from public.claim_credential_sync_operation(
 -- Retention: an expired held payload is erased, but the blocking row remains.
 select is(public.prune_expired_credential_sync_operations(), 1, 'cleanup erases the expired payload of a held claim');
 reset role;
+select is((select count(*)::integer from cron.job where jobname = 'academic-arena-purge-cron-history'), 1,
+  'pg_cron run history is purged on a schedule');
+set local role service_role;
+reset role;
 select is((select row(password_jwe is null, lease_token_hash is not null)::text from app_private.credential_sync_operations
   where account_id = '20000000-0000-4000-8000-000000000073'), row(true, true)::text,
   'the held claim still blocks after its encrypted payload is erased');
@@ -142,8 +147,18 @@ select is((select row(credential_epoch, (select password_jwe from app_private.cr
 select is((select count(*)::integer from app_private.audit_events
   where target_account_id = '20000000-0000-4000-8000-000000000073' and action_key = 'account.credential_sync_operator_released'), 1,
   'operator release is audited');
+select throws_ok($$select app_private.operator_finish_staff_mfa_recovery('stuck.student', 2)$$, '22023', null,
+  'finish cannot unblock a non-staff account');
 
 -- Break-glass staff MFA recovery: application state only.
+insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
+values ('30000000-0000-4000-8000-000000000074', '10000000-0000-4000-8000-000000000074', 'lost', 'totp', 'verified', now(), now(), 'fictional');
+update app_private.accounts set credential_update_pending = true, force_password_change = true
+where id = '20000000-0000-4000-8000-000000000074';
+select throws_ok($$select app_private.operator_finish_staff_mfa_recovery('stuck.staff', 0)$$, '22023', null,
+  'finish refuses a pending staff account that the lock step did not lock');
+update app_private.accounts set credential_update_pending = false, force_password_change = false
+where id = '20000000-0000-4000-8000-000000000074';
 select is(app_private.operator_lock_staff_for_mfa_recovery('stuck.staff'), 1::bigint, 'operator locks the staff account first');
 select ok((select force_password_change and credential_update_pending from app_private.accounts
   where id = '20000000-0000-4000-8000-000000000074'), 'locked staff account cannot sign in or use data');
@@ -156,8 +171,10 @@ select throws_ok($$select app_private.operator_finish_staff_mfa_recovery('stuck.
   'finish cannot be replayed');
 select throws_ok($$select app_private.operator_lock_staff_for_mfa_recovery('stuck.student')$$, '22023', null,
   'break-glass applies only to staff accounts');
-select is((select encrypted_password from auth.users where id = '10000000-0000-4000-8000-000000000071'), 'unchanged',
-  'operator functions leave provider credentials to the Auth Admin API');
+select is((select encrypted_password from auth.users where id = '10000000-0000-4000-8000-000000000074'), '',
+  'break-glass leaves the target''s provider password to the Auth Admin API');
+select is((select count(*)::integer from auth.mfa_factors where user_id = '10000000-0000-4000-8000-000000000074'), 1,
+  'break-glass SQL leaves factor deletion to the Auth Admin API');
 select is((select count(*)::integer from app_private.audit_events
   where target_account_id = '20000000-0000-4000-8000-000000000074' and action_key like 'staff.mfa_operator_recovery_%'), 2,
   'break-glass start and finish are audited');
