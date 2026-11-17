@@ -11,8 +11,13 @@ async function safeFetch(input, init = {}) {
   return response;
 }
 
-export function providerReturnedHttpResponse(error) {
-  return typeof error?.status === "number" && Number.isInteger(error.status) && error.status >= 100 && error.status <= 599;
+// A claim may be released only when Auth definitively rejected the request
+// (4xx other than 408). No response, timeouts, and any 5xx (which may come from
+// a gateway while Auth still applies the change) are ambiguous: the claim stays
+// held until the database quiescence window allows explicit staff reconciliation.
+export function providerResultIsDefinitive(error) {
+  const status = error?.status;
+  return Number.isInteger(status) && status >= 400 && status <= 499 && status !== 408;
 }
 
 function options(extra = {}) {

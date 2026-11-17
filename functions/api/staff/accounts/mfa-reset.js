@@ -1,5 +1,5 @@
 import { authorizeStaffMutation } from "../../../lib/authorization.js";
-import { providerReturnedHttpResponse, serviceClient, userAuthClient } from "../../../lib/provider.js";
+import { providerResultIsDefinitive, serviceClient, userAuthClient } from "../../../lib/provider.js";
 import { randomOpaqueToken, sha256Bytea } from "../../../lib/secure-crypto.js";
 import { jsonResponse } from "../../../lib/response.js";
 import { findLoginIdentity } from "../../../lib/staff-accounts.js";
@@ -85,7 +85,7 @@ export async function onRequestPost({ request, env }) {
   try {
     const { data, error } = await provider.auth.admin.mfa.listFactors({ userId: identity.provider_user_id });
     if (error || !Array.isArray(data?.factors)) {
-      if (providerReturnedHttpResponse(error)) {
+      if (providerResultIsDefinitive(error)) {
         await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
       }
       return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
@@ -96,7 +96,7 @@ export async function onRequestPost({ request, env }) {
         id: factor.id,
       });
       if (deleteError) {
-        if (providerReturnedHttpResponse(deleteError)) {
+        if (providerResultIsDefinitive(deleteError)) {
           await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
         }
         return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);

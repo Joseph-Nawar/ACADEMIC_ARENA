@@ -1,5 +1,5 @@
 import { authorizeStaffMutation } from "../../../lib/authorization.js";
-import { providerReturnedHttpResponse, serviceClient, userAuthClient } from "../../../lib/provider.js";
+import { providerResultIsDefinitive, serviceClient, userAuthClient } from "../../../lib/provider.js";
 import { configuration } from "../../../lib/env.js";
 import { decryptSessionSecret, encryptSessionSecret, randomOpaqueToken, sha256Bytea } from "../../../lib/secure-crypto.js";
 import { jsonResponse } from "../../../lib/response.js";
@@ -109,7 +109,7 @@ export async function onRequestPost({ request, env }) {
       password: initialPassword,
     });
     if (resetError) {
-      if (providerReturnedHttpResponse(resetError)) {
+      if (providerResultIsDefinitive(resetError)) {
         await releaseClaim(provider, identity.account_id, recoveryState.credential_epoch, leaseTokenHash);
       }
       return jsonResponse({ error: "recovery_applied_password_sync_pending" }, 503);

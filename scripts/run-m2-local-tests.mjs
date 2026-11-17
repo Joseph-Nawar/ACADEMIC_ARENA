@@ -230,8 +230,10 @@ async function startProviderFaultProxy(targetUrl, port) {
       factorListMatch?.[1]?.toLowerCase() === pendingFailure.providerUserId.toLowerCase();
     if (shouldFailPassword || shouldFailFactors) {
       pendingFailure = undefined;
-      response.writeHead(503, { "content-type": "application/json", "cache-control": "no-store" })
-        .end(JSON.stringify({ msg: "Injected one-time local provider failure." }));
+      // 429 is a definitive rejection: Auth did not apply the change, so the
+      // BFF may release its claim and a retry replays the same operation.
+      response.writeHead(429, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(JSON.stringify({ msg: "Injected one-time local provider rejection." }));
       return;
     }
 
