@@ -35,7 +35,7 @@ and 3 monthly copies; delete older ones per the approved retention period.
    (prompts for the passphrase; checksum and GCM tag verified; applied through
    the Management API as one all-or-nothing transaction; no database URL or
    password in process arguments; temporary files deleted).
-5. Verify:
+4. Verify:
    ```sql
    select (select count(*) from auth.users) users,
           (select count(*) from app_private.accounts) accounts,
@@ -44,7 +44,7 @@ and 3 monthly copies; delete older ones per the approved retention period.
           (select allow_fictional_account_lifecycle from app_private.runtime_controls) lifecycle_gate;
    ```
    Compare with the counts recorded at export time; `lifecycle_gate` must be `false`.
-6. Point the Pages environment at the new project (`SUPABASE_URL` and
+5. Point the Pages environment at the new project (`SUPABASE_URL` and
    `configure-pages-secrets.sh`), redeploy, and sign in with a staff account.
    Rotating `SESSION_JWE_KEY` here signs everyone out, which is intended.
 
