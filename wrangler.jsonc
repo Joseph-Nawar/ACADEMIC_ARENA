@@ -1,6 +1,0 @@
-{
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "academic-arena-m1-preview",
-  "pages_build_output_dir": "./dist",
-  "compatibility_date": "2026-11-15"
-}

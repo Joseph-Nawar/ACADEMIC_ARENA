@@ -2,6 +2,24 @@
 
 Keep short. Newest first.
 
+## 2026-11-17 — M3 merged, M4 in progress
+
+- **M3** merged as PR #4 (`eb526df`). The migration is `202611170001_m3_publication_and_campus_wins.sql`. The independent review found no blockers; its medium/low findings were fixed: deadlock-safe locking, formula-prefix label checks, no self-reactions, CSV headroom.
+- Known V1 limits:
+  - One active draft at a time; each upload replaces the previous unpublished draft.
+  - Suspending a student does not hide their published posts.
+  - Reactions are not rate-limited beyond authentication.
+- **M4** (branch `m4/ops-and-deploy`):
+  - `scripts/db-backup.sh` does encrypted export/restore; the local drill passed (see `docs/operations/backup-restore.md`).
+  - `scripts/configure-pages-secrets.sh` loads provider secrets without printing them.
+  - Runbooks: `docs/operations/deployment.md` and `docs/operations/staff-guide.md`.
+- **Blocked on the owner:** `npx supabase login`, `npx wrangler login`, and two Supabase Free projects (staging, prod) with sign-up disabled. Then follow `deployment.md`.
+- **Hosted release plan:**
+  - Production shows the public site with the empty "no approved standings" state, plus staff publishing for a bootstrapped admin.
+  - Student accounts and Campus Wins submissions are unavailable on hosted until account provisioning is verified and the university approves real identities.
+  - No fictional rankings are ever published to production.
+- `scripts/local-live-preview.mjs` runs the production build against local Supabase with fictional accounts, for manual QA.
+
 ## 2026-11-17 — M2 owner-review corrections (branch `m2/auth-database-foundation`, PR #3)
 
 The owner rejected `a5aa236`. Migration 009 was rewritten (never merged or
