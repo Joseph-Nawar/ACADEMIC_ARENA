@@ -8,11 +8,13 @@ $0/month. No paid add-ons, schedulers, monitoring, or domains.
 | | Supabase project | Pages environment | Data |
 |---|---|---|---|
 | Local | CLI native stack | `wrangler pages dev` | fictional, `ENVIRONMENT=test` (loopback only) |
-| Staging | `academic-arena-staging` | Pages **preview** (non-`main` branches) | fictional only |
-| Production | `academic-arena-prod` | Pages **production** (`main`) | approved data only |
+| Staging | `academic-arena-staging` | Pages project `academic-arena-staging` | fictional only |
+| Production | `academic-arena-prod` | Pages project `academic-arena` | approved data only |
 
-Preview and production never share Supabase keys or session/rate-limit keys
-(`configure-pages-secrets.sh` is run separately per environment).
+`wrangler pages secret put` only writes a project's production environment,
+so staging and production are separate Pages projects with separate secrets
+(`configure-pages-secrets.sh <project> <ref>`). Preview deployments of either
+project receive no secrets and fail closed with 503. They never share keys.
 `ENVIRONMENT` is `production` in both hosted environments, never `test`, so the
 M2 account-lifecycle routes stay disabled (403) and the database lifecycle gate
 stays off. Hosted provisioning/recovery/suspension/MFA-reset remain disabled
@@ -27,15 +29,18 @@ until they are verified on staging and separately approved.
    `npx supabase link --project-ref <ref>` then `npx supabase db push`.
    Verify: `select count(*) from cron.job` = 2 and
    `select allow_fictional_account_lifecycle from app_private.runtime_controls` = `false`.
-4. Create the Pages project once:
-   `npx wrangler pages project create academic-arena --production-branch main`.
-5. Set `SUPABASE_URL` and `ENVIRONMENT=production` as plain environment
-   variables for each environment (dashboard → Settings → Variables), and the
-   secrets with `scripts/configure-pages-secrets.sh academic-arena <ref> production|preview`.
+4. Create each Pages project once:
+   `npx wrangler pages project create academic-arena --production-branch main`
+   (and `academic-arena-staging`). `wrangler.toml` sets `compatibility_date`.
+5. Store all six settings (SUPABASE_URL, ENVIRONMENT=production, both Supabase
+   keys, freshly generated session and rate-limit keys) without printing them:
+   `scripts/configure-pages-secrets.sh academic-arena <prod-ref>` and
+   `scripts/configure-pages-secrets.sh academic-arena-staging <staging-ref>`.
+   The script checks that all six exist afterwards.
 6. Build and deploy: `npm ci && npm run build:production &&
-   npx wrangler pages deploy dist --project-name academic-arena --branch main`
-   (use another `--branch` name for staging previews). The build refuses demo
-   output for Cloudflare; production never includes fictional fixtures.
+   npx wrangler pages deploy dist --project-name academic-arena --branch main`.
+   The build refuses demo output for Cloudflare, and production never includes
+   fictional fixtures. Secrets apply only to deployments made after they are set.
 7. Smoke test the hosted site: `/api/public/catalog?level=5&semester=1` returns
    `{"groups":[],"modules":{}}` with `Cache-Control: private, no-store`; the home
    page shows the "no approved standings" empty state; `/api/staff/accounts`
@@ -59,7 +64,8 @@ until they are verified on staging and separately approved.
 - **Bad application deployment:** Cloudflare dashboard → Pages → academic-arena
   → Deployments → previous production deployment → *Rollback to this
   deployment* (instant). JS/CSS use `Cache-Control: no-cache`, so browsers
-  pick up the rollback on next load. Database migrations are forward-only:
+  pick up the rollback on next load. A rollback does **not** restore earlier
+  secrets or settings, and does not undo database migrations. Database migrations are forward-only:
   write a corrective migration rather than editing an applied one.
 - **Migrations:** add a new timestamped file; run the full local suite;
   `npx supabase db push` to staging, verify, then production.
@@ -68,10 +74,10 @@ until they are verified on staging and separately approved.
 
 | Secret | How | Effect |
 |---|---|---|
-| `SESSION_JWE_KEY` | rerun `configure-pages-secrets.sh` (or `wrangler pages secret put`) and redeploy | everyone is signed out (old session rows cannot be decrypted) |
+| `SESSION_JWE_KEY` | rerun `configure-pages-secrets.sh` and redeploy | everyone is signed out (old session rows cannot be decrypted) |
 | `RATE_LIMIT_HMAC_KEY` | same | login throttle counters reset |
-| Supabase secret/service key | Supabase dashboard → API keys → roll; then rerun the script | old key stops working immediately |
-| Supabase anon/publishable key | same | none for users (BFF only) |
+| Supabase `sb_secret_…` / `sb_publishable_…` key | dashboard → API keys → create a new key, rerun the script, redeploy, then delete the old key | no downtime if done in this order |
+| Legacy `service_role` / `anon` JWT keys | rotating means rotating the project JWT secret | **all** keys and user JWTs become invalid at once; the site is down until the script is rerun and redeployed, and everyone signs in again. Prefer migrating to the new key types. |
 | Database password | Supabase dashboard → Database → reset | update the custodian's password manager; not used by the app |
 
 Rotate immediately if a key may have leaked, when a custodian leaves, and at
@@ -82,7 +88,9 @@ least each academic year.
 - **Inactivity pause:** Supabase Free pauses after about a week without
   database activity. The site then shows "temporarily unavailable" states (the
   BFF fails closed with 503; no stale or demo data is substituted). Restore it
-  from the Supabase dashboard (*Restore project*); data is kept. No artificial
+  from the Supabase dashboard (*Restore project*). A paused Free project can be
+  restored for only about 90 days; after that, rebuild from the latest export
+  (`backup-restore.md`). No artificial
   keep-alive traffic is used. While paused, pg_cron does not run, so expired
   encrypted temporary passwords are only erased after resume.
 - **Quota exhaustion:** Cloudflare Functions (100k requests/day) or Supabase
