@@ -32,9 +32,13 @@ and 3 monthly copies; delete older ones per the approved retention period.
 2. Apply the schema: `npx supabase link --project-ref <new-ref> && npx supabase db push`.
 3. Keep that project linked and run
    `scripts/db-backup.sh restore linked /secure/offsite/<file>.aabk`
-   (prompts for the passphrase; checksum and GCM tag verified; applied through
+   (asks you to type the linked project ref back, then the passphrase; checksum
+   and GCM tag verified; applied through
    the Management API as one all-or-nothing transaction; no database URL or
-   password in process arguments; temporary files deleted).
+   password in process arguments; temporary files deleted; `pg_stat_statements`
+   is reset afterwards because the statement text contains credential
+   material). Hosted Postgres logs may still record the statement if it
+   fails; treat the project's log retention accordingly.
 4. Verify:
    ```sql
    select (select count(*) from auth.users) users,
@@ -70,5 +74,6 @@ are included, so staff keep their authenticators.
 5. A restored user signed in through GoTrue with the original password: HTTP 200.
 6. Drill files and the passphrase were deleted.
 
-Repeat the drill against the hosted staging project after the first hosted
+Re-check the exclusion list whenever the Supabase CLI/Auth version changes
+(new `auth.*` token tables must be excluded). Repeat the drill against the hosted staging project after the first hosted
 deployment, and once per term.

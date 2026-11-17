@@ -18,6 +18,8 @@ project=${1:?pages project name}; ref=${2:?supabase project ref}
 [[ "$project" =~ ^academic-arena(-staging)?$ ]] || { echo "unexpected Pages project name" >&2; exit 2; }
 [[ "$ref" =~ ^[a-z0-9]{20}$ ]] || { echo "unexpected Supabase project ref format" >&2; exit 2; }
 cd "$(dirname "$0")/.."
+read -r -p "Configure Pages project $project with Supabase project $ref. Type the ref again to confirm: " confirm_ref
+[[ "$confirm_ref" == "$ref" ]] || { echo "Confirmation did not match; nothing changed." >&2; exit 2; }
 
 put() { npx --no-install wrangler pages secret put "$1" --project-name "$project" >/dev/null 2>&1 || { echo "failed to set $1" >&2; exit 1; }; }
 
