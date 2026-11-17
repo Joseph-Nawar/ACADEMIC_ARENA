@@ -11,12 +11,22 @@
     "build:production": "node scripts/build.mjs --mode production",
     "preview": "npm run build:demo && wrangler pages dev dist --ip 127.0.0.1 --port 8788",
     "test": "node --test tests/frontend/*.test.mjs",
+    "supabase:start": "node scripts/local-supabase.mjs start",
+    "supabase:reset": "node scripts/local-supabase.mjs reset",
+    "supabase:stop": "node scripts/local-supabase.mjs stop",
+    "test:m2:local": "node scripts/run-m2-local-tests.mjs",
     "test:browser": "npm run build:demo && node scripts/run-browser-smoke.mjs",
     "check:security": "npm run build:production && python3 scripts/check_secrets.py --root . && python3 scripts/check_secrets.py --root dist --public",
     "test:security": "python3 -m unittest discover -s tests -p test_check_secrets.py"
   },
   "devDependencies": {
+    "otpauth": "9.4.1",
     "playwright": "1.65.1",
+    "supabase": "2.121.0",
     "wrangler": "4.162.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.119.0",
+    "jose": "6.2.17"
   }
 }

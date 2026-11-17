@@ -88,6 +88,10 @@
       role,
       mustChangePassword: value.user.mustChangePassword === true,
     };
+    if (role !== "student") {
+      user.mfaRequired = value.user.mfaRequired === true;
+      user.mfaSetupRequired = value.user.mfaSetupRequired === true;
+    }
     const avatar = sanitizeAvatar(value.user.avatar);
     if (avatar) user.avatar = avatar;
     return { authenticated: true, user };
@@ -392,10 +396,32 @@
       async changePassword(oldPassword, newPassword) {
         if (mode === "demo") throw new ArenaDataError("Password changes are not connected in the fictional preview.", "unavailable");
         if (typeof oldPassword !== "string" || typeof newPassword !== "string" ||
-            newPassword.length < 15 || newPassword.length > 256) {
+            newPassword.length < 15 || newPassword.length > 128) {
           throw new ArenaDataError("Choose a new password with at least 15 characters.", "invalid_password");
         }
-        return request("POST", "/auth/change-password", { oldPassword, newPassword });
+        const payload = await request("POST", "/auth/change-password", { oldPassword, newPassword });
+        if (payload?.changed === true && payload?.authenticated === false) csrfToken = "";
+        return payload;
+      },
+      async enrollMfa() {
+        if (mode === "demo") throw new ArenaDataError("Staff MFA is unavailable in the fictional preview.", "unavailable");
+        const payload = await request("POST", "/auth/mfa/enroll", {});
+        if (typeof payload?.secret !== "string" || payload.secret.length < 16) {
+          throw new ArenaDataError("Staff security setup is temporarily unavailable.", "unavailable");
+        }
+        return { secret: payload.secret };
+      },
+      async verifyMfa(code) {
+        if (mode === "demo") throw new ArenaDataError("Staff MFA is unavailable in the fictional preview.", "unavailable");
+        if (typeof code !== "string" || !/^\d{6}$/.test(code)) {
+          throw new ArenaDataError("Enter the six-digit authenticator code.", "invalid_code");
+        }
+        const payload = await request("POST", "/auth/mfa/verify", { code });
+        const nextSession = sanitizeSession(payload);
+        if (!nextSession.authenticated || nextSession.user.mfaRequired) {
+          throw new ArenaDataError("Staff verification could not be completed.", "verification_failed");
+        }
+        return nextSession;
       },
     };
 

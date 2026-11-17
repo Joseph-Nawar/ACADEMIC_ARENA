@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+.dev.vars*
 __pycache__/
 .pytest_cache/
 *.py[cod]
@@ -12,6 +13,8 @@ venv/
 .venv/
 node_modules/
 .wrangler/
+/supabase/.temp/
+/supabase/.branches/
 dist/
 playwright-report/
 test-results/

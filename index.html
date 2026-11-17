@@ -96,9 +96,25 @@
   </form>
   <div id="account-panel" hidden>
    <p id="account-status"></p>
+   <section id="mfa-panel" class="mfa-panel" hidden aria-labelledby="mfa-title">
+    <h3 id="mfa-title">STAFF SECURITY CHECK</h3>
+    <p id="mfa-status" role="status" aria-live="polite"></p>
+    <form id="mfa-enroll-form" hidden>
+     <button type="submit" class="outline-btn">SET UP AUTHENTICATOR</button>
+    </form>
+    <div id="mfa-secret-panel" hidden>
+     <p>Add this one-time setup key to your authenticator app. Keep it private; it is shown only during setup.</p>
+     <code id="mfa-secret"></code>
+    </div>
+    <form id="mfa-code-form" hidden>
+     <label for="mfa-code">Six-digit authenticator code</label>
+     <input id="mfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required />
+     <button type="submit" class="button-solid">VERIFY STAFF ACCOUNT</button>
+    </form>
+   </section>
    <form id="change-password-form">
     <label for="old-password">Current password</label><input id="old-password" type="password" autocomplete="current-password" required maxlength="256" />
-    <label for="new-password">New password (15+ characters)</label><input id="new-password" type="password" autocomplete="new-password" required minlength="15" maxlength="256" />
+    <label for="new-password">New password (15–128 characters)</label><input id="new-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />
     <button type="submit" class="button-solid">CHANGE PASSWORD</button>
    </form>
    <div class="dialog-footer"><button type="button" class="outline-btn" id="logout-btn">SIGN OUT</button></div>

@@ -32,6 +32,7 @@
   let pendingSubmission = null;
   let previewPosts = [];
   const viewerReactions = new Map();
+  let activeTotpSecret = "";
   let selectedCategory = "all";
   let choices = { base: "amara", style: "ink", tone: "mint", badge: "✦" };
 
@@ -329,13 +330,54 @@
   function openLogin() {
     $("login-backdrop").hidden = false;
     $("login-status").textContent = "";
-    $("login-form").hidden = session.authenticated;
-    $("account-panel").hidden = !session.authenticated;
+    renderAccountPanel();
     if (session.authenticated) $("account-status").textContent = "You are signed in to your character account.";
     else $("login-username").focus();
   }
 
+  function clearTotpSetup() {
+    activeTotpSecret = "";
+    $("mfa-secret").textContent = "";
+    $("mfa-secret-panel").hidden = true;
+    $("mfa-code-form").reset();
+  }
+
+  function renderAccountPanel() {
+    const authenticated = session.authenticated === true;
+    $("login-form").hidden = authenticated;
+    $("account-panel").hidden = !authenticated;
+    if (!authenticated) {
+      $("mfa-panel").hidden = true;
+      return;
+    }
+
+    const user = session.user || {};
+    const mustChangePassword = user.mustChangePassword === true;
+    const needsMfa = user.mfaRequired === true;
+    $("mfa-panel").hidden = !needsMfa;
+    if (!needsMfa) return;
+    if (mustChangePassword) {
+      $("mfa-status").textContent = "Change your temporary password before setting up staff verification.";
+      $("mfa-enroll-form").hidden = true;
+      $("mfa-secret-panel").hidden = true;
+      $("mfa-code-form").hidden = true;
+    } else if (user.mfaSetupRequired === true) {
+      $("mfa-status").textContent = activeTotpSecret
+        ? "Add the setup key to your authenticator, then enter its current six-digit code."
+        : "Staff accounts must set up an authenticator before using staff tools.";
+      $("mfa-enroll-form").hidden = Boolean(activeTotpSecret);
+      $("mfa-secret-panel").hidden = !activeTotpSecret;
+      $("mfa-code-form").hidden = !activeTotpSecret;
+    } else {
+      $("mfa-status").textContent = "Enter the current six-digit code from your staff authenticator.";
+      $("mfa-enroll-form").hidden = true;
+      $("mfa-secret-panel").hidden = true;
+      $("mfa-code-form").hidden = false;
+    }
+  }
+
   function closeLogin() {
+    clearTotpSetup();
     $("login-backdrop").hidden = true;
     $("account-entry").focus();
   }
@@ -577,12 +619,43 @@
         viewerReactions.clear();
         $("login-form").reset();
         $("account-entry").textContent = "ACCOUNT";
-        $("login-form").hidden = true;
-        $("account-panel").hidden = false;
+        renderAccountPanel();
         $("account-status").textContent = "You are signed in to your character account.";
         if (session.user.mustChangePassword) $("account-status").textContent += " Change your initial password before continuing.";
+        else if (session.user.mfaRequired) $("account-status").textContent = "Complete the staff security check to continue.";
       } catch {
         $("login-status").textContent = "Could not sign you in. Check your details or try again later.";
+      }
+    });
+    $("mfa-enroll-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("mfa-status").textContent = "Preparing your authenticator setup…";
+      try {
+        const enrollment = await api.auth.enrollMfa();
+        activeTotpSecret = enrollment.secret;
+        $("mfa-secret").textContent = enrollment.secret;
+        renderAccountPanel();
+        $("mfa-code").focus();
+      } catch {
+        $("mfa-status").textContent = "Authenticator setup could not be started. Try again later.";
+      }
+    });
+    $("mfa-code-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("mfa-code-form").querySelector('button[type="submit"]');
+      button.disabled = true;
+      $("mfa-status").textContent = "Checking your authenticator…";
+      try {
+        session = await api.auth.verifyMfa($("mfa-code").value);
+        if (!session.authenticated || session.user.mfaRequired) throw new Error("MFA verification failed");
+        clearTotpSetup();
+        renderAccountPanel();
+        $("account-status").textContent = "Staff verification is complete.";
+      } catch {
+        $("mfa-code").value = "";
+        $("mfa-status").textContent = "Code could not be verified. Check it and try again.";
+      } finally {
+        button.disabled = false;
       }
     });
     $("change-password-form").addEventListener("submit", async (event) => {
@@ -592,7 +665,12 @@
       try {
         await api.auth.changePassword(oldPassword, newPassword);
         $("change-password-form").reset();
-        $("account-status").textContent = "Password changed.";
+        session = { authenticated: false };
+        clearTotpSetup();
+        $("account-entry").textContent = "SIGN IN";
+        renderAccountPanel();
+        $("login-status").textContent = "Password changed. Sign in again to continue.";
+        $("login-form").hidden = false;
       } catch {
         $("account-status").textContent = "Password change could not be completed. Check the new password or try again later.";
       }
@@ -602,9 +680,9 @@
         await api.auth.signOut();
         session = { authenticated: false };
         viewerReactions.clear();
+        clearTotpSetup();
         $("account-entry").textContent = "SIGN IN";
-        $("account-panel").hidden = true;
-        $("login-form").hidden = false;
+        renderAccountPanel();
         $("login-status").textContent = "You are signed out.";
       } catch {
         $("account-status").textContent = "Sign-out could not be confirmed. Close this browser session and try again.";
