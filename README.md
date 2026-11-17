@@ -91,4 +91,4 @@ The draft EUE wordmark remains clearly identified as draft artwork. Replace it o
 - `arena/` — FastAPI pilot retained for domain and test reference; do not deploy unchanged.
 - `assets/server-adapter.js` — legacy FastAPI adapter excluded from Pages builds.
 - `tests/smoke_api.py` — baseline backend behavior check.
-- `data/sample-approved-ranks.example.csv` — fictional schema example, ignored by Git; never use real data in development or tests.
+- `data/ranking-upload.template.csv` and `data/ranking-upload.example.csv` — staff upload header and a fully fictional example; never commit real student data.
