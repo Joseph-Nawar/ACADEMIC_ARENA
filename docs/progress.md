@@ -2,37 +2,42 @@
 
 Keep short. Newest first.
 
-## 2026-11-17 — M2 final review fixes (branch `m2/auth-database-foundation`, PR #3)
+## 2026-11-17 — M2 owner-review corrections (branch `m2/auth-database-foundation`, PR #3)
 
-Review of M2 found and fixed:
+The owner rejected `a5aa236`. Migration 009 was rewritten (never merged or
+hosted) as follows:
 
-- **Stuck claims were permanent.** A lost Auth Admin result left the lease held
-  forever, blocking the account with no recovery path. Migration 009 stamps
-  `leased_at`; after a 15-minute quiescence window an explicit staff retry
-  starts a new generation (audited `account.credential_sync_reconciled`).
-- **Ambiguous gateway statuses released claims.** Routes now release only on a
-  definitive rejection (`providerResultIsDefinitive`: 4xx except 408). Timeouts
-  and every 5xx keep the claim held.
-- **Unbounded/incomplete cleanup.** Prune is limited to 200 rows per call and
-  also removes expired payloads whose claim is stale.
-- **No admin bootstrap or sole-admin MFA recovery.** Added database-owner-only
-  `app_private.operator_bootstrap_initial_admin` and
-  `app_private.operator_recover_staff_mfa`; runbook in
-  `docs/operations/identity-runbook.md`. Break-glass also replaces the password
-  with a random value; bootstrap refuses banned users or pre-enrolled factors.
+- **No time-based reconciliation.** Held password-update claims never expire.
+  Auth does not enforce our fencing token, so elapsed time proves nothing.
+  `app_private.operator_release_stuck_credential_sync` (owner-only) releases
+  the claim explicitly and destroys the never-revealed payload; staff then
+  start a fresh recovery.
+- **No writes to `auth.*`.** Break-glass is now `operator_lock_staff_for_mfa_recovery`
+  and `operator_finish_staff_mfa_recovery`, which change application tables only.
+  Factor deletion and the mandatory fresh password go through the Auth Admin
+  API (see runbook). Bootstrap only reads `auth.users` and `auth.mfa_factors`.
+- **Per-operation release rules.** A password update is released only for Auth's
+  pre-write error codes (`passwordUpdateRejectedBeforeWrite`). An MFA reset is
+  released after any failure: listing is a read, and each delete is scoped to
+  one factor ID.
+- **Retention.** pg_cron runs every minute (Supabase Free) and login also
+  prunes. Expired payloads, including those of held claims, are erased. This
+  is not a guarantee while a project is paused.
 
-Independent review (subagent) found no blockers; its medium findings are
-fixed above. Its `has_permission` concern was already covered: it requires no
-forced change or pending sync, which every reset sets. Not done (low): operator
-audit rows have no actor column; hosted `auth` schema write rights unverified.
+Results: 203 pgTAP, 31 live integration, 1 lifecycle-gate, and 33 unit tests
+pass locally.
+
+## 2026-11-17 — M2 final review fixes (superseded above)
+
+`a5aa236` added a 15-minute quiescence reconciliation and direct `auth.*`
+break-glass writes; both were replaced by the corrections above.
 
 Reviewed without change: session resolution (AAL2 needs both the `aal2` claim
 and a verified TOTP factor), CSRF/same-origin, SQL grants, forced RLS.
 
-Deferred by design (gated, not launch-blocking for a fictional/read-only
-release): lifecycle routes return 403 outside `ENVIRONMENT=test` and the DB
-lifecycle gate defaults off; enabling them for real identities needs
-university approval plus a hosted-integration review.
+Deferred by design: lifecycle routes return 403 outside `ENVIRONMENT=test` and
+the DB lifecycle gate defaults off; enabling them for real identities needs
+university approval plus hosted fictional-staging verification.
 
 ## Next
 

@@ -1,24 +1,16 @@
--- M2 review fixes.
--- 1. Unresolved provider claims become reconcilable by an explicit staff retry
---    once a conservative quiescence window has elapsed. Before then, a held
---    claim still blocks any new credential generation.
--- 2. Cleanup of expired encrypted retry payloads is bounded per call and also
---    removes payloads whose claim is past the quiescence window.
--- 3. Operator-only (database owner) bootstrap of the first administrator and
---    break-glass staff MFA recovery. No API role can execute these.
-
--- The BFF aborts provider calls after 15 seconds; Auth Admin requests cannot
--- plausibly still be applied 15 minutes after the claim was taken.
-create function app_private.credential_sync_lease_is_stale(p_leased_at timestamptz)
-returns boolean
-language sql
-volatile
-set search_path = ''
-as $$
-  select p_leased_at is not null
-    and p_leased_at <= pg_catalog.clock_timestamp() - interval '15 minutes'
-$$;
-revoke all on function app_private.credential_sync_lease_is_stale(timestamptz) from public;
+-- M2 review fixes. Application state only: nothing here writes to the
+-- provider-managed auth schema. Provider changes are made through the Supabase
+-- Auth Admin API (BFF routes or the operator runbook).
+--
+-- 1. Held provider claims never expire automatically. Supabase Auth does not
+--    enforce our fencing token, so elapsed time is not evidence that an older
+--    password update can no longer land. Only an explicit operator release
+--    (database owner) clears a held claim, and it destroys the never-revealed
+--    temporary password so a delayed write can only set an unknown password.
+-- 2. Encrypted temporary passwords are scrubbed as soon as their operation
+--    expires, by a pg_cron job (included in Supabase Free) and on each login.
+-- 3. Operator-only first-admin bootstrap and staff MFA break-glass lock/finish.
+--    No API role can execute these.
 
 alter table app_private.credential_sync_operations add column leased_at timestamptz;
 update app_private.credential_sync_operations
@@ -28,8 +20,21 @@ alter table app_private.credential_sync_operations
   add constraint credential_sync_operations_lease_time_check
   check ((lease_token_hash is null) = (leased_at is null));
 
--- Lease time is stamped by the database whenever a claim is taken or changed.
--- Only security-definer functions write this table; no API role has grants.
+-- Allow an uncompleted student recovery row whose expired payload was erased.
+-- Such a row can never be claimed (claims require a payload) and only an
+-- operator release removes it.
+alter table app_private.credential_sync_operations drop constraint credential_sync_operations_check;
+alter table app_private.credential_sync_operations
+  add constraint credential_sync_operations_payload_check check (
+    (operation_kind = 'student_password_recovery' and (
+      password_jwe is null
+      or (pg_catalog.length(password_jwe) between 64 and 4096 and completed_at is null)
+    ))
+    or (operation_kind = 'staff_mfa_reset' and password_jwe is null)
+  );
+
+-- Records when a claim was taken, for operator diagnosis only. Only
+-- security-definer functions write this table; no API role has grants.
 create function app_private.stamp_credential_sync_lease()
 returns trigger
 language plpgsql
@@ -49,6 +54,9 @@ create trigger credential_sync_operations_stamp_lease
 before insert or update on app_private.credential_sync_operations
 for each row execute function app_private.stamp_credential_sync_lease();
 
+-- Expired operations can no longer be claimed, so their encrypted payload is
+-- never needed again. Unclaimed expired rows are deleted; held expired rows are
+-- kept (they still block a new generation) but their payload is erased.
 create or replace function public.prune_expired_credential_sync_operations()
 returns integer
 language plpgsql
@@ -57,15 +65,15 @@ set search_path = ''
 as $$
 declare
   deleted_count integer;
+  scrubbed_count integer;
 begin
   with doomed as (
     select operation.account_id, operation.operation_kind
     from app_private.credential_sync_operations as operation
     where operation.expires_at <= pg_catalog.clock_timestamp()
-      and (operation.lease_token_hash is null
-        or app_private.credential_sync_lease_is_stale(operation.leased_at))
+      and operation.lease_token_hash is null
     order by operation.expires_at
-    limit 200
+    limit 500
     for update skip locked
   )
   delete from app_private.credential_sync_operations as operation
@@ -73,13 +81,39 @@ begin
   where operation.account_id = doomed.account_id
     and operation.operation_kind = doomed.operation_kind;
   get diagnostics deleted_count = row_count;
-  return deleted_count;
+
+  with held as (
+    select operation.account_id, operation.operation_kind
+    from app_private.credential_sync_operations as operation
+    where operation.expires_at <= pg_catalog.clock_timestamp()
+      and operation.password_jwe is not null
+    order by operation.expires_at
+    limit 500
+    for update skip locked
+  )
+  update app_private.credential_sync_operations as operation
+  set password_jwe = null
+  from held
+  where operation.account_id = held.account_id
+    and operation.operation_kind = held.operation_kind;
+  get diagnostics scrubbed_count = row_count;
+  return deleted_count + scrubbed_count;
 end
 $$;
 
-create or replace function public.force_password_change_for_account(
+create extension if not exists pg_cron with schema pg_catalog;
+select cron.schedule(
+  'academic-arena-prune-credential-sync',
+  '* * * * *',
+  'select public.prune_expired_credential_sync_operations()'
+);
+
+-- Operator-only: clear a held provider claim after following the runbook.
+-- The account stays blocked (forced change + pending) until staff start a new
+-- recovery or MFA reset, which then begins a new credential generation.
+create function app_private.operator_release_stuck_credential_sync(
   p_username text,
-  p_password_jwe text
+  p_operation_kind text
 )
 returns boolean
 language plpgsql
@@ -87,206 +121,50 @@ security definer
 set search_path = ''
 as $$
 declare
-  actor_account_id uuid;
   target_account_id uuid;
-  target_epoch bigint;
-  current_operation app_private.credential_sync_operations%rowtype;
-  reconciling boolean := false;
 begin
-  if not app_private.fictional_account_lifecycle_enabled() then
-    raise exception using errcode = '42501', message = 'fictional account lifecycle is disabled';
+  if p_operation_kind is null or p_operation_kind not in ('student_password_recovery', 'staff_mfa_reset') then
+    raise exception using errcode = '22023', message = 'unknown operation kind';
   end if;
-  if p_password_jwe is null or pg_catalog.length(p_password_jwe) not between 64 and 4096 then
-    raise exception using errcode = '22023', message = 'invalid encrypted recovery credential';
-  end if;
-  if not app_private.has_permission('accounts.recover') then
-    raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
-  end if;
-  actor_account_id := app_private.current_account_id();
-
-  select account.id, account.credential_epoch into target_account_id, target_epoch
-  from app_private.identity_mappings as mapping
-  join app_private.accounts as account on account.id = mapping.account_id
-  where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
-    and account.status = 'active'
-    and actor_account_id <> account.id
-    and exists (
-      select 1 from app_private.account_role_grants as student_role
-      where student_role.account_id = account.id and student_role.role_name = 'student'
-    )
-    and not exists (
-      select 1 from app_private.account_role_grants as staff_role
-      where staff_role.account_id = account.id and staff_role.role_name in ('moderator', 'publisher', 'admin')
-    )
-  for update of account;
-  if target_account_id is null then
-    return false;
-  end if;
-
-  select operation.* into current_operation
+  select operation.account_id into target_account_id
   from app_private.credential_sync_operations as operation
-  where operation.account_id = target_account_id
-    and operation.operation_kind = 'student_password_recovery'
-  for update;
-  if found then
-    if current_operation.lease_token_hash is not null then
-      -- A provider request may still be in flight: never race it with a new
-      -- generation until the quiescence window proves it has resolved.
-      if not app_private.credential_sync_lease_is_stale(current_operation.leased_at) then
-        return true;
-      end if;
-      reconciling := true;
-    elsif current_operation.credential_epoch = target_epoch
-      and current_operation.expires_at > pg_catalog.clock_timestamp()
-      and current_operation.password_jwe is not null
-      and current_operation.completed_at is null
-      and (select account.force_password_change and account.credential_update_pending
-           from app_private.accounts as account where account.id = target_account_id) then
-      return true;
-    end if;
+  join app_private.identity_mappings as mapping on mapping.account_id = operation.account_id
+  join app_private.accounts as account on account.id = operation.account_id
+  where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
+    and operation.operation_kind = p_operation_kind
+    and operation.lease_token_hash is not null
+    and operation.completed_at is null
+  for update of operation, account;
+  if target_account_id is null then
+    raise exception using errcode = '22023', message = 'no held provider claim for this account';
   end if;
 
+  -- Deleting the row destroys the encrypted temporary password and the lease.
+  -- The original holder can no longer release or finalize anything.
+  delete from app_private.credential_sync_operations as operation
+  where operation.account_id = target_account_id
+    and operation.operation_kind = p_operation_kind;
   update app_private.accounts as account
   set force_password_change = true,
       credential_update_pending = true,
-      credential_epoch = account.credential_epoch + 1,
       updated_at = pg_catalog.clock_timestamp()
-  where account.id = target_account_id
-  returning account.credential_epoch into target_epoch;
+  where account.id = target_account_id;
   update app_private.bff_sessions as session
   set revoked_at = pg_catalog.clock_timestamp(),
-      revoke_reason = 'recovery',
+      revoke_reason = 'admin_revoke',
       provider_access_token_jwe = null,
       provider_refresh_token_jwe = null,
       csrf_token_jwe = null
   where session.account_id = target_account_id and session.revoked_at is null;
-
-  insert into app_private.credential_sync_operations (
-    account_id, operation_kind, credential_epoch, password_jwe, expires_at,
-    completed_at, created_at, lease_token_hash
-  ) values (
-    target_account_id, 'student_password_recovery', target_epoch, p_password_jwe,
-    pg_catalog.clock_timestamp() + interval '15 minutes', null,
-    pg_catalog.clock_timestamp(), null
-  ) on conflict (account_id, operation_kind) do update set
-    credential_epoch = excluded.credential_epoch,
-    password_jwe = excluded.password_jwe,
-    expires_at = excluded.expires_at,
-    completed_at = null,
-    created_at = excluded.created_at,
-    lease_token_hash = null;
-
-  if reconciling then
-    insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
-    values (actor_account_id, target_account_id, 'account.credential_sync_reconciled', 'stale_provider_claim');
-  end if;
-  insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
-  values (actor_account_id, target_account_id, 'account.recovery_started', 'staff_recovery');
+  insert into app_private.audit_events (target_account_id, action_key, reason_code)
+  values (target_account_id, 'account.credential_sync_operator_released', p_operation_kind);
   return true;
 end
 $$;
 
-create or replace function public.reset_staff_mfa_for_account(p_username text)
-returns boolean
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  actor_account_id uuid;
-  target_account_id uuid;
-  target_epoch bigint;
-  current_operation app_private.credential_sync_operations%rowtype;
-  reconciling boolean := false;
-begin
-  if not app_private.fictional_account_lifecycle_enabled() then
-    raise exception using errcode = '42501', message = 'fictional account lifecycle is disabled';
-  end if;
-  if not app_private.has_permission('accounts.mfa_reset') then
-    raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
-  end if;
-  actor_account_id := app_private.current_account_id();
-
-  select account.id, account.credential_epoch into target_account_id, target_epoch
-  from app_private.identity_mappings as mapping
-  join app_private.accounts as account on account.id = mapping.account_id
-  where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
-    and account.status = 'active'
-    and account.id <> actor_account_id
-    and exists (
-      select 1 from app_private.account_role_grants as role_grant
-      where role_grant.account_id = account.id
-        and role_grant.role_name in ('moderator', 'publisher', 'admin')
-    )
-  for update of account;
-  if target_account_id is null then
-    return false;
-  end if;
-
-  select operation.* into current_operation
-  from app_private.credential_sync_operations as operation
-  where operation.account_id = target_account_id
-    and operation.operation_kind = 'staff_mfa_reset'
-  for update;
-  if found then
-    if current_operation.lease_token_hash is not null then
-      if not app_private.credential_sync_lease_is_stale(current_operation.leased_at) then
-        return true;
-      end if;
-      reconciling := true;
-    elsif current_operation.credential_epoch = target_epoch
-      and current_operation.expires_at > pg_catalog.clock_timestamp()
-      and current_operation.completed_at is null
-      and (select account.force_password_change and account.credential_update_pending
-           from app_private.accounts as account where account.id = target_account_id) then
-      return true;
-    end if;
-  end if;
-
-  update app_private.accounts as account
-  set force_password_change = true,
-      credential_update_pending = true,
-      credential_epoch = account.credential_epoch + 1,
-      updated_at = pg_catalog.clock_timestamp()
-  where account.id = target_account_id
-  returning account.credential_epoch into target_epoch;
-  update app_private.bff_sessions as session
-  set revoked_at = pg_catalog.clock_timestamp(),
-      revoke_reason = 'recovery',
-      provider_access_token_jwe = null,
-      provider_refresh_token_jwe = null,
-      csrf_token_jwe = null
-  where session.account_id = target_account_id and session.revoked_at is null;
-
-  insert into app_private.credential_sync_operations (
-    account_id, operation_kind, credential_epoch, password_jwe, expires_at,
-    completed_at, created_at, lease_token_hash
-  ) values (
-    target_account_id, 'staff_mfa_reset', target_epoch, null,
-    pg_catalog.clock_timestamp() + interval '15 minutes', null,
-    pg_catalog.clock_timestamp(), null
-  ) on conflict (account_id, operation_kind) do update set
-    credential_epoch = excluded.credential_epoch,
-    password_jwe = null,
-    expires_at = excluded.expires_at,
-    completed_at = null,
-    created_at = excluded.created_at,
-    lease_token_hash = null;
-
-  if reconciling then
-    insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
-    values (actor_account_id, target_account_id, 'account.credential_sync_reconciled', 'stale_provider_claim');
-  end if;
-  insert into app_private.audit_events (actor_account_id, target_account_id, action_key, reason_code)
-  values (actor_account_id, target_account_id, 'staff.mfa_reset', 'administrator_recovery');
-  return true;
-end
-$$;
-
--- Operator-only: create the first administrator mapping for an Auth user that
--- the database owner created in the Supabase dashboard. Refuses once any
--- active administrator exists. The administrator must change the password and
--- enroll TOTP before any privileged action (AAL2 is enforced elsewhere).
+-- Operator-only: map the first administrator to an Auth user that the project
+-- owner created through the dashboard or Auth Admin API. Reads auth.users and
+-- auth.mfa_factors; never writes them.
 create function app_private.operator_bootstrap_initial_admin(
   p_provider_user_id uuid,
   p_username text
@@ -328,7 +206,6 @@ begin
   if exists (select 1 from auth.mfa_factors as factor where factor.user_id = p_provider_user_id) then
     raise exception using errcode = '22023', message = 'provider user already has MFA factors';
   end if;
-  delete from auth.sessions as provider_session where provider_session.user_id = p_provider_user_id;
 
   insert into app_private.accounts (provider_user_id, status, force_password_change)
   values (p_provider_user_id, 'active', true)
@@ -344,20 +221,20 @@ end
 $$;
 
 -- Operator-only break-glass for a staff member (including the sole
--- administrator) who lost their TOTP factor. Removes provider factors and
--- provider sessions/refresh tokens, revokes BFF sessions, cancels any pending
--- provider sync, invalidates the old password, and forces a password change.
-create function app_private.operator_recover_staff_mfa(p_username text)
-returns boolean
+-- administrator) who lost their TOTP factor. Step 1 locks the account in
+-- application state; the operator then deletes factors and sets a fresh
+-- password through the Auth Admin API; step 2 unblocks password change.
+create function app_private.operator_lock_staff_for_mfa_recovery(p_username text)
+returns bigint
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
   target_account_id uuid;
-  target_provider_user_id uuid;
+  target_epoch bigint;
 begin
-  select account.id, account.provider_user_id into target_account_id, target_provider_user_id
+  select account.id into target_account_id
   from app_private.identity_mappings as mapping
   join app_private.accounts as account on account.id = mapping.account_id
   where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
@@ -374,10 +251,11 @@ begin
 
   update app_private.accounts as account
   set force_password_change = true,
-      credential_update_pending = false,
+      credential_update_pending = true,
       credential_epoch = account.credential_epoch + 1,
       updated_at = pg_catalog.clock_timestamp()
-  where account.id = target_account_id;
+  where account.id = target_account_id
+  returning account.credential_epoch into target_epoch;
   delete from app_private.credential_sync_operations as operation
   where operation.account_id = target_account_id;
   update app_private.bff_sessions as session
@@ -387,21 +265,54 @@ begin
       provider_refresh_token_jwe = null,
       csrf_token_jwe = null
   where session.account_id = target_account_id and session.revoked_at is null;
-  delete from auth.mfa_factors as factor where factor.user_id = target_provider_user_id;
-  delete from auth.sessions as provider_session where provider_session.user_id = target_provider_user_id;
-  -- The old password may be compromised with the lost device: replace it with
-  -- an unknown random bcrypt hash. The operator then sets a temporary password.
-  update auth.users as auth_user
-  set encrypted_password = extensions.crypt(
-        pg_catalog.encode(extensions.gen_random_bytes(32), 'hex'), extensions.gen_salt('bf')),
-      updated_at = pg_catalog.now()
-  where auth_user.id = target_provider_user_id;
-
   insert into app_private.audit_events (target_account_id, action_key, reason_code)
-  values (target_account_id, 'staff.mfa_operator_recovery', 'operator_break_glass');
+  values (target_account_id, 'staff.mfa_operator_recovery_started', 'operator_break_glass');
+  return target_epoch;
+end
+$$;
+
+create function app_private.operator_finish_staff_mfa_recovery(
+  p_username text,
+  p_expected_credential_epoch bigint
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target_account_id uuid;
+begin
+  select account.id into target_account_id
+  from app_private.identity_mappings as mapping
+  join app_private.accounts as account on account.id = mapping.account_id
+  where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
+    and account.status = 'active'
+    and account.force_password_change = true
+    and account.credential_update_pending = true
+    and account.credential_epoch = p_expected_credential_epoch
+    and not exists (
+      select 1 from app_private.credential_sync_operations as operation
+      where operation.account_id = account.id
+    )
+  for update of account;
+  if target_account_id is null then
+    raise exception using errcode = '22023', message = 'no matching locked staff recovery';
+  end if;
+
+  -- The forced password change stays set: the staff member signs in with the
+  -- fresh operator-issued password, must change it, then re-enrolls TOTP.
+  update app_private.accounts as account
+  set credential_update_pending = false,
+      updated_at = pg_catalog.clock_timestamp()
+  where account.id = target_account_id;
+  insert into app_private.audit_events (target_account_id, action_key, reason_code)
+  values (target_account_id, 'staff.mfa_operator_recovery_completed', 'operator_break_glass');
   return true;
 end
 $$;
 
+revoke all on function app_private.operator_release_stuck_credential_sync(text, text) from public, anon, authenticated, service_role;
 revoke all on function app_private.operator_bootstrap_initial_admin(uuid, text) from public, anon, authenticated, service_role;
-revoke all on function app_private.operator_recover_staff_mfa(text) from public, anon, authenticated, service_role;
+revoke all on function app_private.operator_lock_staff_for_mfa_recovery(text) from public, anon, authenticated, service_role;
+revoke all on function app_private.operator_finish_staff_mfa_recovery(text, bigint) from public, anon, authenticated, service_role;

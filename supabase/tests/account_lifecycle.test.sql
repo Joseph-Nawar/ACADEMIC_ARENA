@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(67);
+select plan(68);
 
 select ok(to_regprocedure('public.complete_password_change(uuid,bigint)') is not null, 'server password completion RPC uses a credential version');
 select ok(to_regprocedure('public.complete_student_password_recovery(uuid,bigint,text)') is not null, 'server recovery finalization RPC requires a claim token');
@@ -127,10 +127,12 @@ set local role service_role;
 select is((select count(*)::integer from public.claim_credential_sync_operation(
   '20000000-0000-4000-8000-000000000031', 'student_password_recovery', repeat('c', 64)
 )), 0, 'a held provider claim cannot be reclaimed by an overlapping operation');
-select is(public.prune_expired_credential_sync_operations(), 0, 'cleanup preserves an expired retry payload while its provider claim is held');
+select is(public.prune_expired_credential_sync_operations(), 1, 'cleanup erases an expired payload even while its provider claim is held');
 reset role;
+select ok((select password_jwe is null and lease_token_hash is not null from app_private.credential_sync_operations
+  where account_id = '20000000-0000-4000-8000-000000000031'), 'the held claim row remains after its expired payload is erased');
 update app_private.credential_sync_operations
-set expires_at = now() + interval '10 minutes'
+set expires_at = now() + interval '10 minutes', password_jwe = repeat('a', 64)
 where account_id = '20000000-0000-4000-8000-000000000031' and operation_kind = 'student_password_recovery';
 set local role service_role;
 select is(public.release_credential_sync_operation(

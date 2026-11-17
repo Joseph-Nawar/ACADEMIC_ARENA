@@ -1,5 +1,5 @@
 import { authorizeStaffMutation } from "../../../lib/authorization.js";
-import { providerResultIsDefinitive, serviceClient, userAuthClient } from "../../../lib/provider.js";
+import { serviceClient, userAuthClient } from "../../../lib/provider.js";
 import { randomOpaqueToken, sha256Bytea } from "../../../lib/secure-crypto.js";
 import { jsonResponse } from "../../../lib/response.js";
 import { findLoginIdentity } from "../../../lib/staff-accounts.js";
@@ -82,12 +82,14 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
 
+  // Releasing after any provider failure here is safe. Listing factors is a
+  // read. Deleting is scoped to one existing factor ID, so a delayed delete can
+  // only remove a factor this reset is meant to remove; factors enrolled later
+  // get new IDs. A retry lists the remaining factors again.
   try {
     const { data, error } = await provider.auth.admin.mfa.listFactors({ userId: identity.provider_user_id });
     if (error || !Array.isArray(data?.factors)) {
-      if (providerResultIsDefinitive(error)) {
-        await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
-      }
+      await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
       return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
     }
     for (const factor of data.factors) {
@@ -96,13 +98,12 @@ export async function onRequestPost({ request, env }) {
         id: factor.id,
       });
       if (deleteError) {
-        if (providerResultIsDefinitive(deleteError)) {
-          await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
-        }
+        await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
         return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
       }
     }
   } catch {
+    await releaseClaim(provider, identity.account_id, resetState.credential_epoch, leaseTokenHash);
     return jsonResponse({ error: "mfa_reset_sync_pending" }, 503);
   }
 

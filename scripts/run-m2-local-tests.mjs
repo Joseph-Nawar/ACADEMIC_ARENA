@@ -128,7 +128,7 @@ async function startProviderFaultProxy(targetUrl, port) {
   const testInstruction = (body) => {
     const instruction = JSON.parse(body.toString("utf8"));
     if (!/^[0-9a-f-]{36}$/iu.test(instruction.providerUserId) ||
-        !["user-password-update", "mfa-factor-list"].includes(instruction.operation)) return null;
+        !["user-password-update", "user-password-update-ambiguous", "mfa-factor-list"].includes(instruction.operation)) return null;
     return { providerUserId: instruction.providerUserId.toLowerCase(), operation: instruction.operation };
   };
   const server = createHttpServer(async (request, response) => {
@@ -145,7 +145,7 @@ async function startProviderFaultProxy(targetUrl, port) {
       try {
         const instruction = JSON.parse(body.toString("utf8"));
         if (!/^[0-9a-f-]{36}$/iu.test(instruction.providerUserId) ||
-            !["user-password-update", "mfa-factor-list"].includes(instruction.operation)) {
+            !["user-password-update", "user-password-update-ambiguous", "mfa-factor-list"].includes(instruction.operation)) {
           response.writeHead(400).end();
           return;
         }
@@ -223,17 +223,25 @@ async function startProviderFaultProxy(targetUrl, port) {
 
     const userUpdateMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})$/iu);
     const factorListMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})\/factors$/iu);
-    const shouldFailPassword = pendingFailure?.operation === "user-password-update" &&
+    const shouldFailPassword = ["user-password-update", "user-password-update-ambiguous"].includes(pendingFailure?.operation) &&
       userUpdateMatch?.[1]?.toLowerCase() === pendingFailure.providerUserId.toLowerCase() &&
       ["PUT", "PATCH"].includes(request.method || "");
     const shouldFailFactors = pendingFailure?.operation === "mfa-factor-list" &&
       factorListMatch?.[1]?.toLowerCase() === pendingFailure.providerUserId.toLowerCase();
     if (shouldFailPassword || shouldFailFactors) {
+      const ambiguous = pendingFailure.operation === "user-password-update-ambiguous";
       pendingFailure = undefined;
-      // 429 is a definitive rejection: Auth did not apply the change, so the
-      // BFF may release its claim and a retry replays the same operation.
+      if (ambiguous) {
+        // A gateway timeout carries no Auth error code: the upstream update may
+        // still apply, so the BFF must keep its claim held.
+        response.writeHead(504, { "content-type": "text/plain", "cache-control": "no-store" })
+          .end("Injected one-time local gateway timeout.");
+        return;
+      }
+      // Auth's own rate-limit rejection runs before any write, so the BFF may
+      // release its claim and a retry replays the same operation.
       response.writeHead(429, { "content-type": "application/json", "cache-control": "no-store" })
-        .end(JSON.stringify({ msg: "Injected one-time local provider rejection." }));
+        .end(JSON.stringify({ error_code: "over_request_rate_limit", msg: "Injected one-time local provider rejection." }));
       return;
     }
 

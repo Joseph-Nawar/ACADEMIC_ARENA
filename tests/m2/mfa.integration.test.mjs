@@ -8,6 +8,7 @@ import {
   injectProviderFailure,
   json,
   local,
+  operatorReleaseStuckCredentialSync,
   pauseNextProviderRequest,
   providerRequestState,
   releaseProviderRequest,
@@ -540,4 +541,46 @@ test("an Auth Admin request that outlives the BFF timeout cannot be reclaimed or
   });
   assert.equal(claimAttempt.ok, true);
   assert.deepEqual(await json(claimAttempt), [], "only explicit provider reconciliation can release the timed-out claim");
+});
+
+test("an ambiguous password-update failure stays fail-closed until an explicit operator release", async (context) => {
+  const administrator = await staffIdentity(context, "ambiguous-admin");
+  const adminSession = await enrollStaffFactor(administrator, "198.51.100.61");
+  const student = await createIdentity(context, "ambiguous-student");
+  const recover = () => api("/api/staff/accounts/recovery", {
+    method: "POST",
+    origin,
+    headers: staffHeaders(adminSession.cookie, adminSession.payload.csrfToken),
+    body: { username: student.username },
+  });
+
+  await injectProviderFailure(student.user.id, "user-password-update-ambiguous");
+  const interrupted = await recover();
+  assert.equal(interrupted.status, 503);
+  assert.deepEqual(await json(interrupted), { error: "recovery_applied_password_sync_pending" });
+
+  const retried = await recover();
+  assert.equal(retried.status, 503, "a gateway timeout keeps the provider claim held; a retry cannot re-enter Auth Admin");
+  assert.deepEqual(await json(retried), { error: "recovery_applied_password_sync_pending" });
+  const blockedIdentity = await serviceRpc("resolve_account_identity", { p_account_id: student.accountId });
+  assert.equal((await json(blockedIdentity))[0].credential_update_pending, true, "the student stays blocked");
+  const blockedLogin = await api("/api/auth/login", {
+    method: "POST", origin,
+    headers: { "CF-Connecting-IP": "198.51.100.62" },
+    body: { username: student.username, password: student.password },
+  });
+  assert.equal(blockedLogin.status, 401, "sign-in stays blocked while the outcome is unknown");
+
+  operatorReleaseStuckCredentialSync(student.username, "student_password_recovery");
+  const recovered = await recover();
+  assert.equal(recovered.status, 200, "after the operator release, staff can start a fresh recovery");
+  const payload = await json(recovered);
+  assert.equal(payload.recovered, true);
+  const freshLogin = await api("/api/auth/login", {
+    method: "POST", origin,
+    headers: { "CF-Connecting-IP": "198.51.100.63" },
+    body: { username: student.username, password: payload.initialPassword },
+  });
+  assert.equal(freshLogin.status, 200);
+  assert.deepEqual((await json(freshLogin)).user, { role: "student", mustChangePassword: true });
 });

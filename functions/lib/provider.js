@@ -11,13 +11,29 @@ async function safeFetch(input, init = {}) {
   return response;
 }
 
-// A claim may be released only when Auth definitively rejected the request
-// (4xx other than 408). No response, timeouts, and any 5xx (which may come from
-// a gateway while Auth still applies the change) are ambiguous: the claim stays
-// held until the database quiescence window allows explicit staff reconciliation.
-export function providerResultIsDefinitive(error) {
+// Password update (PUT /admin/users/{id}) is not fenced by Supabase Auth: a
+// request whose outcome is unknown could still change the password later. A
+// claim is released only when Auth itself (not a gateway) answered with one of
+// its documented error codes for checks that run before the user record is
+// written: admin authentication, rate limiting, user lookup, and request or
+// password validation. Anything else (no response, timeout, any 5xx, a 4xx
+// without an Auth error code, or another code) keeps the account fail-closed
+// for operator reconciliation. Re-verify this list when the Auth version changes.
+const PASSWORD_UPDATE_PRE_WRITE_ERROR_CODES = new Set([
+  "bad_json",
+  "bad_jwt",
+  "no_authorization",
+  "not_admin",
+  "over_request_rate_limit",
+  "user_not_found",
+  "validation_failed",
+  "weak_password",
+]);
+
+export function passwordUpdateRejectedBeforeWrite(error) {
   const status = error?.status;
-  return Number.isInteger(status) && status >= 400 && status <= 499 && status !== 408;
+  return Number.isInteger(status) && status >= 400 && status <= 499 && status !== 408 &&
+    typeof error.code === "string" && PASSWORD_UPDATE_PRE_WRITE_ERROR_CODES.has(error.code);
 }
 
 function options(extra = {}) {

@@ -87,7 +87,7 @@ export function serviceRpc(name, args) {
 
 export async function injectProviderFailure(providerUserId, operation) {
   assert.match(providerUserId, /^[0-9a-f-]{36}$/iu);
-  assert.ok(["user-password-update", "mfa-factor-list"].includes(operation));
+  assert.ok(["user-password-update", "user-password-update-ambiguous", "mfa-factor-list"].includes(operation));
   const response = await fetchForTest("Local fault proxy failure injection", new URL("/__local_test__/fail-next-provider-request", local.supabaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -123,6 +123,24 @@ export async function releaseProviderRequest(providerUserId, operation) {
     body: JSON.stringify({ providerUserId, operation }),
   });
   assert.equal(response.status, 204, "loopback test proxy releases the selected delayed fictional provider request");
+}
+
+// Runs the owner-only operator release exactly as the runbook does (database owner).
+export function operatorReleaseStuckCredentialSync(username, operationKind) {
+  assert.match(username, /^[a-z0-9][a-z0-9._-]{2,31}$/u);
+  assert.ok(["student_password_recovery", "staff_mfa_reset"].includes(operationKind));
+  try {
+    execFileSync("npx", [
+      "--no-install", "supabase", "db", "query", "--local",
+      `select app_private.operator_release_stuck_credential_sync('${username}', '${operationKind}')`,
+    ], {
+      cwd: process.cwd(),
+      env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: "1" },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    throw new Error("Local operator release could not be applied.");
+  }
 }
 
 export function setFictionalAccountStatus(accountId, status) {
