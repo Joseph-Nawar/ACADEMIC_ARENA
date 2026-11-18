@@ -8,6 +8,7 @@ const ROLE_PERMISSIONS = Object.freeze({
   "accounts.suspend": new Set(["admin"]),
   "accounts.mfa_reset": new Set(["admin"]),
   "leaderboards.publish": new Set(["publisher", "admin"]),
+  "leaderboards.link": new Set(["admin"]),
   "campus_wins.moderate": new Set(["moderator", "admin"]),
 });
 
