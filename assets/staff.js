@@ -185,7 +185,7 @@
       list.replaceChildren();
       if (!result.links.length) list.append(textNode("li", "No links: approving clears every link for this publication."));
       for (const item of result.links) {
-        list.append(textNode("li", `Level ${item.level} · rank ${item.position} · ${item.publicName} → ${item.username} (${item.providerEmail}, ${item.accountStatus}) · ${linkStates[item.previous] || item.previous}`));
+        list.append(textNode("li", `Level ${item.level} · rank ${item.position} · ${item.publicName} → ${item.username} (${item.accountStatus}) · ${linkStates[item.previous] || item.previous}`));
       }
       linkCsv = csv;
       linkPublication = publicationId;

@@ -18,8 +18,9 @@
 // the service key into memory only. Local targets read `supabase status`.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { planProvisioning, temporaryPassword, USERNAME_PATTERN, validateRoster } from "./lib/student-roster.mjs";
@@ -91,15 +92,26 @@ export async function connect(target) {
     return {
       target, production: false, url: status.API_URL, serviceKey: status.SERVICE_ROLE_KEY,
       async sql(query) {
+        // The SQL (which may name roster emails) goes through a private
+        // temporary file, never the process arguments visible in `ps`.
+        const directory = mkdtempSync(join(tmpdir(), "aa-sql-"));
+        const file = join(directory, "query.sql");
         let output;
         try {
-          output = execFileSync("npx", ["--no-install", "supabase", "db", "query", "--local", "--output-format", "json", query], {
+          writeFileSync(file, query, { mode: 0o600, flag: "wx" });
+          output = execFileSync("npx", ["--no-install", "supabase", "db", "query", "--local", "--output-format", "json", "-f", file], {
             encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
           });
         } catch (error) {
-          throw new Error(`local SQL failed${databaseReason(`${error.stdout}${error.stderr}`) ? ` — ${databaseReason(`${error.stdout}${error.stderr}`)}` : ""}`);
+          const reason = databaseReason(`${error.stdout}${error.stderr}`);
+          throw new Error(`local SQL failed${reason ? ` — ${reason}` : ""}`);
+        } finally {
+          rmSync(directory, { recursive: true, force: true });
         }
-        return JSON.parse(output.slice(output.indexOf("{"))).rows || [];
+        // The CLI may print notices after the JSON document.
+        const start = output.indexOf("{");
+        const end = output.indexOf("\n}", start);
+        return JSON.parse(output.slice(start, end + 2)).rows || [];
       },
     };
   }
@@ -279,8 +291,9 @@ async function reset(values) {
   const secret = passphrase();
   const connection = await connect(values.target);
   // Step 1 locks the account: sessions revoked, sign-in blocked, new epoch.
-  const [{ provider_user_id: userId }] = await connection.sql(
-    `select app_private.operator_begin_student_recovery(${sqlLiteral(username)}, ${sqlLiteral(values["verified-ref"])}) as provider_user_id`);
+  const [{ provider_user_id: userId, credential_epoch: epoch }] = await connection.sql(
+    `select * from app_private.operator_begin_student_recovery(${sqlLiteral(username)}, ${sqlLiteral(values["verified-ref"])})`);
+  if (!/^[0-9a-f-]{36}$/u.test(String(userId)) || !/^\d+$/u.test(String(epoch))) die("unexpected database result; the account stays locked", 1);
   const password = temporaryPassword();
   try {
     await authAdmin(connection).setPassword(userId, password);
@@ -288,8 +301,9 @@ async function reset(values) {
     // Conservative: the account stays locked; never auto-released by time.
     die(`password update not confirmed (${error.message}). The account stays locked; rerun reset for a fresh password.`, 1);
   }
-  await connection.sql(`select app_private.operator_finish_student_recovery(${sqlLiteral(username)})`);
+  // Save the credential before unlocking, so an unlocked account always has a deliverable password.
   writeExport(values.export, secret, [{ username, password, issuedAt: new Date().toISOString() }]);
+  await connection.sql(`select app_private.operator_finish_student_recovery(${sqlLiteral(username)}, ${Number(epoch)})`);
   console.log(`reset complete for ${username}; sessions revoked; password change required at next sign-in; credential encrypted to ${values.export}`);
 }
 

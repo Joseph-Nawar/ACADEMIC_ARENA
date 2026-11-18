@@ -67,9 +67,9 @@ can share a Campus Win.
 
 Staff Desk → Verified account links. Pick a published version, upload a private
 `level,rank,username` file, and check every identity in the private preview.
-Each row shows the public name, the username, the institutional email and the
-account status, and whether it is new, changed, or the same as the previous
-version. Then approve. Each publication needs its own approval, and rollback
+Each row shows the public name, the username and the account status (never the
+email: verify usernames against the roster offline), and whether it is new,
+changed, or the same as the previous version. Then approve. Each publication needs its own approval, and rollback
 restores that version's links. Uploading a header-only file clears the links.
 Never link by name alone. A student's own character appears on the board only
 after they switch public display on.

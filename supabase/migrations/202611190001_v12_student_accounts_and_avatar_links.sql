@@ -68,7 +68,8 @@ begin
   where control.singleton;
   if p_feature = 'student_sign_in' and not p_enabled then
     update app_private.bff_sessions as bff_session
-    set revoked_at = pg_catalog.clock_timestamp(), revoke_reason = 'admin_revoke'
+    set revoked_at = pg_catalog.clock_timestamp(), revoke_reason = 'admin_revoke',
+        provider_access_token_jwe = null, provider_refresh_token_jwe = null, csrf_token_jwe = null
     where bff_session.revoked_at is null
       and not exists (
         select 1 from app_private.account_role_grants as role_grant
@@ -330,7 +331,7 @@ revoke all on function app_private.resolve_level_row_links(uuid, jsonb) from pub
 
 create function public.preview_level_row_links(p_snapshot_id uuid, p_links jsonb)
 returns table (
-  level smallint, "position" smallint, public_name text, username text, provider_email text,
+  level smallint, "position" smallint, public_name text, username text,
   account_status text, previous_state text
 )
 language plpgsql
@@ -342,7 +343,9 @@ begin
     raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
   end if;
   return query
-  select resolved.level, resolved.position, resolved.public_name, resolved.username, resolved.provider_email,
+  -- Never returns the provider email: staff verify usernames against the
+  -- authoritative roster on the operator device, not in the browser.
+  select resolved.level, resolved.position, resolved.public_name, resolved.username,
          resolved.account_status, resolved.previous_state
   from app_private.resolve_level_row_links(p_snapshot_id, p_links) as resolved;
 end
@@ -448,7 +451,8 @@ grant execute on function public.public_level_leaderboard_v2(smallint) to anon, 
 create function app_private.operator_student_provisioning_state(p_emails text[])
 returns table (
   provider_email text, auth_user_id uuid, auth_confirmed boolean, auth_has_signed_in boolean,
-  auth_created_by_tool boolean, account_username text, account_status text, account_roles text[],
+  auth_created_by_tool boolean, auth_has_mfa boolean, auth_user_mapped boolean,
+  account_username text, account_status text, account_roles text[],
   force_password_change boolean, credential_update_pending boolean
 )
 language sql
@@ -461,6 +465,8 @@ as $$
          auth_user.email_confirmed_at is not null,
          auth_user.last_sign_in_at is not null,
          coalesce(auth_user.raw_app_meta_data ->> 'aa_provisioning', '') = 'v1',
+         exists (select 1 from auth.mfa_factors as factor where factor.user_id = auth_user.id),
+         exists (select 1 from app_private.accounts as mapped where mapped.provider_user_id = auth_user.id),
          mapping.username_normalized,
          account.status,
          (select pg_catalog.array_agg(role_grant.role_name order by role_grant.role_name)
@@ -566,13 +572,14 @@ revoke all on function app_private.operator_provision_student(uuid, text, text) 
 -- new credential epoch) before the operator sets a fresh temporary password
 -- through the Auth Admin API. The lock is never released by elapsed time.
 create function app_private.operator_begin_student_recovery(p_username text, p_verification_code text)
-returns uuid
+returns table (provider_user_id uuid, credential_epoch bigint)
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
   target record;
+  new_epoch bigint;
 begin
   if not app_private.student_feature('student_provisioning') then
     raise exception using errcode = '42501', message = 'student provisioning is disabled';
@@ -602,20 +609,24 @@ begin
       credential_update_pending = true,
       credential_epoch = account.credential_epoch + 1,
       updated_at = pg_catalog.clock_timestamp()
-  where account.id = target.id;
+  where account.id = target.id
+  returning account.credential_epoch into new_epoch;
   update app_private.bff_sessions as bff_session
-  set revoked_at = pg_catalog.clock_timestamp(), revoke_reason = 'recovery'
+  set revoked_at = pg_catalog.clock_timestamp(), revoke_reason = 'recovery',
+      provider_access_token_jwe = null, provider_refresh_token_jwe = null, csrf_token_jwe = null
   where bff_session.account_id = target.id and bff_session.revoked_at is null;
   insert into app_private.audit_events (target_account_id, action_key, reason_code)
-  values (target.id, 'account.recovery_started', p_verification_code);
-  return target.provider_user_id;
+  values (target.id, 'account.operator_recovery_started', p_verification_code);
+  return query select target.provider_user_id, new_epoch;
 end
 $$;
 revoke all on function app_private.operator_begin_student_recovery(text, text) from public, anon, authenticated, service_role;
 
--- Recovery step 2, only after the Auth Admin API confirmed the new password.
+-- Recovery step 2, only after the Auth Admin API confirmed the new password
+-- set for exactly this epoch. A later overlapping reset moves the epoch on,
+-- so an earlier run can never unlock the account with a superseded password.
 -- The student must still change it at the next sign-in.
-create function app_private.operator_finish_student_recovery(p_username text)
+create function app_private.operator_finish_student_recovery(p_username text, p_expected_epoch bigint)
 returns boolean
 language plpgsql
 security definer
@@ -629,25 +640,28 @@ begin
   join app_private.accounts as account on account.id = mapping.account_id
   where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
     and account.credential_update_pending
+    and account.credential_epoch = p_expected_epoch
   for update of account;
-  if not found or not exists (
-    select 1 from app_private.audit_events as event
-    where event.target_account_id = target_id and event.action_key = 'account.recovery_started'
-      and not exists (select 1 from app_private.audit_events as later
-                      where later.target_account_id = target_id and later.action_key = 'account.recovery_completed'
-                        and later.id > event.id)
-  ) then
-    raise exception using errcode = '22023', message = 'no operator recovery in progress';
+  if not found
+    or exists (select 1 from app_private.credential_sync_operations as operation
+               where operation.account_id = target_id and operation.completed_at is null)
+    or coalesce((
+      select event.action_key from app_private.audit_events as event
+      where event.target_account_id = target_id
+        and event.action_key in ('account.operator_recovery_started', 'account.operator_recovery_completed', 'account.recovery_started', 'account.recovery_completed')
+      order by event.id desc limit 1
+    ), '') <> 'account.operator_recovery_started' then
+    raise exception using errcode = '22023', message = 'no matching operator recovery in progress';
   end if;
   update app_private.accounts as account
   set credential_update_pending = false, force_password_change = true, updated_at = pg_catalog.clock_timestamp()
   where account.id = target_id;
   insert into app_private.audit_events (target_account_id, action_key, reason_code)
-  values (target_id, 'account.recovery_completed', 'operator');
+  values (target_id, 'account.operator_recovery_completed', 'operator');
   return true;
 end
 $$;
-revoke all on function app_private.operator_finish_student_recovery(text) from public, anon, authenticated, service_role;
+revoke all on function app_private.operator_finish_student_recovery(text, bigint) from public, anon, authenticated, service_role;
 
 create function app_private.operator_set_student_status(p_username text, p_status text, p_reason_code text)
 returns boolean
@@ -668,6 +682,8 @@ begin
   where mapping.username_normalized = pg_catalog.lower(pg_catalog.btrim(p_username))
   for update of account;
   if not found
+    or not exists (select 1 from app_private.account_role_grants as role_grant
+                   where role_grant.account_id = target_id and role_grant.role_name = 'student')
     or exists (select 1 from app_private.account_role_grants as role_grant
                where role_grant.account_id = target_id and role_grant.role_name <> 'student') then
     raise exception using errcode = '22023', message = 'student account not found';
@@ -677,7 +693,8 @@ begin
   where account.id = target_id;
   if p_status = 'suspended' then
     update app_private.bff_sessions as bff_session
-    set revoked_at = pg_catalog.clock_timestamp(), revoke_reason = 'suspension'
+    set revoked_at = pg_catalog.clock_timestamp(), revoke_reason = 'suspension',
+        provider_access_token_jwe = null, provider_refresh_token_jwe = null, csrf_token_jwe = null
     where bff_session.account_id = target_id and bff_session.revoked_at is null;
   end if;
   insert into app_private.audit_events (target_account_id, action_key, reason_code)

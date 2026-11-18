@@ -135,8 +135,9 @@ test("V1.2 student accounts: provisioning, first login, opt-in avatars, private 
   assert.equal((await preview(admin, linkCsv([[4, 1, admin.identity.username]]))).status, 422, "staff accounts cannot be linked");
   assert.equal((await preview(admin, linkCsv([[4, 1, alpha.username], [4, 2, alpha.username]]))).status, 422, "one account per publication");
   const shown = await json(await preview(admin, linkCsv([[4, 1, alpha.username]])));
-  assert.deepEqual(shown.links.map((item) => [item.level, item.position, item.username, item.providerEmail, item.previous]),
-    [[4, 1, alpha.username, alpha.email, "new"]], "admins privately see the verified identity");
+  assert.deepEqual(shown.links.map((item) => [item.level, item.position, item.username, item.accountStatus, item.previous]),
+    [[4, 1, alpha.username, "active", "new"]], "admins see the username and account state");
+  assert.doesNotMatch(JSON.stringify(shown), /@|email/iu, "provider emails never reach the browser");
   assert.deepEqual(await json(await approve(admin, linkCsv([[4, 1, alpha.username]]))), { linked: 1 });
 
   const linked = await board(4);

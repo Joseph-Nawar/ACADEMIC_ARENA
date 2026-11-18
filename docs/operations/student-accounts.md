@@ -74,7 +74,8 @@ Never email lists of passwords, share spreadsheets, or keep plaintext copies. If
    - The account locks first: sessions are revoked, sign-in is blocked, and the credential epoch moves on.
    - The Auth Admin API then sets a new temporary password, and the student must change it at the next sign-in.
    - If the provider times out, the account **stays locked**. Rerun `reset`; nothing is released because time has passed.
-4. Deliver it as above. The audit records `recovery_started`, keyed by the ticket code, and `recovery_completed`.
+   - Each run is bound to its own credential epoch, so an earlier overlapping run can never unlock the account. The encrypted credential is saved before the unlock.
+4. Deliver it as above. The audit records `operator_recovery_started`, keyed by the ticket code, and `operator_recovery_completed`.
 
 ## Suspension
 
@@ -89,7 +90,7 @@ Suspension revokes sessions at once. A suspended student's personal character di
 
 - Staff Desk → **Verified account links** (admin, AAL2). Choose the publication and upload `level,rank,username`.
   - Every username must first be checked against the authoritative roster.
-  - The private preview shows each row's public name, the username, the institutional email and the account status. It marks each row as new, changed, or the same as the previous version.
+  - The private preview shows each row's public name, the username and the account status. Institutional emails never reach the browser; check usernames against the roster on the operator device. Each row is marked as new, changed, or the same as the previous version.
 - Every publication needs its own approved links. Nothing carries forward silently, and rollback restores that version's links.
 - Names, emails and student numbers are never accepted as link keys, and students cannot claim rows.
 - The public board shows a student's own character only when:

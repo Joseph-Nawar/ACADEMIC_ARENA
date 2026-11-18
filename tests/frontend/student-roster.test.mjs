@@ -65,16 +65,20 @@ test("planning resumes idempotently and never re-creates or silently adopts acco
     { line: 5, email: "d@u.example", username: "delta-four" },
     { line: 6, email: "e@u.example", username: "echo-five" },
     { line: 7, email: "f@u.example", username: "taken-name" },
+    { line: 8, email: "g@u.example", username: "golf-seven" },
+    { line: 9, email: "h@u.example", username: "hotel-eight" },
   ];
   const state = [
     { provider_email: "a@u.example", auth_user_id: "1", account_username: "alpha-one" },
     { provider_email: "b@u.example", auth_user_id: "2", account_username: "someone-else" },
     { provider_email: "c@u.example", auth_user_id: "3", auth_confirmed: true, auth_created_by_tool: true, auth_has_signed_in: false },
     { provider_email: "d@u.example", auth_user_id: "4", auth_confirmed: true, auth_created_by_tool: false, auth_has_signed_in: false },
+    { provider_email: "g@u.example", auth_user_id: "7", auth_confirmed: true, auth_created_by_tool: true, auth_user_mapped: true },
+    { provider_email: "h@u.example", auth_user_id: "8", auth_confirmed: true, auth_created_by_tool: true, auth_has_mfa: true },
   ];
   const plan = planProvisioning(rows, state, ["taken-name"]);
-  assert.deepEqual(plan.map((item) => item.action), ["done", "conflict", "orphan", "orphan", "create", "conflict"]);
+  assert.deepEqual(plan.map((item) => item.action), ["done", "conflict", "orphan", "orphan", "create", "conflict", "conflict", "orphan"]);
   const adopting = planProvisioning(rows, state, ["taken-name"], { adoptOrphans: true });
-  assert.deepEqual(adopting.map((item) => item.action), ["done", "conflict", "adopt", "orphan", "create", "conflict"],
-    "only tool-created, never-signed-in provider users are adopted");
+  assert.deepEqual(adopting.map((item) => item.action), ["done", "conflict", "adopt", "orphan", "create", "conflict", "conflict", "orphan"],
+    "only unmapped, tool-created, never-signed-in provider users without MFA are adopted");
 });

@@ -86,7 +86,7 @@ export function temporaryPassword(length = 20) {
 
 // Decide what to do for each eligible roster row given hosted state.
 // state rows: { provider_email, auth_user_id, auth_confirmed, auth_has_signed_in,
-//   auth_created_by_tool, account_username }
+//   auth_created_by_tool, auth_has_mfa, auth_user_mapped, account_username }
 export function planProvisioning(rows, stateRows, takenUsernames, { adoptOrphans = false } = {}) {
   const byEmail = new Map(stateRows.map((row) => [row.provider_email, row]));
   const taken = new Set(takenUsernames);
@@ -97,7 +97,10 @@ export function planProvisioning(rows, stateRows, takenUsernames, { adoptOrphans
     }
     if (taken.has(row.username)) return { ...row, action: "conflict", reason: "username already in use" };
     if (state.auth_user_id) {
-      if (state.auth_created_by_tool && !state.auth_has_signed_in && state.auth_confirmed) {
+      if (state.auth_user_mapped) {
+        return { ...row, action: "conflict", reason: "provider user is already mapped to another account; review manually" };
+      }
+      if (state.auth_created_by_tool && !state.auth_has_signed_in && state.auth_confirmed && !state.auth_has_mfa) {
         return adoptOrphans
           ? { ...row, action: "adopt", authUserId: state.auth_user_id }
           : { ...row, action: "orphan", reason: "provider user from an interrupted run; rerun with --adopt-orphans" };

@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(26);
+select plan(30);
 
 create function pg_temp.as_user(p_uid text, p_aal text) returns void language sql as $$
   select set_config('request.jwt.claim.sub', p_uid, true);
@@ -107,6 +107,17 @@ select is(app_private.operator_provision_student('10000000-0000-4000-8000-000000
 select is((select array_agg(role_grant.role_name) from app_private.account_role_grants as role_grant
   join app_private.accounts as account on account.id = role_grant.account_id
   where account.provider_user_id = '10000000-0000-4000-8000-0000000000a3'), array['student'], 'only the student role is granted');
+
+-- Operator recovery: locked first, bound to its epoch, never unlocked by a superseded run.
+create temporary table first_reset as select * from app_private.operator_begin_student_recovery('v12-new', 'ticket-a');
+create temporary table second_reset as select * from app_private.operator_begin_student_recovery('v12-new', 'ticket-b');
+select throws_ok($$select app_private.operator_finish_student_recovery('v12-new', (select credential_epoch from first_reset))$$,
+  '22023', 'no matching operator recovery in progress', 'an overlapping earlier reset cannot unlock the account');
+select ok(app_private.operator_finish_student_recovery('v12-new', (select credential_epoch from second_reset)), 'the latest reset unlocks');
+select is((select row(force_password_change, credential_update_pending)::text from app_private.accounts
+  where provider_user_id = '10000000-0000-4000-8000-0000000000a3'), '(t,f)', 'a new password is still required after recovery');
+select throws_ok($$select app_private.operator_finish_student_recovery('v12-new', (select credential_epoch from second_reset))$$,
+  '22023', 'no matching operator recovery in progress', 'finishing twice is refused');
 
 -- Links: AAL2 admin only, usernames only, student-only accounts.
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000a2', 'aal2');

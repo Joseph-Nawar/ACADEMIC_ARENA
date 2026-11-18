@@ -5,7 +5,8 @@ import { requireStaff, rpcFailure, UUID_PATTERN } from "../../../../lib/route-au
 import { hasExactKeys, readJsonBody } from "../../../../lib/validation.js";
 
 // Admin-only (AAL2): preview private account links for one level-only
-// publication. Shows the approved identity privately so staff can verify it.
+// publication. Returns usernames and account status only; provider emails
+// never reach the browser (verify usernames against the roster offline).
 export async function onRequestPost({ request, env }) {
   const auth = await requireStaff(request, env, "leaderboards.link", { mutation: true });
   if (auth.response) return auth.response;
@@ -24,7 +25,7 @@ export async function onRequestPost({ request, env }) {
   return jsonResponse({
     links: data.map((row) => ({
       level: row.level, position: row.position, publicName: row.public_name, username: row.username,
-      providerEmail: row.provider_email, accountStatus: row.account_status, previous: row.previous_state,
+      accountStatus: row.account_status, previous: row.previous_state,
     })),
   });
 }
