@@ -12,6 +12,35 @@ project has its own 6 encrypted settings, loaded with
 `scripts/configure-pages-secrets.sh`. Preview deployments get no secrets and
 fail closed.
 
+## Hosted acceptance — 18 Nov 2026
+
+| Check | Staging | Production |
+|---|---|---|
+| Migrations | 11 applied, latest `202611180001` | 11 applied, latest `202611180001` |
+| Table owner, lifecycle gate, pg_cron jobs | postgres, **off**, 2 | postgres, **off**, 2 |
+| Accounts | 1 admin (onboarded) | none, no admin yet |
+| Published data | 2 fictional versions, **withdrawn** (0 current) | none (0 versions, 0 rows) |
+| Anonymous level API (`?level=4/5/6`) | 200, empty | 200, empty, `private, no-store` |
+| Bad level/extra params, legacy catalog | 400 / 404 | 400 / 404 |
+| Unknown-user login; cross-origin login | 401 generic; 403 | 401 generic; 403 |
+| Staff/student routes anonymous | 401 | 401 |
+| Keys, Supabase URLs, fictional records in served assets | none | none (only hidden demo-mode strings) |
+
+**Staging admin**
+- The audit trail shows bootstrap, temporary password changed, TOTP enrolled and verified.
+- A browser-pane session reported role admin, AAL2, nothing pending.
+
+**Staging workflow (fictional data, Staff Desk UI)**
+- Rejected uploads: extra metric column, 29 rows, duplicate rank, and markup. No draft was created and nothing went public.
+- Valid upload: the preview listed 30 additions. Version 1 published. Each level showed 10 rows in upload order with only allowlisted fields. The page showed "Week 5 · Quiz Leaderboard", the podium with crown, and ranks 04–10.
+- Version 2: the preview listed exactly one changed name. All levels switched together.
+- Rollback to version 1, then withdrawal: all boards emptied.
+- The audit trail records draft, publish, draft, publish, rolled_back, withdrawn.
+
+**Fixed during acceptance (PR #9)**
+- The About page copy wrongly called the site a fictional prototype.
+- An open page kept showing standings that had been withdrawn or replaced until it was reloaded.
+
 ## V1 level-only release (18 Nov 2026)
 
 - PR #7 was merged as `b5921df`. Both Pages projects are deployed from it.
@@ -24,9 +53,7 @@ fail closed.
   - Hosted reads return 503 until the database is migrated.
 - Checked in the browser on both hosts at 390px: no horizontal overflow, the
   level tabs work, and the empty/unavailable states are honest.
-- Migration `202611180001_level_only_leaderboards.sql` is not yet applied to
-  either hosted database (the same network block as before). Both need the
-  owner's keychain-approved command in `docs/progress.md`.
+- Migration `202611180001_level_only_leaderboards.sql` is applied to both hosted databases (owner-run, 18 Nov).
 - The real Week 5 CSV passes the importer locally (30 rows, 10/10/10). It has
   not been uploaded anywhere. Publishing it needs the university's written
   disclosure approval and a verified staff account.
