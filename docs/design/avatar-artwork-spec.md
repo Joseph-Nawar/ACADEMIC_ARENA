@@ -82,7 +82,10 @@ Respect rules, which are reviewed before integration:
    ```sql
    alter table public.student_avatar_configs drop constraint student_avatar_configs_character_key_check,
      add constraint student_avatar_configs_character_key_check check (character_key in ('omar', …, '<new keys>'));
-   -- …same for the other three constraints…
+   alter table app_private.campus_wins_submissions drop constraint campus_wins_submissions_approved_avatar_key_check,
+     add constraint campus_wins_submissions_approved_avatar_key_check
+       check (approved_avatar_key is null or approved_avatar_key in ('omar', …, '<new keys>'));   -- stays nullable
+   -- …same pattern for published_leaderboard_rows and campus_wins_public (avatar_key, not null)…
    create or replace function public.save_own_avatar_preferences(…) … -- copy from 202611190001, extend the list only
    ```
 4. **Tests:**

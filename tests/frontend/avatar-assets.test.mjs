@@ -71,7 +71,7 @@ function latestConstraintKeys(table, column, name) {
     const created = new RegExp(`create table ${table.replace(".", "\\.")} \\(([\\s\\S]*?)\\n\\);`, "u").exec(source);
     const inline = created && new RegExp(`${column} in \\(([^)]+)\\)`, "u").exec(created[1]);
     if (inline) latest = inline[1];
-    for (const match of source.matchAll(new RegExp(`constraint ${name} check \\(\\w+ in \\(([^)]+)\\)`, "gu"))) latest = match[1];
+    for (const match of source.matchAll(new RegExp(`constraint ${name} check \\((?:\\w+ is null or )?\\w+ in \\(([^)]+)\\)`, "gu"))) latest = match[1];
   }
   assert.ok(latest, `no definition found for ${name}`);
   return [...latest.matchAll(/'([a-z0-9]+)'/gu)].map((item) => item[1]).sort();
