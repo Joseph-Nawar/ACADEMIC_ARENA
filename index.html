@@ -45,6 +45,7 @@
        <div class="competitor third"><img class="champion-art" id="art-3" src="assets/characters/youssef-ink.png" alt=""/><div class="name-tag" id="name-3">—</div><div class="pedestal"><span class="rank-num">3</span><span class="medal-text">THIRD PLACE</span></div></div>
       </div>
       <p class="podium-caption">Officially approved places only — no grades or scores shown</p>
+      <p class="artwork-note">Default illustrated characters are shown until students choose their own.</p>
      </section>
      <section class="rank-sheet" aria-labelledby="sheet-heading" hidden>
       <h2 id="sheet-heading" class="sheet-title">THE <em>TOP 10</em></h2>
@@ -66,14 +67,15 @@
     <div id="wins-feed" class="wins-feed"></div>
    </section>
    <section id="page-avatar" class="page" hidden aria-labelledby="avatar-title">
-    <div class="studio-heading"><div class="section-prelude"><span class="prelude-swatch"></span>THE EUE CHARACTER STUDIO</div><h1 class="hero-title" id="avatar-title">MAKE IT<br/><span>YOUR OWN.</span></h1><p>Choose an avatar family, customize your colors, and wear your style on the board. This is a visual prototype. Only students with staff-issued accounts will be able to save avatars in production.</p></div>
+    <div class="studio-heading"><div class="section-prelude"><span class="prelude-swatch"></span>THE EUE CHARACTER STUDIO</div><h1 class="hero-title" id="avatar-title">MAKE IT<br/><span>YOUR OWN.</span></h1><p>Choose a character, an art family, a backdrop and a sticker. Students with a university-issued Arena account can save their character and, if they choose, show it on the public leaderboard.</p></div>
     <div class="studio-grid">
      <div class="studio-stage" id="studio-stage" data-tone="mint"><div class="studio-scribble">YOUR ALTER EGO / PREVIEW</div><span class="studio-badge" id="studio-badge">✦</span><img id="studio-art" class="studio-art" src="assets/characters/amara-ink.png" alt="Selected illustrated character"/><div class="studio-namebar"><strong id="studio-name">YOUR CHARACTER</strong><span>READY FOR THE BOARD</span></div></div>
-     <div class="studio-controls"><h2>CHARACTER SELECT.</h2><p>No uploads, no photos, and no personal details needed in the editor. Try nine original character presets in two completely different character families. This V6 editor changes the full look, backdrop and sticker; a fully modular face/hair/outfit editor can follow after the design is approved.</p>
+     <div class="studio-controls"><h2>CHARACTER SELECT.</h2><p>No uploads, no photos, and no personal details. Pick any character in either art family; nothing is pre-selected from your name or account.</p>
       <div class="picker-group"><div class="picker-head"><h3>01 / Choose your character</h3><span>9 different looks</span></div><div class="base-options" id="base-options"></div></div>
       <div class="picker-group"><div class="picker-head"><h3>02 / Character family</h3><span>2 complete art families</span></div><div class="style-options" id="style-options"></div><div class="studio-status-small">Comic Original and 3D Cartoon are independently illustrated avatar families. Choose the one that feels most like you.</div></div>
       <div class="picker-group"><div class="picker-head"><h3>03 / Pick a backdrop</h3><span>tap a color</span></div><div class="swatches"><button class="swatch selected" data-tone="mint" aria-label="Mint backdrop" aria-pressed="true"></button><button class="swatch" data-tone="coral" aria-label="Coral backdrop" aria-pressed="false"></button><button class="swatch" data-tone="gold" aria-label="Gold backdrop" aria-pressed="false"></button><button class="swatch" data-tone="paper" aria-label="Paper backdrop" aria-pressed="false"></button><button class="swatch" data-tone="blue" aria-label="Blue backdrop" aria-pressed="false"></button><button class="swatch" data-tone="lilac" aria-label="Lilac backdrop" aria-pressed="false"></button></div></div>
       <div class="picker-group"><div class="picker-head"><h3>04 / Choose your sticker</h3><span>a little personality</span></div><div class="badge-choices"><button class="badge-choice selected" data-badge="✦" aria-label="Star sticker" aria-pressed="true">✦</button><button class="badge-choice" data-badge="⚡" aria-label="Lightning sticker" aria-pressed="false">⚡</button><button class="badge-choice" data-badge="♥" aria-label="Heart sticker" aria-pressed="false">♥</button><button class="badge-choice" data-badge="★" aria-label="Solid star sticker" aria-pressed="false">★</button><button class="badge-choice" data-badge="" aria-label="No sticker" aria-pressed="false">—</button></div></div>
+      <div class="picker-group" id="public-avatar-group" hidden><div class="picker-head"><h3>05 / Public leaderboard</h3><span>your choice</span></div><label class="optin-row"><input type="checkbox" id="show-on-leaderboard"/><span>Show my character on public leaderboards</span></label><div class="studio-status-small">Your character appears only after university staff verify which published ranking is yours, and only while this is switched on. Turn it off any time to return to the default illustration.</div></div>
       <div class="studio-actions"><button class="button-solid" id="save-character">SAVE CHARACTER ↗</button><div class="save-note" id="save-note">Fictional demo changes stay in this browser. Production saves require your staff-issued account.</div></div><div class="save-status" id="save-status" role="status" aria-live="polite"></div>
      </div>
     </div>
@@ -108,6 +110,21 @@
      </div>
      <ul id="moderation-list" class="staff-list"></ul>
     </section>
+    <section class="staff-panel" id="staff-links" hidden aria-labelledby="links-heading">
+     <h2 class="sheet-title" id="links-heading">VERIFIED <em>ACCOUNT LINKS</em></h2>
+     <p class="staff-note">Private, administrator-only. Upload <code>level,rank,username</code> for one publication, using Arena usernames you have checked against the authoritative roster on the operator's device (emails are never shown here). Names are never matched automatically. A student's own character appears only for linked rows where the student has switched public display on. Each publication needs its own approved links; rollback restores that version's links.</p>
+     <form id="links-form" class="staff-form">
+      <div class="staff-field"><label for="links-publication">Publication</label><select id="links-publication" required></select></div>
+      <div class="staff-field"><label for="links-file">Link CSV</label><input id="links-file" type="file" accept=".csv,text/csv" required /></div>
+      <button class="button-solid" type="submit">PREVIEW LINKS</button>
+     </form>
+     <div id="links-preview" class="staff-preview" hidden>
+      <h3>PRIVATE PREVIEW</h3>
+      <ul id="links-list"></ul>
+      <button class="button-solid" type="button" id="approve-links">APPROVE THESE LINKS</button>
+     </div>
+     <ul id="links-errors" class="staff-errors"></ul>
+    </section>
     <section class="staff-panel" id="staff-accounts" hidden aria-labelledby="names-heading">
      <h2 class="sheet-title" id="names-heading">APPROVED <em>PUBLIC NAMES</em></h2>
      <p class="staff-note">Students cannot choose or edit their public name. Set the approved display name used on Campus Wins.</p>
@@ -119,7 +136,7 @@
      <p id="public-name-status" role="status"></p>
     </section>
    </section>
-   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>THE IDEA</div><h1 id="about-title">BIG ENERGY.<br/>SMALL SCOPE.</h1><p>Academic Arena starts with one thing: a visually exciting home for the university's approved top-ten rankings. Ranked students appear as comic-style illustrations, never personal photographs. Everyone can view the standings without signing in.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Choose Level 4, 5, or 6 to see that level's approved top ten.</p></div></div><div class="about-step"><b>02</b><div><h3>Meet the characters</h3><p>Board artwork is assigned by rank from the illustrated cast. Default illustrated characters are shown until students choose their own; they are not likenesses of the students. No personal images and no image uploads.</p></div></div><div class="about-step"><b>03</b><div><h3>See who tops the board</h3><p>Show approved names and ranked positions, never individual grades, scores, or attendance records.</p></div></div></div><p class="illustration-credit">Rankings are published by authorized university staff from approved quiz results and show only names and positions. Characters on the board are illustrations assigned by rank, not photos or likenesses of students.</p></section>
+   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>THE IDEA</div><h1 id="about-title">BIG ENERGY.<br/>SMALL SCOPE.</h1><p>Academic Arena starts with one thing: a visually exciting home for the university's approved top-ten rankings. Ranked students appear as comic-style illustrations, never personal photographs. Everyone can view the standings without signing in.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Choose Level 4, 5, or 6 to see that level's approved top ten.</p></div></div><div class="about-step"><b>02</b><div><h3>Meet the characters</h3><p>Board artwork is assigned by rank from the illustrated cast. Default illustrated characters are shown until students choose their own; they are not likenesses of the students. No personal images and no image uploads.</p></div></div><div class="about-step"><b>03</b><div><h3>See who tops the board</h3><p>Show approved names and ranked positions, never individual grades, scores, or attendance records.</p></div></div></div><div class="about-signin"><h2>SIGNING IN</h2><p>Students receive an Academic Arena username and temporary password individually from university staff; there is no public sign-up. After the first sign-in you choose a new password, then open My Character to pick your look. Your character shows on a public leaderboard only after staff verify your ranking and you switch public display on.</p></div><p class="illustration-credit">Rankings are published by authorized university staff from approved quiz results and show only names and positions. Characters on the board are illustrations assigned by rank, not photos or likenesses of students.</p></section>
   </main>
  </div>
 </div>
@@ -151,6 +168,7 @@
      <button type="submit" class="button-solid">VERIFY STAFF ACCOUNT</button>
     </form>
    </section>
+   <section id="student-next" class="student-next" hidden aria-labelledby="student-next-title"><h3 id="student-next-title">NEXT: YOUR CHARACTER</h3><p>Pick your look in My Character. Showing it on a leaderboard needs a staff-verified ranking link and your opt-in.</p><button type="button" class="button-solid" id="open-studio">OPEN MY CHARACTER ↗</button></section>
    <form id="change-password-form">
     <label for="old-password">Current password</label><input id="old-password" type="password" autocomplete="current-password" required maxlength="256" />
     <label for="new-password">New password (15–128 characters)</label><input id="new-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />
@@ -161,6 +179,7 @@
  </div>
 </div>
 <div class="dialog-backdrop" id="composer-backdrop" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="composer-title"><h2 id="composer-title">SHARE YOUR WIN ✦</h2><p>Choose an approved milestone. Submissions stay private until staff review.</p><form id="achievement-form"><label for="achievement-type">Milestone</label><select id="achievement-type" required><option value="top3">Made the top three</option><option value="workshop">Completed a workshop challenge</option><option value="project">Finished a project</option><option value="helped">Helped classmates</option></select><p id="submission-hint">No text, photos, comments, or links are collected. Production submissions require an authorized student account.</p><div class="dialog-footer"><button type="button" class="outline-btn" id="close-composer">CANCEL</button><button class="button-solid" type="submit">SUBMIT FOR REVIEW</button></div><div id="composer-status" class="dialog-status" role="status"></div></form></div></div>
+<div class="dialog-backdrop welcome-backdrop" id="welcome-backdrop" hidden><div class="dialog welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title" aria-describedby="welcome-copy"><button type="button" class="welcome-close" id="welcome-close" aria-label="Close welcome message">×</button><div class="section-prelude"><span class="prelude-swatch"></span>WELCOME TO THE ARENA</div><h2 id="welcome-title">YOUR NAME.<br/><span>YOUR CHARACTER.</span></h2><p id="welcome-copy">Academic Arena celebrates your achievements. Students with university-issued Arena accounts can sign in and make their character their own.</p><div class="dialog-footer"><button type="button" class="outline-btn" id="welcome-explore">EXPLORE LEADERBOARDS</button><button type="button" class="button-solid" id="welcome-signin">SIGN IN &amp; PERSONALIZE</button></div></div></div>
 <script src="assets/runtime-config.js" defer></script>
 <script src="assets/data-access.js" defer></script>
 <script src="assets/display-names.js" defer></script>

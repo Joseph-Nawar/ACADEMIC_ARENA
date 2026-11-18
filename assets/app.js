@@ -31,6 +31,10 @@
   let activeTotpSecret = "";
   let selectedCategory = "all";
   let choices = { base: "amara", style: "ink", tone: "mint", badge: "✦" };
+  let features = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false };
+  const WELCOME_KEY = "arena-welcome-dismissed";
+  const WELCOME_VERSION = "v1";
+  let welcomeReturnFocus = null;
 
   function showPage(target) {
     currentPage = target;
@@ -107,7 +111,7 @@
         continue;
       }
       image.src = artwork(row.avatar, row.style);
-      image.alt = `Illustrated character for rank ${position}`;
+      image.alt = row.personalized ? `Character chosen by the rank ${position} student` : `Default illustrated character for rank ${position}`;
       setPublicName(name, visibleName(row), row.name);
     }
     for (const rowData of rows.filter((row) => row.position > 3).slice(0, 7)) {
@@ -120,6 +124,7 @@
       const image = document.createElement("img");
       image.src = faceArtwork(rowData.avatar, rowData.style);
       image.alt = "";
+      if (rowData.personalized) portrait.dataset.tone = rowData.tone;
       portrait.append(image);
       const name = document.createElement("span");
       name.className = "person";
@@ -259,11 +264,65 @@
   async function loadSavedCharacter() {
     try {
       const saved = await api.student.getMyCharacter();
-      if (saved) choices = { ...choices, ...saved };
+      if (saved) {
+        const { showOnLeaderboard, ...look } = saved;
+        choices = { ...choices, ...look };
+        $("show-on-leaderboard").checked = showOnLeaderboard === true;
+      }
     } catch {
       if (mode === "production") $("save-note").textContent = "Sign in with your staff-issued account to load your saved character.";
     }
     renderStudio();
+  }
+
+  function welcomeDismissed() {
+    try {
+      return window.localStorage.getItem(WELCOME_KEY) === WELCOME_VERSION;
+    } catch {
+      return false;
+    }
+  }
+
+  // Shown once per browser (per onboarding version), only when the database
+  // owner has enabled student accounts and the welcome switch, and never to a
+  // signed-in visitor. Dismissal stores only a version marker.
+  function maybeShowWelcome() {
+    if (!features.welcomeDialog || !features.studentSignIn || session.authenticated || welcomeDismissed()) return;
+    welcomeReturnFocus = document.activeElement;
+    $("welcome-backdrop").hidden = false;
+    $("welcome-signin").focus();
+  }
+
+  function closeWelcome(remember = true) {
+    if ($("welcome-backdrop").hidden) return;
+    $("welcome-backdrop").hidden = true;
+    if (remember) {
+      try {
+        window.localStorage.setItem(WELCOME_KEY, WELCOME_VERSION);
+      } catch {
+        // Storage unavailable: the dialog may appear again on a later visit.
+      }
+    }
+    if (welcomeReturnFocus && typeof welcomeReturnFocus.focus === "function") welcomeReturnFocus.focus();
+  }
+
+  function trapWelcomeFocus(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeWelcome();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...$("welcome-backdrop").querySelectorAll("button")];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function openLogin() {
@@ -322,6 +381,8 @@
     if (mode !== "production") return;
     const user = session.user || {};
     const student = session.authenticated && user.role === "student" && !user.mustChangePassword;
+    $("student-next").hidden = !student;
+    if (session.authenticated) closeWelcome(false);
     viewerReactions.clear();
     if (!student) {
       renderSubmissions([]);
@@ -564,10 +625,14 @@
       return;
     }
     try {
-      await api.student.saveCharacter(choices);
-      $("save-status").textContent = mode === "demo"
-        ? "Fictional character saved in this browser."
-        : "Character saved to your account.";
+      const publicChoice = features.avatarPersonalization ? $("show-on-leaderboard").checked : undefined;
+      const result = await api.student.saveCharacter(choices, publicChoice);
+      const base = mode === "demo" ? "Fictional character saved in this browser." : "Character saved to your account.";
+      $("save-status").textContent = !features.avatarPersonalization ? base
+        : result.showOnLeaderboard
+          ? `${base} Public display is on: it appears on a leaderboard once staff have verified your ranking.`
+          : `${base} Public display is off: leaderboards show the default illustration.`;
+      if (currentPage === "leaderboard" || publicChoice !== undefined) void loadLeaderboard();
     } catch {
       $("save-status").textContent = "Your character could not be saved. Sign in and try again.";
     }
@@ -671,6 +736,20 @@
       }
     });
     $("close-account").addEventListener("click", closeLogin);
+    $("open-studio").addEventListener("click", () => {
+      closeLogin();
+      showPage("avatar");
+    });
+    $("welcome-close").addEventListener("click", () => closeWelcome());
+    $("welcome-explore").addEventListener("click", () => closeWelcome());
+    $("welcome-signin").addEventListener("click", () => {
+      closeWelcome();
+      openLogin();
+    });
+    $("welcome-backdrop").addEventListener("keydown", trapWelcomeFocus);
+    $("welcome-backdrop").addEventListener("click", (event) => {
+      if (event.target === $("welcome-backdrop")) closeWelcome();
+    });
     $("logout-btn").addEventListener("click", async () => {
       try {
         await api.auth.signOut();
@@ -706,8 +785,11 @@
     renderStudio();
     updateLevelButtons();
     bindEvents();
+    features = await api.public.getFeatures();
+    $("public-avatar-group").hidden = !features.avatarPersonalization;
     await Promise.all([loadLeaderboard(), loadWins(), renderSession(), loadSavedCharacter()]);
     document.documentElement.dataset.appReady = "true";
+    maybeShowWelcome();
   }
 
   void start();

@@ -335,3 +335,52 @@ export function diffLevels(liveRows, nextRows) {
   });
   return { levels, unchanged: levels.every((level) => level.changes.length === 0) };
 }
+
+// Private staff link file: level,rank,username (at most 30 rows). Usernames
+// are verified Arena usernames, never names, emails, or student numbers.
+export const LINK_COLUMNS = Object.freeze(["level", "rank", "username"]);
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/u;
+
+export function parseLinkCsv(text) {
+  const errors = [];
+  const fail = (line, message) => {
+    if (errors.length < MAX_ERRORS) errors.push({ line, message });
+  };
+  if (typeof text !== "string") return { ok: false, errors: [{ line: 0, message: "The file is empty." }] };
+  if (new TextEncoder().encode(text).byteLength > 4096) {
+    return { ok: false, errors: [{ line: 0, message: "The file is larger than 4 KB." }] };
+  }
+  const lines = text.replace(/^﻿/u, "").split(/\r?\n/u);
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  const header = (lines[0] || "").split(",").map((name) => name.trim().toLowerCase());
+  if (header.length !== LINK_COLUMNS.length || header.some((name, index) => name !== LINK_COLUMNS[index])) {
+    return { ok: false, errors: [{ line: 1, message: `The header must be exactly: ${LINK_COLUMNS.join(",")}` }] };
+  }
+  if (lines.length - 1 > 30) return { ok: false, errors: [{ line: 0, message: "At most 30 links (10 per level)." }] };
+  const links = [];
+  const positions = new Set();
+  const usernames = new Set();
+  for (let index = 1; index < lines.length; index += 1) {
+    const lineNumber = index + 1;
+    const fields = lines[index].split(",").map((field) => field.trim());
+    if (fields.length !== 3) {
+      fail(lineNumber, `Expected 3 values, found ${fields.length}.`);
+      continue;
+    }
+    const [levelText, rankText, rawUsername] = fields;
+    const level = /^[456]$/u.test(levelText) ? Number(levelText) : null;
+    const rank = /^(?:[1-9]|10)$/u.test(rankText) ? Number(rankText) : null;
+    const username = rawUsername.toLowerCase();
+    if (!level) fail(lineNumber, "Level must be 4, 5, or 6.");
+    if (!rank) fail(lineNumber, "Rank must be 1 to 10.");
+    if (!USERNAME_PATTERN.test(username)) fail(lineNumber, "Username must be an Arena username (3–32 letters, digits, . _ -).");
+    if (!level || !rank || !USERNAME_PATTERN.test(username)) continue;
+    const position = `${level}:${rank}`;
+    if (positions.has(position)) fail(lineNumber, `Level ${level} rank ${rank} is linked twice.`);
+    if (usernames.has(username)) fail(lineNumber, "A username is linked twice.");
+    positions.add(position);
+    usernames.add(username);
+    links.push({ level, rank, username });
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, links };
+}

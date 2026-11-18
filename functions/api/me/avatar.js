@@ -18,10 +18,10 @@ function avatarFromRow(row) {
 async function ownedAvatar(env, session) {
   const { data, error } = await userAuthClient(env, session.providerAccessToken)
     .from("student_avatar_configs")
-    .select("character_key,family,tone,badge")
+    .select("character_key,family,tone,badge,show_on_leaderboard")
     .maybeSingle();
   if (error) throw new Error("Avatar data is unavailable.");
-  return avatarFromRow(data);
+  return { avatar: avatarFromRow(data), showOnLeaderboard: data?.show_on_leaderboard === true };
 }
 
 function authenticatedRole(session) {
@@ -34,7 +34,7 @@ export async function onRequestGet({ request, env }) {
   if (!authenticatedRole(session)) return jsonResponse({ error: "forbidden" }, 403);
   if (session.mustChangePassword) return jsonResponse({ error: "password_change_required" }, 409);
   try {
-    return jsonResponse({ avatar: await ownedAvatar(env, session) });
+    return jsonResponse(await ownedAvatar(env, session));
   } catch {
     return jsonResponse({ error: "unavailable" }, 503);
   }
@@ -48,22 +48,29 @@ export async function onRequestPut({ request, env }) {
   if (!authenticatedRole(session)) return jsonResponse({ error: "forbidden" }, 403);
   if (session.mustChangePassword) return jsonResponse({ error: "password_change_required" }, 409);
 
+  // { avatar } keeps the current public-display choice; { avatar, showOnLeaderboard }
+  // changes it. Only allowlisted keys are accepted; no paths, URLs, or markup.
   const body = await readJsonBody(request, 1024);
-  const avatar = hasExactKeys(body, ["avatar"]) ? normalizeAvatar(body.avatar) : null;
-  if (!avatar) return jsonResponse({ error: "invalid_avatar" }, 400);
+  const withChoice = hasExactKeys(body, ["avatar", "showOnLeaderboard"]);
+  const avatar = withChoice || hasExactKeys(body, ["avatar"]) ? normalizeAvatar(body.avatar) : null;
+  if (!avatar || (withChoice && typeof body.showOnLeaderboard !== "boolean")) {
+    return jsonResponse({ error: "invalid_avatar" }, 400);
+  }
 
   try {
     const client = userAuthClient(env, session.providerAccessToken);
-    const { data, error } = await client.rpc("save_own_avatar_config", {
+    const showOnLeaderboard = withChoice ? body.showOnLeaderboard : (await ownedAvatar(env, session)).showOnLeaderboard;
+    const { data, error } = await client.rpc("save_own_avatar_preferences", {
       p_character_key: avatar.base,
       p_family: avatar.style,
       p_tone: avatar.tone,
       p_badge: avatar.badge,
+      p_show_on_leaderboard: showOnLeaderboard,
     });
     if (error || data !== true) return jsonResponse({ error: "avatar_save_failed" }, 403);
-    const savedAvatar = await ownedAvatar(env, session);
-    if (!savedAvatar) return jsonResponse({ error: "avatar_save_failed" }, 403);
-    return jsonResponse({ saved: true, avatar: savedAvatar });
+    const saved = await ownedAvatar(env, session);
+    if (!saved.avatar) return jsonResponse({ error: "avatar_save_failed" }, 403);
+    return jsonResponse({ saved: true, ...saved });
   } catch {
     return jsonResponse({ error: "unavailable" }, 503);
   }

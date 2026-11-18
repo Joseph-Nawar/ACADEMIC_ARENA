@@ -64,7 +64,10 @@ test("level-only publication: validation, preview, atomic publish, concurrency, 
     assert.deepEqual(live.rows.map((row) => row.position), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     assert.deepEqual(live.rows.map((row) => row.name), expected.filter((row) => row[0] === String(level)).map((row) => row[2]),
       `Level ${level} keeps the uploaded order and spelling`);
-    for (const row of live.rows) assert.deepEqual(Object.keys(row).sort(), ["avatar", "name", "position", "style"]);
+    for (const row of live.rows) {
+      assert.deepEqual(Object.keys(row).sort(), ["avatar", "name", "personalized", "position", "style"]);
+      assert.equal(row.personalized, false, "unlinked rows use default artwork");
+    }
   }
   assert.equal((await api("/api/public/leaderboards?level=7")).status, 400, "unknown level is rejected");
   assert.equal((await api("/api/public/leaderboards?level=4&semester=1")).status, 400, "legacy filters are rejected");

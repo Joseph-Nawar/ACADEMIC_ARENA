@@ -56,6 +56,19 @@ export async function onRequestPost({ request, env }) {
       !Array.isArray(identity.role_names) || identity.role_names.length === 0) {
     return genericFailure(startedAt);
   }
+  // Student-only accounts can sign in only after the owner enables the
+  // student rollout switch; the response stays indistinguishable from a
+  // wrong password.
+  if (!isStaffRoleSet(identity.role_names)) {
+    try {
+      const { data, error } = await serviceClient(env).rpc("public_feature_state");
+      const features = Array.isArray(data) ? data[0] : data;
+      if (error) return jsonResponse({ error: "unavailable" }, 503);
+      if (features?.student_sign_in !== true) return genericFailure(startedAt);
+    } catch {
+      return jsonResponse({ error: "unavailable" }, 503);
+    }
+  }
 
   let authResult;
   try {

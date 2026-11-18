@@ -63,9 +63,20 @@ Students cannot pick their public name. Staff Desk → Approved public names →
 student username + the approved display name. A student needs one before they
 can share a Campus Win.
 
+## Verified account links (admin, V1.2)
+
+Staff Desk → Verified account links. Pick a published version, upload a private
+`level,rank,username` file, and check every identity in the private preview.
+Each row shows the public name, the username and the account status (never the
+email: verify usernames against the roster offline), and whether it is new,
+changed, or the same as the previous version. Then approve. Each publication needs its own approval, and rollback
+restores that version's links. Uploading a header-only file clears the links.
+Never link by name alone. A student's own character appears on the board only
+after they switch public display on.
+
 ## Accounts
 
-Creating students, password recovery, suspension, and staff MFA reset are
-**disabled on the hosted site** until hosted verification and university
-approval (see `docs/progress.md`). Lost staff authenticator: follow
-`identity-runbook.md`.
+The in-app account routes stay **disabled on the hosted site**. Student
+accounts are created, recovered and suspended by the authorized operator with
+`scripts/student-accounts.mjs`, behind default-off switches. See
+`student-accounts.md`. Lost staff authenticator: follow `identity-runbook.md`.

@@ -1,8 +1,8 @@
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/u;
-const CHARACTER_IDS = new Set(["omar", "mariam", "youssef", "amara", "tariq", "habiba2", "malek", "nour2", "zein"]);
-const CHARACTER_FAMILIES = new Set(["ink", "cartoon3d"]);
-const CHARACTER_TONES = new Set(["mint", "coral", "gold", "paper", "blue", "lilac"]);
-const CHARACTER_BADGES = new Set(["✦", "⚡", "♥", "★", ""]);
+export const CHARACTER_IDS = new Set(["omar", "mariam", "youssef", "amara", "tariq", "habiba2", "malek", "nour2", "zein"]);
+export const CHARACTER_FAMILIES = new Set(["ink", "cartoon3d"]);
+export const CHARACTER_TONES = new Set(["mint", "coral", "gold", "paper", "blue", "lilac"]);
+export const CHARACTER_BADGES = new Set(["✦", "⚡", "♥", "★", ""]);
 
 export async function readJsonBody(request, maximumBytes = 4096) {
   if (!/^application\/json(?:\s*;|$)/iu.test(request.headers.get("Content-Type") || "")) return null;

@@ -282,6 +282,73 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
     await namesPage.close();
   }
 
+  // V1.2 welcome dialog: backend-controlled, accessible, once per browser, never for signed-in users.
+  const welcomeContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const welcomePage = await welcomeContext.newPage();
+  let signedIn = false;
+  await welcomePage.route("**/api/public/features", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ studentSignIn: true, avatarPersonalization: true, welcomeDialog: true }),
+  }));
+  await welcomePage.route("**/api/auth/session", (route) => route.fulfill(signedIn
+    ? { status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, csrfToken: "x".repeat(43), user: { role: "student", mustChangePassword: false } }) }
+    : { status: 401, contentType: "application/json", body: JSON.stringify({ error: "unauthorized" }) }));
+  await welcomePage.route("**/api/public/leaderboards**", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ releaseLabel: "Week 9", publishedAt: null, rows: [
+      { position: 1, name: "Fictional Chosen", avatar: "zein", style: "cartoon3d", tone: "lilac", badge: "⚡", personalized: true },
+      { position: 2, name: "Fictional Default", avatar: "omar", style: "ink", personalized: false },
+      { position: 3, name: "Fictional Third", avatar: "mariam", style: "ink", personalized: false },
+    ] }),
+  }));
+  await welcomePage.goto(baseUrl);
+  await waitForReady(welcomePage);
+  const dialog = await welcomePage.evaluate(() => {
+    const element = document.querySelector("#welcome-backdrop .dialog");
+    return {
+      visible: !document.getElementById("welcome-backdrop").hidden,
+      role: element.getAttribute("role"), modal: element.getAttribute("aria-modal"),
+      title: document.getElementById(element.getAttribute("aria-labelledby"))?.textContent,
+      focused: document.activeElement?.id,
+      boardVisible: !document.querySelector(".podium-zone").hidden,
+      overflow: document.documentElement.scrollWidth - innerWidth,
+    };
+  });
+  assert.equal(dialog.visible, true, "welcome dialog appears when the backend enables it");
+  assert.equal(dialog.role, "dialog");
+  assert.equal(dialog.modal, "true");
+  assert.match(dialog.title, /YOUR NAME\.\s*YOUR CHARACTER\./u);
+  assert.equal(dialog.focused, "welcome-signin", "focus moves into the dialog");
+  assert.equal(dialog.boardVisible, true, "the public board loads behind the dialog");
+  assert.ok(dialog.overflow <= 1, "dialog does not overflow at phone width");
+  await welcomePage.keyboard.press("Shift+Tab");
+  assert.equal(await welcomePage.evaluate(() => document.activeElement?.closest("#welcome-backdrop") !== null), true, "focus stays in the dialog");
+  await welcomePage.keyboard.press("Escape");
+  assert.equal(await welcomePage.locator("#welcome-backdrop").isHidden(), true, "Escape closes the dialog");
+  const stored = await welcomePage.evaluate(() => ({ ...localStorage }));
+  assert.deepEqual(stored, { "arena-welcome-dismissed": "v1" }, "dismissal stores only a version marker");
+  await welcomePage.locator('.level-tabs [data-level="5"]').click();
+  assert.equal(await welcomePage.locator("#welcome-backdrop").isHidden(), true, "changing level never reopens it");
+  await welcomePage.reload();
+  await waitForReady(welcomePage);
+  assert.equal(await welcomePage.locator("#welcome-backdrop").isHidden(), true, "shown once per browser");
+  assert.equal(await welcomePage.locator("#art-1").getAttribute("alt"), "Character chosen by the rank 1 student");
+  assert.match(await welcomePage.locator("#art-1").getAttribute("src"), /zein-3d\.png$/u, "an opted-in student's own character is shown");
+  assert.equal(await welcomePage.locator("#art-2").getAttribute("alt"), "Default illustrated character for rank 2");
+  assert.match(await welcomePage.locator(".artwork-note").textContent(), /Default illustrated characters are shown until students choose their own/u);
+  await welcomePage.evaluate(() => localStorage.clear());
+  signedIn = true;
+  await welcomePage.reload();
+  await waitForReady(welcomePage);
+  assert.equal(await welcomePage.locator("#welcome-backdrop").isHidden(), true, "never shown to signed-in visitors");
+  await welcomeContext.close();
+
+  const offPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await offPage.goto(baseUrl);
+  await waitForReady(offPage);
+  assert.equal(await offPage.locator("#welcome-backdrop").isHidden(), true, "no dialog while the backend switches are off");
+  assert.equal(await offPage.locator("#public-avatar-group").isHidden(), true, "no public-display option while personalization is off");
+  await offPage.close();
+
   const racePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   let levelFourStarted = false;
   await racePage.route("**/api/public/leaderboards**", async (route) => {
