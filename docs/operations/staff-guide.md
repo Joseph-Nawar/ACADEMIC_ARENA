@@ -21,6 +21,9 @@ plus approved public names).
      capitalization are kept exactly; extra spaces are trimmed.
    - **Never include** scores, quiz counts, attendance, student IDs, emails, or
      extra columns. The upload is rejected if you do.
+   - Two students with the same name in one level must be disambiguated
+     (for example with an approved initial). Names with hidden characters,
+     look-alike letters from mixed alphabets, or fullwidth forms are rejected.
    - The site does not recalculate rankings. Ranks are shown exactly as uploaded.
    - Keep real files on your own device. Never put them in the repository or
      on the staging site.

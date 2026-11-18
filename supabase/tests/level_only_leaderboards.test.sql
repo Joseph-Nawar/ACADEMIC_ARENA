@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(37);
+select plan(39);
 
 create function pg_temp.as_user(p_uid text, p_aal text) returns void language sql as $$
   select set_config('request.jwt.claim.sub', p_uid, true);
@@ -90,6 +90,12 @@ select throws_ok($$select * from public.create_level_leaderboard_draft('2026-27'
 select throws_ok($$select * from public.create_level_leaderboard_draft('2026-27', 'Week 5',
   (select jsonb_agg(case when (r->>'position')::int = 3 and (r->>'level')::int = 4 then jsonb_set(r, '{position}', '11') else r end) from jsonb_array_elements(pg_temp.rows('a')) r))$$,
   '23514', null, 'rank 11 is rejected');
+select throws_ok($$select * from public.create_level_leaderboard_draft('2026-27', 'Week 5',
+  (select jsonb_agg(case when (r->>'position')::int = 3 and (r->>'level')::int = 4 then jsonb_set(r, '{public_name}', to_jsonb(U&'\3164\3164'::text)) else r end) from jsonb_array_elements(pg_temp.rows('a')) r))$$,
+  '23514', null, 'an invisible filler-character name is rejected by the database');
+select throws_ok($$select * from public.create_level_leaderboard_draft('2026-27', 'Week 5',
+  (select jsonb_agg(case when (r->>'position')::int = 3 and (r->>'level')::int = 4 then jsonb_set(r, '{public_name}', to_jsonb(U&'\FF2E\FF41\FF4D\FF45'::text)) else r end) from jsonb_array_elements(pg_temp.rows('a')) r))$$,
+  '23514', null, 'a fullwidth (non-NFKC) name is rejected by the database');
 select throws_ok($$select * from public.create_level_leaderboard_draft('2026-27', '<b>Week</b>', pg_temp.rows('a'))$$, '22023', null,
   'release label is validated');
 select throws_ok($$select * from public.create_level_leaderboard_draft('Week 5', 'Week 5', pg_temp.rows('a'))$$, '22023', null,

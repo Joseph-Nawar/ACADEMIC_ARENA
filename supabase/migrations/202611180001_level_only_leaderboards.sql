@@ -23,6 +23,8 @@ create table public.published_level_rows (
     pg_catalog.length(pg_catalog.btrim(public_name)) between 1 and 80
     and public_name !~ '[[:cntrl:]<>"`\\{}\[\]|;=]'
     and public_name !~ '^[=+@-]'
+    and public_name is nfkc normalized
+    and public_name !~ '[\u115F\u1160\u3164\uFFA0\u034F\uFE00-\uFE0F\u200B-\u200F\u2060-\u2064\u202A-\u202E\u2066-\u2069]'
   ),
   primary key (snapshot_id, level, position)
 );

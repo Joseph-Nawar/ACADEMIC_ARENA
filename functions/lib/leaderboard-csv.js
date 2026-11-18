@@ -226,7 +226,22 @@ export function diffBoards(liveRows, nextRows) {
 // normalization and whitespace collapsing are applied.
 export const LEVEL_COLUMNS = Object.freeze(["level", "rank", "public_name"]);
 export const LEVELS = Object.freeze([4, 5, 6]);
-const LEVEL_NAME_PATTERN = /^\p{L}[\p{L}\p{M} .'’-]{0,79}$/u;
+// A name is letters (each with at most 3 combining marks) joined by spaces,
+// periods, apostrophes, or hyphens; starts with a letter; at most 80 characters.
+const LEVEL_NAME_PATTERN = /^\p{L}\p{M}{0,3}(?:[ .'’-]{0,2}\p{L}\p{M}{0,3})*\.?$/u;
+// Invisible "letters" and selectors that would render blank or defeat duplicate checks.
+const INVISIBLE = /[\u115F\u1160\u3164\uFFA0\u034F\uFE00-\uFE0F\u{E0100}-\u{E01EF}\u200B-\u200F\u2060-\u2064\u202A-\u202E\u2066-\u2069]/u;
+const SCRIPTS = [/\p{Script=Latin}/u, /\p{Script=Cyrillic}/u, /\p{Script=Greek}/u];
+
+function safeLevelName(name) {
+  if (name.length > 80 || INVISIBLE.test(name) || name !== name.normalize("NFKC") || !LEVEL_NAME_PATTERN.test(name)) return false;
+  // Mixing look-alike alphabets (e.g. Latin with Cyrillic) is how spoofed duplicates are made.
+  return SCRIPTS.filter((script) => script.test(name)).length <= 1;
+}
+
+export function nameKey(name) {
+  return name.normalize("NFKC").toLowerCase();
+}
 const MAX_LEVEL_CSV_BYTES = 16 * 1024;
 
 export function validReleaseLabel(value) {
@@ -275,8 +290,8 @@ export function parseLevelCsv(text) {
     let valid = true;
     if (!["4", "5", "6"].includes(level)) { fail(lineNumber, "level must be 4, 5, or 6."); valid = false; }
     if (!/^(10|[1-9])$/u.test(rank)) { fail(lineNumber, "rank must be a whole number from 1 to 10."); valid = false; }
-    if (!LEVEL_NAME_PATTERN.test(name)) {
-      fail(lineNumber, "public_name must be a name of letters, spaces, apostrophes, hyphens, or periods (max 80).");
+    if (!safeLevelName(name)) {
+      fail(lineNumber, "public_name must be a plain name of letters, spaces, apostrophes, hyphens, or periods (max 80; no hidden or look-alike characters).");
       valid = false;
     }
     if (valid) rows.push({ level: Number(level), position: Number(rank), public_name: name, line: lineNumber });
@@ -289,8 +304,8 @@ export function parseLevelCsv(text) {
     const names = new Set();
     for (const row of levelRows) {
       if (positions.has(row.position)) fail(row.line, `Duplicate rank ${row.position} in Level ${level}.`);
-      const normalized = row.public_name.toLocaleLowerCase("en");
-      if (names.has(normalized)) fail(row.line, `This name already appears in Level ${level}.`);
+      const normalized = nameKey(row.public_name);
+      if (names.has(normalized)) fail(row.line, `This name already appears in Level ${level}; add an approved disambiguator (e.g. an initial).`);
       positions.add(row.position);
       names.add(normalized);
     }

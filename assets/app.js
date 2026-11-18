@@ -118,7 +118,8 @@
     announce("ranking-status", "Loading approved standings…", "loading");
     const result = await api.public.getLeaderboard({ level: boardState.level });
     if (sequence !== boardSequence) return;
-    $("leaderboard-subtitle").textContent = `${result.releaseLabel || "Week 5"} · Quiz Leaderboard`;
+    // Only name a release (e.g. "Week 5") when a publication actually carries that label.
+    $("leaderboard-subtitle").textContent = result.releaseLabel ? `${result.releaseLabel} · Quiz Leaderboard` : "Quiz Leaderboard";
     if (result.state === "unavailable") {
       announce("ranking-status", "Standings are temporarily unavailable. Please try again later.", "unavailable");
       return;

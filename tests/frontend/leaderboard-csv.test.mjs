@@ -32,11 +32,14 @@ test("level-only parser accepts exactly 30 rows and preserves names", () => {
   const result = parseLevelCsv(levelCsv((rows) => {
     rows[0][2] = "  ZIAD  O'Brien-Smith ";
     rows[1][2] = "Ünal ÇELİK";
+    rows[2][2] = "أحمد محمد";
+    rows[3][2] = "Mary-Jane St. John";
     return rows;
   }));
   assert.equal(result.ok, true, JSON.stringify(result.errors));
   assert.deepEqual(result.rows[0], { level: 4, position: 1, public_name: "ZIAD O'Brien-Smith" });
   assert.equal(result.rows[1].public_name, "Ünal ÇELİK", "capitalization and accents are kept");
+  assert.equal(result.rows[2].public_name, "أحمد محمد", "non-Latin scripts are accepted");
   assert.deepEqual([4, 5, 6].map((level) => result.rows.filter((row) => row.level === level).length), [10, 10, 10]);
 });
 
@@ -59,6 +62,14 @@ test("level-only parser rejects malformed, incomplete, duplicated, and unsafe da
     "quoted comma": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "\"Smith"] : row),
     "control char": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "Name\u0007"] : row),
     "overlong name": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "A".repeat(81)] : row),
+    "hangul filler blank": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "\u3164\u3164"] : row),
+    "CGJ duplicate": (rows) => rows.map((row, index) => index === 1 ? [row[0], row[1], rows[0][2] + "\u034F"] : row),
+    "variation selector": (rows) => rows.map((row, index) => index === 1 ? [row[0], row[1], "Name\uFE0F Bx"] : row),
+    "cyrillic homoglyph": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "M\u0430riam Test"] : row),
+    "fullwidth": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "\uFF2E\uFF41\uFF4D\uFF45"] : row),
+    "zalgo": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "A" + "\u0301".repeat(10)] : row),
+    "zero width space": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "Na\u200Bme"] : row),
+    "rtl override": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "Name\u202Etset"] : row),
   };
   for (const [label, mutate] of Object.entries(cases)) {
     assert.equal(parseLevelCsv(levelCsv(mutate)).ok, false, label);
