@@ -79,7 +79,7 @@
       if (!publications.length) list.append(listItem([textNode("span", "No publications yet.")]));
       for (const item of publications) {
         const when = item.publishedAt ? new Date(item.publishedAt).toLocaleString("en-GB") : "not published";
-        const actions = item.state === "live" ? [] : [button(item.state === "draft" ? "PUBLISH" : "ROLL BACK TO THIS", async () => {
+        const actions = item.state === "live" || item.format !== "level_only" ? [] : [button(item.state === "draft" ? "PUBLISH" : "ROLL BACK TO THIS", async () => {
           if (!window.confirm(`Make version ${item.version} the live rankings?`)) return;
           try {
             await api.staff.publishLeaderboard(item.id);
@@ -92,7 +92,9 @@
         list.append(listItem([
           textNode("strong", `v${item.version}`),
           stateTag(item.state, stateLabels[item.state]),
-          textNode("span", `${item.academicYear} · ${item.boardCount} boards · ${item.rowCount} rows · ${when}`),
+          textNode("span", item.format === "level_only"
+            ? `${item.releaseLabel || ""} · ${item.academicYear} · ${item.rowCount} rows · ${when}`
+            : `legacy semester/module format · ${item.academicYear} · ${when}`),
         ], actions));
       }
     } catch (error) {
@@ -103,12 +105,18 @@
   function renderDiff(result) {
     const list = $("ranking-diff");
     list.replaceChildren();
-    const { added, changed, removed, unchanged } = result.diff;
-    list.append(textNode("li", `Draft v${result.draft.version}: ${result.draft.boardCount} boards, ${result.draft.rowCount} rows. Live version: ${result.liveVersion ?? "none"}.`));
-    for (const board of added) list.append(textNode("li", `New board: ${board.board} (${board.rows} rows)`));
-    for (const board of changed) list.append(textNode("li", `Changed: ${board.board} (${board.changedPositions} positions)`));
-    for (const board of removed) list.append(textNode("li", `Will be removed from public view: ${board.board}`));
-    list.append(textNode("li", `${unchanged} boards unchanged.`));
+    list.append(textNode("li", `Draft v${result.draft.version} (${result.draft.releaseLabel}): ${result.draft.rowCount} rows. Live version: ${result.liveVersion ?? "none"}.`));
+    const words = { added: "New", changed: "Changed", removed: "Removed" };
+    for (const { level, changes } of result.diff.levels) {
+      if (!changes.length) {
+        list.append(textNode("li", `Level ${level}: no changes.`));
+        continue;
+      }
+      for (const item of changes) {
+        const detail = item.change === "changed" ? `${item.before} → ${item.after}` : item.after ?? item.before;
+        list.append(textNode("li", `Level ${level} · rank ${item.position} · ${words[item.change]}: ${detail}`));
+      }
+    }
     $("ranking-preview").hidden = false;
   }
 
@@ -118,13 +126,13 @@
     $("ranking-preview").hidden = true;
     draftId = "";
     const file = $("ranking-file").files[0];
-    if (!file || file.size > 262144) {
-      status("Choose a CSV file of at most 256 KB.", "unavailable");
+    if (!file || file.size > 16384) {
+      status("Choose a CSV file of at most 16 KB.", "unavailable");
       return;
     }
     status("Validating…", "loading");
     try {
-      const result = await api.staff.uploadRankings($("ranking-year").value.trim(), await file.text());
+      const result = await api.staff.uploadRankings($("ranking-year").value.trim(), $("ranking-label").value.trim(), await file.text());
       draftId = result.draft.id;
       renderDiff(result);
       status("The file is valid. Review the preview, then publish.", "ready");

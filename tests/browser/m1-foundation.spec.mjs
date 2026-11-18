@@ -38,27 +38,26 @@ export async function runDemoBrowserTests(browser, baseUrl, root) {
   assert.ok(crown && crown.y + crown.height < visibleWinnerTop + 8,
     `crown must sit above visible art (crown bottom ${crown?.y + crown?.height}; art top ${visibleWinnerTop})`);
 
-  for (const level of ["4", "5", "6"]) {
-    await page.locator("#level-filter").selectOption(level);
-    await page.waitForFunction((value) => document.getElementById("level-filter").value === value &&
-      document.getElementById("podium-label").textContent.includes("LEVEL " + value), level);
+  assert.equal(await page.locator("#leaderboard-title").innerText(), "LEVEL\nCHAMPIONS.");
+  assert.match(await page.locator("#leaderboard-subtitle").textContent(), /· Quiz Leaderboard$/u);
+  assert.equal(await page.evaluate(() => document.querySelectorAll(
+    "#semester-filter, #group-filter, #module-filter, #tab-semester, #tab-module, #level-filter").length), 0,
+    "no semester, cohort, or module controls exist");
+  assert.equal(await page.locator('.level-tabs [data-level="4"]').getAttribute("aria-pressed"), "true", "Level 4 is the default");
+  const boards = {};
+  for (const level of ["5", "6", "4"]) {
+    await page.locator(`.level-tabs [data-level="${level}"]`).click();
+    await page.waitForFunction((value) => document.getElementById("podium-label").textContent === `LEVEL ${value} / TOP 3` &&
+      document.getElementById("ranking-status").dataset.state === "ready", level);
+    boards[level] = await page.evaluate(() => ({
+      podium: [1, 2, 3].map((position) => document.getElementById(`name-${position}`).textContent),
+      rest: [...document.querySelectorAll("#ranking-rows li")].map((row) => row.querySelector("b").textContent + " " + row.querySelector(".person").textContent),
+    }));
+    assert.equal(boards[level].rest.length, 7, `Level ${level} shows ranks 4-10 below the podium`);
+    assert.deepEqual(boards[level].rest.map((row) => row.slice(0, 2)), ["04", "05", "06", "07", "08", "09", "10"]);
+    assert.equal(await page.locator(`.level-tabs [data-level="${level}"]`).getAttribute("aria-pressed"), "true");
   }
-  for (const semester of ["1", "2"]) {
-    await page.locator("#semester-filter").selectOption(semester);
-    await page.waitForFunction((value) => document.getElementById("semester-filter").value === value &&
-      document.getElementById("podium-label").textContent.includes("SEM " + value), semester);
-  }
-  await page.locator("#tab-module").click();
-  assert.equal(await page.locator("#module-wrap").isVisible(), true);
-  for (const [key, label] of [["module-a", "Module A"], ["module-b", "Module B"], ["module-c", "Module C"]]) {
-    await page.locator("#module-filter").selectOption(key);
-    await page.waitForFunction((value) => document.getElementById("module-filter").value === value &&
-      document.getElementById("sheet-subtitle").textContent.includes(value === "module-a" ? "Module A" :
-        value === "module-b" ? "Module B" : "Module C"), key);
-    assert.ok((await page.locator("#podium-label").textContent()).includes(label));
-  }
-  await page.locator("#tab-semester").click();
-  assert.equal(await page.locator("#module-wrap").isVisible(), false);
+  assert.equal(new Set(Object.values(boards).map((board) => board.podium.join("|"))).size, 3, "each level shows its own rankings");
 
   await page.locator('.nav-link[data-page="avatar"]').click();
   await page.locator('button[data-base="amara"]').click();
@@ -118,7 +117,7 @@ export async function runDemoBrowserTests(browser, baseUrl, root) {
   const mobile = await page.evaluate(() => ({
     width: window.innerWidth,
     documentWidth: document.documentElement.scrollWidth,
-    levelVisible: document.getElementById("level-filter").getBoundingClientRect().width > 0,
+    levelVisible: document.querySelector(".level-tabs").getBoundingClientRect().width > 0,
     podiumVisible: !document.querySelector(".podium-zone").hidden,
     crownVisible: document.querySelector(".crown").getBoundingClientRect().width > 0,
     demoLabelVisible: document.querySelector(".demo-stamp").getBoundingClientRect().width > 0 &&
@@ -201,38 +200,35 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.deepEqual(redirectTargetBodies, [], "login credentials must not reach the redirect target");
   await redirectPage.close();
 
-  const emptyCatalogPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  let leaderboardRequests = 0;
-  await emptyCatalogPage.route("**/api/public/catalog**", async (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({ groups: [], modules: {} }),
-  }));
-  await emptyCatalogPage.route("**/api/public/leaderboards**", async (route) => {
-    leaderboardRequests += 1;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [] }) });
+  const emptyBoardPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  let catalogRequests = 0;
+  await emptyBoardPage.route("**/api/public/catalog**", async (route) => {
+    catalogRequests += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await emptyCatalogPage.goto(baseUrl);
-  await waitForReady(emptyCatalogPage);
-  assert.match(await emptyCatalogPage.locator("#ranking-status").textContent(), /no cohorts/i);
-  assert.equal(await emptyCatalogPage.locator("#ranking-status").getAttribute("data-state"), "empty");
-  assert.equal(await emptyCatalogPage.locator("#group-filter").isDisabled(), true);
-  assert.equal(await emptyCatalogPage.locator("#group-filter").inputValue(), "");
-  assert.equal(leaderboardRequests, 0, "do not query rankings without a cohort");
-  await emptyCatalogPage.close();
+  await emptyBoardPage.route("**/api/public/leaderboards**", async (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ rows: [], releaseLabel: null, publishedAt: null }),
+  }));
+  await emptyBoardPage.goto(baseUrl);
+  await waitForReady(emptyBoardPage);
+  assert.match(await emptyBoardPage.locator("#ranking-status").textContent(), /no approved standings are published for level 4/i);
+  assert.equal(await emptyBoardPage.locator("#ranking-status").getAttribute("data-state"), "empty");
+  assert.equal(await emptyBoardPage.locator(".podium-zone").isHidden(), true);
+  assert.equal(catalogRequests, 0, "the level-only page never requests the legacy catalog");
+  await emptyBoardPage.close();
 
   const racePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   let levelFourStarted = false;
   await racePage.route("**/api/public/leaderboards**", async (route) => {
     const url = new URL(route.request().url());
     const level = url.searchParams.get("level");
-    if (level === "4") {
+    if (level === "5") {
       levelFourStarted = true;
       await new Promise((resolve) => setTimeout(resolve, 450));
     } else {
       await new Promise((resolve) => setTimeout(resolve, 30));
     }
-    const name = level === "4" ? "Stale Level Four" : "Current Level Six <img src=x onerror=window.__arenaInjected=true>";
+    const name = level === "5" ? "Stale Level Five" : level === "6" ? "Current Level Six <img src=x onerror=window.__arenaInjected=true>" : "Initial Level Four";
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -247,23 +243,15 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
       }),
     });
   });
-  await racePage.route("**/api/public/catalog**", async (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      groups: [{ key: "core", label: "Core module selection" }],
-      modules: { core: [{ key: "module-a", label: "Module A" }] },
-    }),
-  }));
   await racePage.goto(baseUrl);
   await waitForReady(racePage);
   const levelFourRequest = racePage.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname.endsWith("/public/leaderboards") && url.searchParams.get("level") === "4";
+    return url.pathname.endsWith("/public/leaderboards") && url.searchParams.get("level") === "5";
   });
-  await racePage.locator("#level-filter").selectOption("4");
+  await racePage.locator('.level-tabs [data-level="5"]').click();
   await levelFourRequest;
-  await racePage.locator("#level-filter").selectOption("6");
+  await racePage.locator('.level-tabs [data-level="6"]').click();
   await racePage.waitForFunction(() => document.getElementById("name-1").textContent.startsWith("Current Level Six"));
   await new Promise((resolve) => setTimeout(resolve, 500));
   assert.equal(levelFourStarted, true);

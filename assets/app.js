@@ -19,13 +19,9 @@
   });
   const reactionTypes = ["heart", "clap", "fire"];
   const reactionIcons = ["❤️", "👏", "🔥"];
-  const level = $("level-filter");
-  const semester = $("semester-filter");
-  const group = $("group-filter");
-  const module = $("module-filter");
-  const boardState = { kind: "semester", groups: [], modules: {}, selectedCategory: "all" };
+  // V1: one public board per level (4, 5, 6). Semester/module boards are a later version.
+  const boardState = { level: "4" };
   let boardSequence = 0;
-  let catalogSequence = 0;
   let winsSequence = 0;
   let currentPage = "leaderboard";
   let session = { authenticated: false };
@@ -57,83 +53,12 @@
     target.dataset.state = state;
   }
 
-  function updateFilterButtons() {
-    for (const kind of ["semester", "module"]) {
-      const active = boardState.kind === kind;
-      $(`tab-${kind}`).classList.toggle("active", active);
-      $(`tab-${kind}`).setAttribute("aria-pressed", String(active));
-    }
-    $("module-wrap").hidden = boardState.kind !== "module";
-  }
-
-  function currentFilters() {
-    return {
-      level: level.value,
-      semester: semester.value,
-      group: group.value,
-      kind: boardState.kind,
-      module: boardState.kind === "module" ? module.value : "",
-    };
-  }
-
-  function replaceOptions(select, items, previous, placeholder) {
-    select.replaceChildren();
-    if (!items.length) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = placeholder;
-      select.append(option);
-      select.disabled = true;
-      return;
-    }
-    for (const item of items) {
-      const option = document.createElement("option");
-      option.value = item.key;
-      option.textContent = item.label;
-      select.append(option);
-    }
-    select.disabled = false;
-    select.value = items.some((item) => item.key === previous) ? previous : items[0].key;
-  }
-
-  async function loadCatalog() {
-    const sequence = ++catalogSequence;
-    const previousGroup = group.value;
-    const previousModule = module.value;
-    group.disabled = true;
-    module.disabled = true;
-    const result = await api.public.getCatalog({ level: level.value, semester: semester.value });
-    if (sequence !== catalogSequence) return;
-    if (result.state === "unavailable") {
-      boardState.groups = [];
-      boardState.modules = {};
-      replaceOptions(group, [], "", "Cohorts unavailable");
-      replaceOptions(module, [], "", "Modules unavailable");
-      await loadLeaderboard();
-      return;
-    }
-    if (result.state === "empty" || !result.groups.length) {
-      boardState.groups = [];
-      boardState.modules = {};
-      replaceOptions(group, [], "", "No cohorts available");
-      setModules(previousModule);
-      boardSequence += 1;
-      document.querySelector(".podium-zone").hidden = true;
-      document.querySelector(".rank-sheet").hidden = true;
-      $("ranking-rows").replaceChildren();
-      announce("ranking-status", "No cohorts are available for this level and semester yet.", "empty");
-      return;
-    }
-    boardState.groups = result.groups;
-    boardState.modules = result.modules;
-    replaceOptions(group, result.groups, previousGroup, "No cohorts available");
-    setModules(previousModule);
-    await loadLeaderboard();
-  }
-
-  function setModules(previous = "") {
-    const available = boardState.modules[group.value] || [];
-    replaceOptions(module, available, previous, "No modules available");
+  function updateLevelButtons() {
+    document.querySelectorAll(".level-tabs [data-level]").forEach((button) => {
+      const active = button.dataset.level === boardState.level;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
   }
 
   function renderBoard(rows) {
@@ -145,12 +70,8 @@
     sheet.hidden = rows.length < 3;
     if (rows.length < 3) return;
 
-    const selectedModule = (boardState.modules[group.value] || []).find((item) => item.key === module.value);
-    const scope = boardState.kind === "module" ? selectedModule?.label || "Module" : "TOP 3";
-    $("podium-label").textContent = `LEVEL ${level.value} / SEM ${semester.value} / ${scope}`;
-    $("sheet-subtitle").textContent = boardState.kind === "module"
-      ? `${selectedModule?.label || "Module"} · approved top ten`
-      : "Seven more names. One leaderboard.";
+    $("podium-label").textContent = `LEVEL ${boardState.level} / TOP 3`;
+    $("sheet-subtitle").textContent = "Seven more names. One leaderboard.";
     for (let position = 1; position <= 3; position += 1) {
       const row = rows.find((item) => item.position === position);
       const image = $(`art-${position}`);
@@ -195,22 +116,15 @@
     document.querySelector(".rank-sheet").hidden = true;
     $("ranking-rows").replaceChildren();
     announce("ranking-status", "Loading approved standings…", "loading");
-    if (!group.value) {
-      announce("ranking-status", "Standings are temporarily unavailable. Please try again later.", "unavailable");
-      return;
-    }
-    if (boardState.kind === "module" && !module.value) {
-      announce("ranking-status", "No modules are available for this selection.", "empty");
-      return;
-    }
-    const result = await api.public.getLeaderboard(currentFilters());
+    const result = await api.public.getLeaderboard({ level: boardState.level });
     if (sequence !== boardSequence) return;
+    $("leaderboard-subtitle").textContent = `${result.releaseLabel || "Week 5"} · Quiz Leaderboard`;
     if (result.state === "unavailable") {
       announce("ranking-status", "Standings are temporarily unavailable. Please try again later.", "unavailable");
       return;
     }
     if (result.state === "empty" || !result.rows.length) {
-      announce("ranking-status", "No approved standings are available for this selection yet.", "empty");
+      announce("ranking-status", `No approved standings are published for Level ${boardState.level} yet.`, "empty");
       return;
     }
     if (result.rows.length < 3) {
@@ -218,7 +132,7 @@
       return;
     }
     renderBoard(result.rows);
-    announce("ranking-status", "Showing the approved top ten standings.", "ready");
+    announce("ranking-status", `Showing the approved Level ${boardState.level} top ten.`, "ready");
   }
 
   function updateCharacterControls() {
@@ -640,23 +554,12 @@
   }
 
   function bindEvents() {
-    $("tab-semester").addEventListener("click", () => {
-      boardState.kind = "semester";
-      updateFilterButtons();
+    document.querySelectorAll(".level-tabs [data-level]").forEach((button) => button.addEventListener("click", () => {
+      if (boardState.level === button.dataset.level) return;
+      boardState.level = button.dataset.level;
+      updateLevelButtons();
       void loadLeaderboard();
-    });
-    $("tab-module").addEventListener("click", () => {
-      boardState.kind = "module";
-      updateFilterButtons();
-      void loadLeaderboard();
-    });
-    level.addEventListener("change", () => void loadCatalog());
-    semester.addEventListener("change", () => void loadCatalog());
-    group.addEventListener("change", () => {
-      setModules();
-      void loadLeaderboard();
-    });
-    module.addEventListener("change", () => void loadLeaderboard());
+    }));
     document.querySelectorAll(".nav-link").forEach((button) => button.addEventListener("click", () => showPage(button.dataset.page)));
     $("profile-link").addEventListener("click", () => showPage("avatar"));
     $("create-button").addEventListener("click", () => showPage("avatar"));
@@ -768,13 +671,18 @@
   async function start() {
     document.documentElement.dataset.appMode = mode;
     $("mode-stamp").hidden = mode !== "demo";
+    // The hosted staging site only ever holds fictional test data; say so on every page.
+    if (/(^|\.)academic-arena-staging\.pages\.dev$/.test(location.hostname)) {
+      $("mode-stamp").textContent = "STAGING · FICTIONAL TEST DATA";
+      $("mode-stamp").hidden = false;
+    }
     $("approve-demo").hidden = mode !== "demo";
     if (mode === "production") $("save-note").textContent = "Your character is private to your account. Staff-issued sign-in is required to save changes.";
     createPickerOptions();
     renderStudio();
-    updateFilterButtons();
+    updateLevelButtons();
     bindEvents();
-    await Promise.all([loadCatalog(), loadWins(), renderSession(), loadSavedCharacter()]);
+    await Promise.all([loadLeaderboard(), loadWins(), renderSession(), loadSavedCharacter()]);
     document.documentElement.dataset.appReady = "true";
   }
 

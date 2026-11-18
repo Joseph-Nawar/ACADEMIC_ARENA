@@ -1,24 +1,31 @@
-level,semester,cohort_key,cohort_label,board_kind,module_key,module_label,rank,public_name,avatar_key,avatar_family
-5,1,core,Core cohort,semester,,,1,Laila Farouk,mariam,ink
-5,1,core,Core cohort,semester,,,2,Karim Saad,omar,cartoon3d
-5,1,core,Core cohort,semester,,,3,Nadia Ezz,amara,ink
-5,1,core,Core cohort,semester,,,4,Hany Fathy,tariq,cartoon3d
-5,1,core,Core cohort,semester,,,5,Rana Adel,habiba2,ink
-5,1,core,Core cohort,semester,,,6,Tamer Lotfy,malek,cartoon3d
-5,1,core,Core cohort,semester,,,7,Salma Wahba,nour2,ink
-5,1,core,Core cohort,semester,,,8,Youssef Nabil,youssef,cartoon3d
-5,1,core,Core cohort,semester,,,9,Mona Rizk,zein,ink
-5,1,core,Core cohort,semester,,,10,Adam Sherif,mariam,cartoon3d
-5,1,core,Core cohort,module,cm2005,Object-oriented programming,1,Hany Fathy,tariq,cartoon3d
-5,1,core,Core cohort,module,cm2005,Object-oriented programming,2,Rana Adel,habiba2,ink
-5,1,core,Core cohort,module,cm2005,Object-oriented programming,3,Tamer Lotfy,malek,cartoon3d
-5,1,core,Core cohort,module,cm2005,Object-oriented programming,4,Salma Wahba,nour2,ink
-5,1,core,Core cohort,module,cm2005,Object-oriented programming,5,Youssef Nabil,youssef,cartoon3d
-5,1,core,Core cohort,module,cm2010,Software design,1,Salma Wahba,nour2,ink
-5,1,core,Core cohort,module,cm2010,Software design,2,Youssef Nabil,youssef,cartoon3d
-5,1,core,Core cohort,module,cm2010,Software design,3,Mona Rizk,zein,ink
-5,1,core,Core cohort,module,cm2010,Software design,4,Adam Sherif,mariam,cartoon3d
-5,1,core,Core cohort,module,cm2010,Software design,5,Dina Kamel,omar,ink
-4,1,foundation,Foundation cohort,module,cm1005,Introduction to programming,1,Nadia Ezz,amara,ink
-4,1,foundation,Foundation cohort,module,cm1005,Introduction to programming,2,Hany Fathy,tariq,cartoon3d
-4,1,foundation,Foundation cohort,module,cm1005,Introduction to programming,3,Rana Adel,habiba2,ink
+level,rank,public_name
+4,1,Laila Farouk
+4,2,Karim Fathy
+4,3,Nadia Wahba
+4,4,Hany Sherif
+4,5,Rana Ezz
+4,6,Tamer Lotfy
+4,7,Salma Rizk
+4,8,Youssef Saad
+4,9,Mona Adel
+4,10,Adam Nabil
+5,1,Hany Saad
+5,2,Rana Adel
+5,3,Tamer Nabil
+5,4,Salma Farouk
+5,5,Youssef Fathy
+5,6,Mona Wahba
+5,7,Adam Sherif
+5,8,Dina Ezz
+5,9,Fady Lotfy
+5,10,Laila Rizk
+6,1,Salma Ezz
+6,2,Youssef Lotfy
+6,3,Mona Rizk
+6,4,Adam Saad
+6,5,Dina Adel
+6,6,Fady Nabil
+6,7,Laila Farouk
+6,8,Karim Fathy
+6,9,Nadia Wahba
+6,10,Hany Sherif
