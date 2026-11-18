@@ -219,3 +219,119 @@ export function diffBoards(liveRows, nextRows) {
   }
   return { added, changed, removed, unchanged };
 }
+
+// ---------------------------------------------------------------------------
+// V1 level-only format: exactly `level,rank,public_name`, 10 ranks for each of
+// Levels 4, 5, and 6. Names keep their spelling and capitalization; only NFC
+// normalization and whitespace collapsing are applied.
+export const LEVEL_COLUMNS = Object.freeze(["level", "rank", "public_name"]);
+export const LEVELS = Object.freeze([4, 5, 6]);
+// A name is letters (each with at most 3 combining marks) joined by spaces,
+// periods, apostrophes, or hyphens; starts with a letter; at most 80 characters.
+const LEVEL_NAME_PATTERN = /^\p{L}\p{M}{0,3}(?:[ .'’-]{0,2}\p{L}\p{M}{0,3})*\.?$/u;
+// Invisible "letters" and selectors that would render blank or defeat duplicate checks.
+const INVISIBLE = /[\u115F\u1160\u3164\uFFA0\u034F\u17B4\u17B5\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}\u200B-\u200F\u2060-\u2064\u202A-\u202E\u2066-\u2069]/u;
+const SCRIPTS = [/\p{Script=Latin}/u, /\p{Script=Cyrillic}/u, /\p{Script=Greek}/u];
+
+function safeLevelName(name) {
+  if (name.length > 80 || INVISIBLE.test(name) || name !== name.normalize("NFKC") || !LEVEL_NAME_PATTERN.test(name)) return false;
+  // Mixing look-alike alphabets (e.g. Latin with Cyrillic) is how spoofed duplicates are made.
+  return SCRIPTS.filter((script) => script.test(name)).length <= 1;
+}
+
+export function nameKey(name) {
+  return name.normalize("NFKC").toLowerCase();
+}
+const MAX_LEVEL_CSV_BYTES = 16 * 1024;
+
+export function validReleaseLabel(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/u.test(value);
+}
+
+export function parseLevelCsv(text) {
+  const errors = [];
+  const fail = (line, message) => {
+    if (errors.length < MAX_ERRORS) errors.push({ line, message });
+  };
+  if (typeof text !== "string" || text.length === 0) return { ok: false, errors: [{ line: 0, message: "The file is empty." }] };
+  if (new TextEncoder().encode(text).byteLength > MAX_LEVEL_CSV_BYTES) {
+    return { ok: false, errors: [{ line: 0, message: "The file is larger than 16 KB." }] };
+  }
+  const lines = text.replace(/^﻿/u, "").split(/\r?\n/u);
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  const header = (lines[0] || "").split(",").map((name) => name.trim().toLowerCase());
+  if (header.length !== LEVEL_COLUMNS.length || header.some((name, index) => name !== LEVEL_COLUMNS[index])) {
+    return { ok: false, errors: [{ line: 1, message: `The header must be exactly: ${LEVEL_COLUMNS.join(",")}` }] };
+  }
+  if (lines.length - 1 !== 30) {
+    return { ok: false, errors: [{ line: 0, message: `Expected exactly 30 rows (10 per level), found ${Math.max(0, lines.length - 1)}.` }] };
+  }
+
+  const rows = [];
+  for (let index = 1; index < lines.length; index += 1) {
+    const lineNumber = index + 1;
+    const fields = splitFields(lines[index]);
+    if (fields.length !== 3) {
+      fail(lineNumber, `Expected 3 values, found ${fields.length}.`);
+      continue;
+    }
+    if (fields.some((field) => field.error)) {
+      fail(lineNumber, "Quotes are not allowed inside values.");
+      continue;
+    }
+    const [levelText, rankText, rawName] = fields.map((field) => field.value);
+    if (fields.some((field) => field.value.length > MAX_FIELD_LENGTH || FORBIDDEN.test(field.value))) {
+      fail(lineNumber, "Contains characters or length that are not allowed.");
+      continue;
+    }
+    const level = clean(levelText);
+    const rank = clean(rankText);
+    const name = clean(rawName);
+    let valid = true;
+    if (!["4", "5", "6"].includes(level)) { fail(lineNumber, "level must be 4, 5, or 6."); valid = false; }
+    if (!/^(10|[1-9])$/u.test(rank)) { fail(lineNumber, "rank must be a whole number from 1 to 10."); valid = false; }
+    if (!safeLevelName(name)) {
+      fail(lineNumber, "public_name must be a plain name of letters, spaces, apostrophes, hyphens, or periods (max 80; no hidden or look-alike characters).");
+      valid = false;
+    }
+    if (valid) rows.push({ level: Number(level), position: Number(rank), public_name: name, line: lineNumber });
+  }
+  if (errors.length) return { ok: false, errors };
+
+  for (const level of LEVELS) {
+    const levelRows = rows.filter((row) => row.level === level);
+    const positions = new Set();
+    const names = new Set();
+    for (const row of levelRows) {
+      if (positions.has(row.position)) fail(row.line, `Duplicate rank ${row.position} in Level ${level}.`);
+      const normalized = nameKey(row.public_name);
+      if (names.has(normalized)) fail(row.line, `This name already appears in Level ${level}; add an approved disambiguator (e.g. an initial).`);
+      positions.add(row.position);
+      names.add(normalized);
+    }
+    if (levelRows.length !== 10) fail(0, `Level ${level} must have exactly 10 rows; found ${levelRows.length}.`);
+    else if (positions.size === 10 && [...positions].some((position) => position < 1 || position > 10)) {
+      fail(0, `Level ${level} must use ranks 1 to 10.`);
+    }
+  }
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, rows: rows.map(({ line, ...row }) => row) };
+}
+
+// Preview: per level and rank, which names are added, changed, or removed.
+export function diffLevels(liveRows, nextRows) {
+  const key = (row) => `${row.level}|${row.position}`;
+  const live = new Map(liveRows.map((row) => [key(row), row.public_name]));
+  const next = new Map(nextRows.map((row) => [key(row), row.public_name]));
+  const levels = LEVELS.map((level) => {
+    const changes = [];
+    for (let position = 1; position <= 10; position += 1) {
+      const before = live.get(`${level}|${position}`) ?? null;
+      const after = next.get(`${level}|${position}`) ?? null;
+      if (before === after) continue;
+      changes.push({ position, change: before === null ? "added" : after === null ? "removed" : "changed", before, after });
+    }
+    return { level, changes };
+  });
+  return { levels, unchanged: levels.every((level) => level.changes.length === 0) };
+}

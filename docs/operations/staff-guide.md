@@ -11,30 +11,32 @@ The **Staff Desk** appears in the menu only after this verification.
 Roles: **publisher** (rankings), **moderator** (Campus Wins), **admin** (both,
 plus approved public names).
 
-## Publishing rankings
+## Publishing rankings (V1: Level 4 / 5 / 6 · Top 10)
 
-1. Prepare the CSV from `data/ranking-upload.template.csv`. Columns, exactly in
-   this order:
-   `level,semester,cohort_key,cohort_label,board_kind,module_key,module_label,rank,public_name,avatar_key,avatar_family`
-   - `level` 4/5/6, `semester` 1/2, `board_kind` `semester` or `module`.
-   - `cohort_key`/`module_key`: lowercase identifiers (`core`, `cm2005`);
-     leave both module columns empty for semester boards.
-   - `rank` 1–10, no gaps or duplicates per board; each student once per board.
-   - `public_name`: the university-approved display name only.
-   - `avatar_key`: omar, mariam, youssef, amara, tariq, habiba2, malek, nour2,
-     zein; `avatar_family`: `ink` (Comic) or `cartoon3d` (3D Cartoon).
-   - **Never include** grades, scores, attendance, student IDs, emails, or
-     extra columns — the upload is rejected.
-   - Only include a semester-wide board if it was explicitly provided and
-     approved; the site never computes one.
-2. Staff Desk → enter the academic year (e.g. `2026-27`) → choose the file →
-   **Validate & preview**. Fix any listed line errors and upload again.
-3. Read the preview: new boards, changed positions, and boards that **will be
-   removed** from public view (any board not in this file disappears).
-4. **Publish this version**. The whole file goes live at once.
+1. Prepare a CSV with exactly this header and 30 rows (ten ranks for each of
+   Levels 4, 5, and 6). Copy the empty template from `data/ranking-upload.template.csv`:
+   `level,rank,public_name`
+   - `rank` is 1–10 per level, with no gaps or duplicates. Each name may appear only once per level.
+   - `public_name` is the university-approved display name. Spelling and
+     capitalization are kept exactly; extra spaces are trimmed.
+   - **Never include** scores, quiz counts, attendance, student IDs, emails, or
+     extra columns. The upload is rejected if you do.
+   - Two students with the same name in one level must be disambiguated
+     (for example with an approved initial). Names with hidden characters,
+     look-alike letters from mixed alphabets, or fullwidth forms are rejected.
+   - The site does not recalculate rankings. Ranks are shown exactly as uploaded.
+   - Keep real files on your own device. Never put them in the repository or
+     on the staging site.
+2. Staff Desk → enter the academic year (e.g. `2026-27`) and the release label
+   (e.g. `Week 5`) → choose the file → **Validate & preview**. Fix any listed
+   line errors and upload again.
+3. Read the preview. It lists, by level and rank, each name that is new,
+   changed, or removed compared with the live version.
+4. Click **Publish this version**. All three levels go live together.
+   Characters on the board are assigned by rank only, never from a name.
 
-Each upload replaces the previous unpublished draft (one active draft at a
-time; coordinate if two publishers work together).
+Each upload replaces the previous unpublished draft. Only one draft is kept at a
+time, so coordinate if two publishers are working.
 
 ## Correcting rankings
 

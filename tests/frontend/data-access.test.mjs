@@ -33,28 +33,18 @@ test("public_board_query_encodes_all_filters_and_allowlists_rows", async () => {
     },
   });
 
-  const result = await api.public.getLeaderboard({
-    level: "6",
-    semester: "2",
-    group: "advanced track",
-    kind: "module",
-    module: "CS/415",
-  });
+  const result = await api.public.getLeaderboard({ level: "6", semester: "2", module: "ignored" });
 
   assert.equal(observed.url.pathname, "/api/public/leaderboards");
-  assert.deepEqual(Object.fromEntries(observed.url.searchParams), {
-    level: "6",
-    semester: "2",
-    group: "advanced track",
-    kind: "module",
-    module: "CS/415",
-  });
+  assert.deepEqual(Object.fromEntries(observed.url.searchParams), { level: "6" }, "only the level is sent");
   assert.equal(observed.options.credentials, "same-origin");
   assert.deepEqual(result, {
     state: "ok",
     publishedAt: null,
+    releaseLabel: null,
     rows: [{ position: 1, name: "Fictional Student", avatar: "amara", style: "cartoon3d" }],
   });
+  await assert.rejects(api.public.getLeaderboard({ level: "7" }), /valid level/u, "unknown levels are rejected client-side");
 });
 
 test("production_failure_never_falls_back_to_fixture", async () => {
@@ -67,17 +57,11 @@ test("production_failure_never_falls_back_to_fixture", async () => {
     },
   });
 
-  const result = await api.public.getLeaderboard({
-    level: "5",
-    semester: "1",
-    group: "core",
-    kind: "semester",
-    module: "",
-  });
+  const result = await api.public.getLeaderboard({ level: "5" });
 
   assert.equal(result.state, "unavailable");
   assert.deepEqual(result.rows, []);
-  assert.deepEqual(requests, ["/api/public/leaderboards?level=5&semester=1&group=core&kind=semester&module="]);
+  assert.deepEqual(requests, ["/api/public/leaderboards?level=5"]);
 });
 
 test("missing_runtime_config_defaults_to_production_without_loading_fixtures", async () => {
@@ -91,9 +75,7 @@ test("missing_runtime_config_defaults_to_production_without_loading_fixtures", a
         throw new Error("backend unavailable");
       },
     });
-    const result = await api.public.getLeaderboard({
-      level: "5", semester: "1", group: "core", kind: "semester", module: "",
-    });
+    const result = await api.public.getLeaderboard({ level: "5" });
     assert.equal(api.mode, "production");
     assert.equal(result.state, "unavailable");
     assert.equal(requests.every((url) => url.startsWith("/api/")), true);
@@ -108,11 +90,9 @@ test("empty_public_responses_are_distinct_from_backend_unavailability", async ()
     mode: "production",
     fetchImpl: async () => response({ rows: [], posts: [] }),
   });
-  const board = await api.public.getLeaderboard({
-    level: "5", semester: "1", group: "core", kind: "semester", module: "",
-  });
+  const board = await api.public.getLeaderboard({ level: "5" });
   const wins = await api.public.getWins("all");
-  assert.deepEqual(board, { state: "empty", publishedAt: null, rows: [] });
+  assert.deepEqual(board, { state: "empty", publishedAt: null, releaseLabel: null, rows: [] });
   assert.deepEqual(wins, { state: "empty", posts: [] });
 });
 
@@ -129,9 +109,7 @@ test("empty_catalog_is_distinct_from_unavailable_and_malformed_api_responses", a
     fetchImpl: async () => response({}),
   });
   const catalog = await malformedApi.public.getCatalog({ level: "5", semester: "1" });
-  const board = await malformedApi.public.getLeaderboard({
-    level: "5", semester: "1", group: "core", kind: "semester", module: "",
-  });
+  const board = await malformedApi.public.getLeaderboard({ level: "5" });
   const wins = await malformedApi.public.getWins("all");
   assert.equal(catalog.state, "unavailable");
   assert.equal(board.state, "unavailable");
@@ -354,21 +332,20 @@ test("demo_avatar_settings_are_owned_by_the_current_preview_account", async () =
   assert.deepEqual(await api.student.getMyCharacter(), avatar);
 });
 
-test("demo_leaderboard_fixture_changes_with_level_semester_and_module_filters", async () => {
+test("demo_leaderboard_fixture_changes_only_with_level", async () => {
   const api = createArenaDataAccess({ mode: "demo", hostname: "127.0.0.1", fetchImpl: async () => response(demoFixture) });
-  const filters = { level: "5", semester: "1", group: "core", kind: "semester", module: "" };
-  const names = async (overrides = {}) => (await api.public.getLeaderboard({ ...filters, ...overrides }))
-    .rows.map((row) => row.name).join(",");
-  const baseline = await names();
-  const variants = [
-    await names({ level: "4" }),
-    await names({ level: "6" }),
-    await names({ semester: "2" }),
-    await names({ kind: "module", module: "module-a" }),
-    await names({ kind: "module", module: "module-b" }),
-    await names({ kind: "module", module: "module-c" }),
-  ];
-  assert.equal(new Set([baseline, ...variants]).size, 7);
+  const names = async (level) => (await api.public.getLeaderboard({ level })).rows.map((row) => row.name).join(",");
+  const boards = [await names("4"), await names("5"), await names("6")];
+  assert.equal(new Set(boards).size, 3, "each level shows a different board");
+  assert.equal(await names("4"), boards[0], "the same level is stable");
+});
+
+test("production_level_board_rejects_oversized_or_malformed_rows", async () => {
+  const rows = Array.from({ length: 11 }, (_, index) => ({ position: (index % 10) + 1, name: "Fictional Person", avatar: "omar", style: "ink" }));
+  const tooMany = createArenaDataAccess({ mode: "production", fetchImpl: async () => response({ rows }) });
+  assert.equal((await tooMany.public.getLeaderboard({ level: "4" })).state, "unavailable");
+  const badLabel = createArenaDataAccess({ mode: "production", fetchImpl: async () => response({ rows: rows.slice(0, 1), releaseLabel: "<b>x</b>" }) });
+  assert.equal((await badLabel.public.getLeaderboard({ level: "4" })).releaseLabel, null);
 });
 
 test("demo_reactions_toggle_one_active_reaction_and_update_counts", async () => {
@@ -413,9 +390,7 @@ test("demo_runtime_mode_is_disabled_outside_loopback_hosts", async () => {
     },
   });
   assert.equal(api.mode, "production");
-  const result = await api.public.getLeaderboard({
-    level: "5", semester: "1", group: "core", kind: "semester", module: "",
-  });
+  const result = await api.public.getLeaderboard({ level: "5" });
   assert.equal(result.state, "unavailable");
   assert.equal(requests.every((url) => url.startsWith("/api/")), true);
   assert.equal(requests.some((url) => url.includes("fixtures/demo")), false);

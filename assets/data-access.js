@@ -103,17 +103,13 @@
     return { authenticated: true, user };
   }
 
+  // V1 public boards are level-only: Level 4, 5, or 6.
   function validFilters(filters = {}) {
     const level = String(filters.level || "");
-    const semester = String(filters.semester || "");
-    const group = text(filters.group);
-    const kind = filters.kind;
-    const module = text(filters.module);
-    if (!["4", "5", "6"].includes(level) || !["1", "2"].includes(semester) || !group ||
-        !["semester", "module"].includes(kind) || (kind === "module" && !module)) {
-      throw new ArenaDataError("Choose a valid leaderboard.", "invalid_filters");
+    if (!["4", "5", "6"].includes(level)) {
+      throw new ArenaDataError("Choose a valid level.", "invalid_filters");
     }
-    return { level, semester, group, kind, module: kind === "module" ? module : "" };
+    return { level };
   }
 
   function copyCounts(counts) {
@@ -229,8 +225,7 @@
     }
 
     function demoRows(students, filters) {
-      if (filters.level === "5" && filters.semester === "1" && filters.group === "core" &&
-          filters.kind === "semester") {
+      if (filters.level === "4") {
         return students.slice(0, 10).map((student, index) => sanitizeBoardRow({
           position: index + 1,
           name: student.name,
@@ -238,7 +233,7 @@
           style: student.style,
         })).filter(Boolean);
       }
-      const scope = [filters.level, filters.semester, filters.group, filters.kind, filters.module].join("|");
+      const scope = "level|" + filters.level;
       function score(student) {
         let value = 2166136261;
         for (const character of scope + "|" + student.avatar) {
@@ -311,27 +306,30 @@
             const fixture = await loadFixture();
             const rows = demoRows(fixture.students, filters);
             return rows.length
-              ? { state: "ok", publishedAt: fixture.publishedAt || null, rows }
-              : { state: "empty", publishedAt: null, rows: [] };
+              ? { state: "ok", publishedAt: fixture.publishedAt || null, releaseLabel: "Fictional demo", rows }
+              : { state: "empty", publishedAt: null, releaseLabel: null, rows: [] };
           } catch {
-            return { state: "unavailable", publishedAt: null, rows: [] };
+            return { state: "unavailable", publishedAt: null, releaseLabel: null, rows: [] };
           }
         }
+        const unavailable = { state: "unavailable", publishedAt: null, releaseLabel: null, rows: [] };
         const query = new URLSearchParams(filters);
         try {
           const payload = await request("GET", "/public/leaderboards?" + query.toString());
-          if (!payload || typeof payload !== "object" || !Array.isArray(payload.rows)) {
-            return { state: "unavailable", publishedAt: null, rows: [] };
+          if (!payload || typeof payload !== "object" || !Array.isArray(payload.rows) || payload.rows.length > 10) {
+            return unavailable;
           }
           const rows = payload.rows.map(sanitizeBoardRow).filter(Boolean);
-          if (rows.length !== payload.rows.length) return { state: "unavailable", publishedAt: null, rows: [] };
+          if (rows.length !== payload.rows.length) return unavailable;
+          const label = text(payload.releaseLabel);
           return {
             state: rows.length ? "ok" : "empty",
             publishedAt: text(payload.publishedAt) || null,
+            releaseLabel: /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/.test(label) ? label : null,
             rows,
           };
         } catch {
-          return { state: "unavailable", publishedAt: null, rows: [] };
+          return unavailable;
         }
       },
 
@@ -514,12 +512,12 @@
     };
 
     const staff = {
-      async uploadRankings(academicYear, csv) {
+      async uploadRankings(academicYear, releaseLabel, csv) {
         if (mode === "demo") throw new ArenaDataError("Staff publishing is unavailable in the fictional preview.", "unauthorized");
-        if (typeof academicYear !== "string" || typeof csv !== "string" || csv.length > 262144) {
-          throw new ArenaDataError("Choose a CSV file of at most 256 KB.", "invalid_upload");
+        if (typeof academicYear !== "string" || typeof releaseLabel !== "string" || typeof csv !== "string" || csv.length > 16384) {
+          throw new ArenaDataError("Choose a CSV file of at most 16 KB.", "invalid_upload");
         }
-        return request("POST", "/staff/leaderboards/drafts", { academicYear, csv });
+        return request("POST", "/staff/leaderboards/drafts", { academicYear, releaseLabel, csv });
       },
       async publicationHistory() {
         if (mode === "demo") return [];
