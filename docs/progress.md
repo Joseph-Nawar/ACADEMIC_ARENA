@@ -2,28 +2,52 @@
 
 Keep short. Newest first.
 
-## 2026-11-18 — V1.2 released (PRs #10, #11, #12)
+## 2026-11-18 — V1.2 release gates (PR #14)
 
-- Both sites run `main`. Staging is migrated (12), and the fictional student flow passed 27/27 there. Production keeps the Week 5 boards unchanged; its V1.2 migration waits for the owner's encrypted backup.
-- Known flake: `v12-student-accounts` once hung in CI ("Promise resolution is still pending") and passed on rerun.
-- **Owner checklist for the controlled student rollout:**
-  1. **Authorizations, in writing:** the university approves processing the student roster and institutional emails in Supabase (EU) and the Academic Arena username scheme, and names the approved channel for credential delivery and identity verification. Required before step 4.
-  2. **Production backup, then migration.** On a network where Postgres works, run
-     `npx supabase link --project-ref jhukafyrdredfkzyzggw && scripts/db-backup.sh export linked /secure/offsite/academic-arena-$(date +%F).aabk`
-     (you choose the passphrase). Then run `node scripts/hosted-sql.mjs jhukafyrdredfkzyzggw migrate` and expect `applied 202611190001…`. All switches remain off.
-  3. **Staging admin rehearsal (optional, about 5 minutes):**
-     - sign in to staging as the staging admin;
-     - publish `data/ranking-upload.example.csv`;
-     - in Verified account links, link `4,1,<a staging test username>` (I can supply one);
-     - check the personalized avatar;
-     - withdraw.
-  4. **Pilot:** keep the private roster on the operator device, with columns `roster_ref,email,username,eligible`. Then:
-     - turn on `student_provisioning`, then `student_sign_in` (`features --set … --confirm-production`);
-     - provision 3–5 pilot students and deliver credentials one at a time (`docs/operations/student-accounts.md`);
-     - link them in Staff Desk, then turn on `avatar_personalization`;
-     - check opt-in and opt-out on the live board.
-  5. **Broad activation:** run roster batches of 25 or fewer, then turn on `welcome_dialog`. The incident switch is `student_sign_in=off`.
-  6. **Artwork:** commission the inclusive character set described in `docs/design/avatar-library.md`. No new art ships until it passes review.
+V1.2 shipped in PRs #10–#13. Both sites run `main`. Known CI flake: `v12-student-accounts` once hung ("Promise resolution is still pending") and passed on rerun. Older owner checklists further down are superseded by the one below.
+
+- **Hosted staging gate passed** with fictional data and the owner's AAL2 admin. Covered: private link approval, opt-in avatar at the correct position, change and opt-out without republishing, per-version links and rollback. Staging is withdrawn (0 live), and its student switches stay on for fictional testing.
+- **Production unchanged** (read-only check). The DB rows, public API and approved Week 5 file share one hash. There are no V1.2 tables, so every student feature is off.
+- **Backup route:**
+  - The direct host is IPv6-only. The CLI's linked dump uses the IPv4 session pooler (`aws-1-eu-west-1:5432`) with a temporary login role, so no password is needed.
+  - The earlier resets were this network's DNS (SERVFAIL for `api.supabase.com`).
+  - A staging drill (export, then restore into a local stack) matched all counts. It found `student_feature_controls` missing from the backup exclusions, which is now fixed and guarded by a test.
+  - New: `scripts/backup-preflight.mjs`.
+- **Artwork:** `docs/design/avatar-artwork-spec.md`, enforced by `tests/frontend/avatar-assets.test.mjs`. The inclusive library is **not** complete; there is still no new art.
+- **Review fixes:**
+  - the legacy CSV importer now shares the character allowlist;
+  - the constraint lists are tested;
+  - the password fallback is scoped to a subshell;
+  - the preflight checks that the pooler URL belongs to the project;
+  - pending credential-sync rows are excluded from backups.
+
+### Owner checklist (the only remaining steps before real student accounts)
+
+1. **University authorization, in writing:**
+   - processing the student roster and institutional emails in Supabase (EU region);
+   - the username scheme;
+   - the approved private channel for verifying identity and delivering credentials;
+   - public display of the linked students' chosen characters.
+2. **Production backup.** On a network where `node scripts/backup-preflight.mjs jhukafyrdredfkzyzggw` prints *Ready*:
+   ```bash
+   npx supabase link --project-ref jhukafyrdredfkzyzggw
+   node scripts/backup-preflight.mjs jhukafyrdredfkzyzggw
+   scripts/db-backup.sh export linked /secure/offsite/academic-arena-$(date +%F).aabk   # you type the passphrase
+   npx supabase link --project-ref cynfnxlbmthjxgivllkg
+   ```
+   Then copy the `.aabk` and `.sha256` files offsite. Keep the passphrase only in your password manager.
+3. **Production migration**, only after step 2. Expect `applied 202611190001…`; every student switch is created off:
+   ```bash
+   node scripts/hosted-sql.mjs jhukafyrdredfkzyzggw migrate
+   ```
+4. **Pilot**, only after step 1:
+   - turn on `student_provisioning` and `student_sign_in` (`features --set … --confirm-production`);
+   - provision 3–5 pilot students from the private roster on your device, and deliver credentials one at a time;
+   - link them in Staff Desk, then turn on `avatar_personalization`;
+   - check opt-in and opt-out;
+   - runbook: `docs/operations/student-accounts.md`.
+5. **Broad activation:** roster batches of 25 or fewer, then `welcome_dialog`. The incident switch is `student_sign_in=off`.
+6. **Artwork:** commission the inclusive set per `docs/design/avatar-artwork-spec.md`. It ships only after the integration tests and a visual review pass.
 
 ## 2026-11-18 — V1.2 Phase B: student account foundation (all switches off)
 

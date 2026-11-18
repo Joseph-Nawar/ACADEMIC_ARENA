@@ -19,8 +19,20 @@ rate-limit buckets are excluded, so restored users simply sign in again.
 
 ```bash
 npx supabase link --project-ref <prod-ref>
+node scripts/backup-preflight.mjs <prod-ref>      # credential-free; must print "Ready"
 scripts/db-backup.sh export linked /secure/offsite/academic-arena-$(date +%F).aabk
+npx supabase link --project-ref cynfnxlbmthjxgivllkg   # relink staging afterwards
 ```
+
+### Connection route (verified 18 Nov 2026)
+
+- The direct database host `db.<ref>.supabase.co` is **IPv6-only** on Supabase Free. This network has no IPv6, so it can't be used.
+- `supabase db dump --linked` instead uses the **session-mode pooler** saved by `supabase link` (`aws-1-<region>.pooler.supabase.com:5432`, IPv4). It authenticates with a temporary login role minted through the Management API, so no database password is typed or stored. This is the official route and needs no SQL workaround.
+- The earlier "connection reset" failures came from this network's DNS resolver, which intermittently returns SERVFAIL for `api.supabase.com`; the pooler itself was reachable. `backup-preflight.mjs` checks DNS, the Management API, pooler TCP + TLS, the linked ref and Docker. If DNS fails, retry later or use another network. Do not change the backup script.
+- If the login-role step still fails while DNS works, the supported fallback is the database password, scoped to one subshell so it never lingers. Never pass it as an argument:
+  `( read -rs SUPABASE_DB_PASSWORD && export SUPABASE_DB_PASSWORD && scripts/db-backup.sh export linked /secure/offsite/academic-arena-$(date +%F).aabk )`
+
+Excluded seeded tables (`role_permissions`, `runtime_controls`, `student_feature_controls`) keep the target project's values. After a restore, every student switch is therefore **off** until you re-enable it deliberately.
 
 Copy the `.aabk` and `.aabk.sha256` to an institution-approved offsite
 location (for example an encrypted university drive). Keep at least 4 weekly
@@ -45,9 +57,11 @@ and 3 monthly copies; delete older ones per the approved retention period.
           (select count(*) from app_private.accounts) accounts,
           (select version_number from public.published_leaderboard_snapshots where is_current) live,
           (select count(*) from public.campus_wins_public) wins,
-          (select allow_fictional_account_lifecycle from app_private.runtime_controls) lifecycle_gate;
+          (select allow_fictional_account_lifecycle from app_private.runtime_controls) lifecycle_gate,
+          (select student_sign_in or student_provisioning or avatar_personalization or welcome_dialog
+             from app_private.student_feature_controls) switches_on;
    ```
-   Compare with the counts recorded at export time; `lifecycle_gate` must be `false`.
+   Compare with the counts recorded at export time; `lifecycle_gate` and `switches_on` must be `false`.
 5. Point the Pages environment at the new project (`SUPABASE_URL` and
    `configure-pages-secrets.sh`), redeploy, and sign in with a staff account.
    Rotating `SESSION_JWE_KEY` here signs everyone out, which is intended.
@@ -56,8 +70,8 @@ Excluded by design: live credentials and transient state (`auth.refresh_tokens`,
 `auth.sessions`, `auth.mfa_amr_claims`, `auth.mfa_challenges`,
 `auth.one_time_tokens`, `auth.flow_state`, `auth.saml_relay_states`,
 `auth.audit_log_entries`, `app_private.bff_sessions`,
-`app_private.login_rate_limit_buckets`) and tables recreated by migrations
-(`auth.schema_migrations`, `app_private.role_permissions`,
+`app_private.login_rate_limit_buckets`, `app_private.credential_sync_operations`) and tables recreated by migrations
+(`auth.schema_migrations`, `app_private.role_permissions`, `app_private.student_feature_controls`,
 `app_private.runtime_controls`, so the lifecycle gate stays off). MFA factors
 are included, so staff keep their authenticators.
 
@@ -77,3 +91,11 @@ are included, so staff keep their authenticators.
 Re-check the exclusion list whenever the Supabase CLI/Auth version changes
 (new `auth.*` token tables must be excluded). Repeat the drill against the hosted staging project after the first hosted
 deployment, and once per term.
+
+## Hosted drill — 18 Nov 2026 (staging, fictional data)
+
+- Ran `db-backup.sh export linked` against staging over the IPv4 session pooler.
+- Restored the encrypted file into a freshly migrated local stack with `restore local`.
+- All counts matched: 3 users, 1 MFA factor, 3 accounts, 32 audit events, 2 versions, 60 level rows, 2 avatars.
+- The drill found that `student_feature_controls` (seeded by migration 202611190001) was missing from the exclusions, so restores failed. It is now excluded, and a unit test checks every migration-seeded table.
+- Drill files were deleted afterwards.
