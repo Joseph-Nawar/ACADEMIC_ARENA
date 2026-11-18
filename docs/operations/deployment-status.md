@@ -1,4 +1,4 @@
-# Deployment status — 17 November 2026
+# Deployment status — 18 November 2026 (V1 level-only release)
 
 ## URLs
 
@@ -11,6 +11,25 @@ Both run the `npm run build:production` output with Pages Functions. Each
 project has its own 6 encrypted settings, loaded with
 `scripts/configure-pages-secrets.sh`. Preview deployments get no secrets and
 fail closed.
+
+## V1 level-only release (18 Nov 2026)
+
+- PR #7 was merged as `b5921df`. Both Pages projects are deployed from it.
+- Public page: LEVEL CHAMPIONS · Quiz Leaderboard · Level 4/5/6 tabs (default
+  Level 4). There are no semester, cohort, or module controls. The staging host
+  shows a "STAGING · FICTIONAL TEST DATA" stamp; production does not.
+- API: `GET /api/public/leaderboards?level=4|5|6`.
+  - Any other level or extra parameter returns 400.
+  - The legacy `/api/public/catalog` route was removed and returns 404.
+  - Hosted reads return 503 until the database is migrated.
+- Checked in the browser on both hosts at 390px: no horizontal overflow, the
+  level tabs work, and the empty/unavailable states are honest.
+- Migration `202611180001_level_only_leaderboards.sql` is not yet applied to
+  either hosted database (the same network block as before). Both need the
+  owner's keychain-approved command in `docs/progress.md`.
+- The real Week 5 CSV passes the importer locally (30 rows, 10/10/10). It has
+  not been uploaded anywhere. Publishing it needs the university's written
+  disclosure approval and a verified staff account.
 
 ## Hosted checks performed (17 Nov 2026)
 
