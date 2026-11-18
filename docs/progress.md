@@ -2,6 +2,29 @@
 
 Keep short. Newest first.
 
+## 2026-11-18 — V1.2 released (PRs #10, #11, #12)
+
+- Both sites run `main`. Staging is migrated (12), and the fictional student flow passed 27/27 there. Production keeps the Week 5 boards unchanged; its V1.2 migration waits for the owner's encrypted backup.
+- Known flake: `v12-student-accounts` once hung in CI ("Promise resolution is still pending") and passed on rerun.
+- **Owner checklist for the controlled student rollout:**
+  1. **Authorizations, in writing:** the university approves processing the student roster and institutional emails in Supabase (EU) and the Academic Arena username scheme, and names the approved channel for credential delivery and identity verification. Required before step 4.
+  2. **Production backup, then migration.** On a network where Postgres works, run
+     `npx supabase link --project-ref jhukafyrdredfkzyzggw && scripts/db-backup.sh export linked /secure/offsite/academic-arena-$(date +%F).aabk`
+     (you choose the passphrase). Then run `node scripts/hosted-sql.mjs jhukafyrdredfkzyzggw migrate` and expect `applied 202611190001…`. All switches remain off.
+  3. **Staging admin rehearsal (optional, about 5 minutes):**
+     - sign in to staging as the staging admin;
+     - publish `data/ranking-upload.example.csv`;
+     - in Verified account links, link `4,1,<a staging test username>` (I can supply one);
+     - check the personalized avatar;
+     - withdraw.
+  4. **Pilot:** keep the private roster on the operator device, with columns `roster_ref,email,username,eligible`. Then:
+     - turn on `student_provisioning`, then `student_sign_in` (`features --set … --confirm-production`);
+     - provision 3–5 pilot students and deliver credentials one at a time (`docs/operations/student-accounts.md`);
+     - link them in Staff Desk, then turn on `avatar_personalization`;
+     - check opt-in and opt-out on the live board.
+  5. **Broad activation:** run roster batches of 25 or fewer, then turn on `welcome_dialog`. The incident switch is `student_sign_in=off`.
+  6. **Artwork:** commission the inclusive character set described in `docs/design/avatar-library.md`. No new art ships until it passes review.
+
 ## 2026-11-19 — V1.2 Phase B: student account foundation (all switches off)
 
 - Migration `202611190001`, append-only:
