@@ -2,6 +2,18 @@
 
 Keep short. Newest first.
 
+## 2026-11-18 — Hosted acceptance complete (PR #9)
+
+- Both databases are migrated (11 migrations) with lifecycle gates off.
+- The staging admin is onboarded. The fictional publish, rollback and withdraw workflow passed on staging, and staging was left withdrawn.
+- Production is empty, with no admin yet. See `docs/operations/deployment-status.md`.
+- **Remaining steps for official publication:**
+  1. **Production admin.** In the Supabase dashboard for `academic-arena-prod`, go to Auth → Add user. Use a staff identity approved for processing in Supabase, a generated password, and auto-confirm. Then run `select app_private.operator_bootstrap_initial_admin('<uuid>','<username>');` in the SQL editor.
+  2. Sign in at https://academic-arena.pages.dev, change the password, and enroll TOTP.
+  3. **After written university approval** for those specific names and ranks: open Staff Desk, enter year `2026-27` and label `Week 5`, choose the private CSV, then Validate & preview → check every level → Publish.
+  4. Check all three levels on the public site. If anything is wrong, use Withdraw or Roll back.
+  5. Take an encrypted backup (`backup-restore.md`).
+
 ## 2026-11-18 — V1 level-only release (PR #7, `b5921df`)
 
 - Added migration `202611180001_level_only_leaderboards.sql`, append-only:

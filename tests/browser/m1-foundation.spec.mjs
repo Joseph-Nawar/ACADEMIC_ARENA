@@ -206,8 +206,9 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
     catalogRequests += 1;
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
+  let liveRows = [];
   await emptyBoardPage.route("**/api/public/leaderboards**", async (route) => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify({ rows: [], releaseLabel: null, publishedAt: null }),
+    status: 200, contentType: "application/json", body: JSON.stringify({ rows: liveRows, releaseLabel: liveRows.length ? "Week 9" : null, publishedAt: null }),
   }));
   await emptyBoardPage.goto(baseUrl);
   await waitForReady(emptyBoardPage);
@@ -215,6 +216,15 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.equal(await emptyBoardPage.locator("#ranking-status").getAttribute("data-state"), "empty");
   assert.equal(await emptyBoardPage.locator(".podium-zone").isHidden(), true);
   assert.equal(catalogRequests, 0, "the level-only page never requests the legacy catalog");
+  liveRows = ["Alpha", "Bravo", "Charlie"].map((name, index) => ({ position: index + 1, name: `Fictional ${name}`, avatar: "omar", style: "ink" }));
+  await emptyBoardPage.locator('.nav-link[data-page="wins"]').click();
+  await emptyBoardPage.locator('.nav-link[data-page="leaderboard"]').click();
+  await emptyBoardPage.waitForFunction(() => document.getElementById("name-1").textContent === "Fictional Alpha");
+  assert.equal(await emptyBoardPage.locator("#leaderboard-subtitle").textContent(), "Week 9 · Quiz Leaderboard", "returning to the page refetches");
+  liveRows = [];
+  await emptyBoardPage.locator('.level-tabs [data-level="4"]').click();
+  await emptyBoardPage.waitForFunction(() => document.getElementById("ranking-status").dataset.state === "empty");
+  assert.equal(await emptyBoardPage.locator(".podium-zone").isHidden(), true, "a withdrawal shows after re-selecting the level");
   await emptyBoardPage.close();
 
   const racePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
