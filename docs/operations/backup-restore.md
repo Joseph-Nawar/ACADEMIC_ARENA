@@ -19,8 +19,19 @@ rate-limit buckets are excluded, so restored users simply sign in again.
 
 ```bash
 npx supabase link --project-ref <prod-ref>
+node scripts/backup-preflight.mjs <prod-ref>      # credential-free; must print "Ready"
 scripts/db-backup.sh export linked /secure/offsite/academic-arena-$(date +%F).aabk
+npx supabase link --project-ref cynfnxlbmthjxgivllkg   # relink staging afterwards
 ```
+
+### Connection route (verified 18 Nov 2026)
+
+- The direct database host `db.<ref>.supabase.co` is **IPv6-only** on Supabase Free. This network has no IPv6, so it can't be used.
+- `supabase db dump --linked` instead uses the **session-mode pooler** saved by `supabase link` (`aws-1-<region>.pooler.supabase.com:5432`, IPv4). It authenticates with a temporary login role minted through the Management API, so no database password is typed or stored. This is the official route and needs no SQL workaround.
+- The earlier "connection reset" failures came from this network's DNS resolver, which intermittently returns SERVFAIL for `api.supabase.com`; the pooler itself was reachable. `backup-preflight.mjs` checks DNS, the Management API, pooler TCP + TLS, the linked ref and Docker. If DNS fails, retry later or use another network. Do not change the backup script.
+- If the login-role step still fails while DNS works, the supported fallback is the database password: `read -rs SUPABASE_DB_PASSWORD && export SUPABASE_DB_PASSWORD`, then the same export command. Never pass it as an argument.
+
+Excluded seeded tables (`role_permissions`, `runtime_controls`, `student_feature_controls`) keep the target project's values. After a restore, every student switch is therefore **off** until you re-enable it deliberately.
 
 Copy the `.aabk` and `.aabk.sha256` to an institution-approved offsite
 location (for example an encrypted university drive). Keep at least 4 weekly
@@ -77,3 +88,11 @@ are included, so staff keep their authenticators.
 Re-check the exclusion list whenever the Supabase CLI/Auth version changes
 (new `auth.*` token tables must be excluded). Repeat the drill against the hosted staging project after the first hosted
 deployment, and once per term.
+
+## Hosted drill — 18 Nov 2026 (staging, fictional data)
+
+- Ran `db-backup.sh export linked` against staging over the IPv4 session pooler.
+- Restored the encrypted file into a freshly migrated local stack with `restore local`.
+- All counts matched: 3 users, 1 MFA factor, 3 accounts, 32 audit events, 2 versions, 60 level rows, 2 avatars.
+- The drill found that `student_feature_controls` (seeded by migration 202611190001) was missing from the exclusions, so restores failed. It is now excluded, and a unit test checks every migration-seeded table.
+- Drill files were deleted afterwards.

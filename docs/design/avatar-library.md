@@ -19,18 +19,6 @@ These gaps cannot be closed with code. The art is flat raster illustration, and 
 - The server and SQL allowlist every key. Students cannot send paths, URLs, SVG or markup.
 - Student opt-in, verified links, the public projection and default-off switches all work with any allowlisted character key.
 
-## Adding a curated character (per new key, both families)
+## Adding characters
 
-1. Commission original or licensed art matching the existing two families, with consistent line weight, palette and proportions. Target set:
-   - at least 4 distinct headscarf designs and colours, across several faces and skin tones;
-   - at least 3 darker skin tones, each with more than one hairstyle (coils, locs, braids, short natural, covered);
-   - modest-clothing and gender-neutral silhouettes.
-2. Files in `assets/characters/`, transparent where noted:
-   - `<key>-ink.png` (full figure, about 900px tall, transparent);
-   - `<key>-face.png` (square crop);
-   - `<key>-3d.png`;
-   - `<key>-3d-face.jpg`;
-   - `<key>-3d-square.jpg`.
-3. Add an append-only migration that extends the character allowlists. These are the check constraints on `student_avatar_configs`, `campus_wins_submissions` and the Campus Wins tables, plus `save_own_avatar_preferences`.
-4. Add the key to the `CHARACTER_IDS` sets in `functions/lib/validation.js`, `assets/data-access.js` and `assets/app.js` (`characterIds`, `characterLabels`). The labels describe a mood, never an identity.
-5. Review every new character on the site at desktop and 390px: studio, podium, list thumbnails, and Campus Wins.
+Follow `avatar-artwork-spec.md`, which covers art direction, diversity targets, delivery sizes and the exact integration and test steps. `tests/frontend/avatar-assets.test.mjs` enforces the file formats and identical allowlists.

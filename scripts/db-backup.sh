@@ -44,14 +44,15 @@ flag=(--"$target")
 
 # Live credentials and transient state are never exported: refresh tokens,
 # provider and BFF sessions, MFA challenges, one-time tokens, and rate-limit
-# buckets. Tables recreated by migrations are excluded too, so the restore
-# applies cleanly and the lifecycle gate stays at its default (off).
+# buckets. Tables seeded by migrations are excluded too, so the restore
+# applies cleanly and the lifecycle gate and every V1.2 student switch stay at
+# their defaults (off); re-enable switches deliberately after a restore.
 excludes=(
   -x auth.schema_migrations -x auth.refresh_tokens -x auth.sessions -x auth.mfa_amr_claims
   -x auth.mfa_challenges -x auth.one_time_tokens -x auth.flow_state -x auth.audit_log_entries
   -x auth.saml_relay_states
   -x app_private.bff_sessions -x app_private.login_rate_limit_buckets
-  -x app_private.role_permissions -x app_private.runtime_controls
+  -x app_private.role_permissions -x app_private.runtime_controls -x app_private.student_feature_controls
 )
 
 if [[ "$command" == export ]]; then
