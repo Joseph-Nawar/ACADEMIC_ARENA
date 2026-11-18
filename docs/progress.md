@@ -2,6 +2,37 @@
 
 Keep short. Newest first.
 
+## 2026-11-18 — V1 level-only release (PR #7, `b5921df`)
+
+- Added migration `202611180001_level_only_leaderboards.sql`, append-only:
+  - a `published_level_rows` table holding only snapshot, level, position and name;
+  - `board_format` and `release_label` columns on snapshots;
+  - level-only draft, publish, rows and history RPCs. These reuse AAL2, the
+    publication lock, the one-current index, withdraw and audit, and they refuse
+    legacy snapshots.
+- Importer accepts exactly `level,rank,public_name` (30 rows, 10 per level).
+  Hidden, look-alike and fullwidth characters are rejected, and duplicate checks
+  use NFKC. The real Week 5 file passes locally; it is never committed or uploaded.
+- UI and API are level-only and deployed to both hosts. The independent review
+  found no unresolved blockers.
+- **Owner checklist (in order):**
+  1. **Migrate staging.** In Terminal, in this repo, run the command below and
+     click Allow on the keychain prompt:
+     `node scripts/hosted-sql.mjs cynfnxlbmthjxgivllkg migrate && node scripts/hosted-sql.mjs cynfnxlbmthjxgivllkg query "select (select count(*) from supabase_migrations.schema_migrations) migrations, (select string_agg(distinct tableowner, ',') from pg_tables where schemaname in ('public','app_private')) owners, (select allow_fictional_account_lifecycle from app_private.runtime_controls) lifecycle_gate"`
+     Expected result: `migrations` 11, `owners` postgres, `lifecycle_gate` false.
+  2. **Bootstrap the staging admin.** In the Supabase dashboard, go to Auth → Add
+     user. Use your own mailbox, a generated password, and auto-confirm. Then run
+     `select app_private.operator_bootstrap_initial_admin('<uuid>','<username>');`
+     in the SQL editor. Sign in at staging, change the password, and enroll TOTP.
+     Then let Claude run the fictional publish/rollback/withdraw check in the
+     browser pane.
+  3. **Migrate production.** Run step 1 with `jhukafyrdredfkzyzggw`.
+  4. **Set up the production admin** (step 2 on production), using an identity
+     approved for Supabase processing.
+  5. **Publish the real file**, once the university's written approval for
+     public disclosure exists. Staff Desk → year `2026-27`, label `Week 5`,
+     upload, review the preview, then publish.
+
 ## 2026-11-17 — Hosted deployment (branch `m5/hosted-deployment`)
 
 - **Deployed:** production https://academic-arena.pages.dev and staging https://academic-arena-staging.pages.dev. Each is a separate Pages project with its own 6 encrypted settings. Hosted checks are in `docs/operations/deployment-status.md`.

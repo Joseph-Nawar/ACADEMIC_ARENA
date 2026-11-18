@@ -1,6 +1,6 @@
 # Academic Arena V1 roadmap
 
-## Status as of 17 November 2026
+## Status as of 18 November 2026
 
 | Milestone | Status | Scope / exit gate |
 | --- | --- | --- |
@@ -9,6 +9,7 @@
 | 2. Authentication and database | **Complete (development foundation)** — PR #3 merged `47bc13a` | Same-origin BFF, private username mapping, opaque sessions, rate limits, fail-closed credential sync with operator release, staff TOTP/AAL2, restrictive RLS. Account-lifecycle routes stay disabled outside the local test environment. |
 | 3. Publishing and moderation | **Complete** — PR #4 merged `eb526df` | Strict CSV validation, draft preview, atomic versioned publish/rollback/withdraw, public catalog/board/feed APIs, Campus Wins templates with transactional limits, moderation, atomic reactions, staff desk UI. |
 | 4. Security and operational readiness | **Complete (read-only release deployed)** — PR #5 merged `3aacb8c` | Encrypted backup/restore drill passed. Runbooks are written. Production https://academic-arena.pages.dev and staging https://academic-arena-staging.pages.dev are deployed and fail closed. Hosted migrations await an owner action (the network blocks Postgres), and real data awaits university approval. |
+| V1 release: level-only Top 10 | **Implemented and deployed (UI/API)** — PR #7 merged `b5921df` | Level 4/5/6 Top 10 from a strict `level,rank,public_name` CSV, with atomic versioned publish, rollback and withdrawal. Hosted migrations await the owner's keychain-approved command. Real names await the university's written disclosure approval. |
 
 ## Approved decisions
 
