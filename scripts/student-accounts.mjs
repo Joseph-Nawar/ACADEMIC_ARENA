@@ -19,6 +19,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { planProvisioning, temporaryPassword, USERNAME_PATTERN, validateRoster } from "./lib/student-roster.mjs";
 
@@ -177,8 +179,9 @@ function loadRoster(values) {
   return result.rows;
 }
 
-function guardTarget(connection, values) {
-  if (connection.production && values.fictional) die("fictional identities are never provisioned in production");
+// Checked before any network call.
+function guardTarget(values) {
+  if (values.target === PRODUCTION_REF && values.fictional) die("fictional identities are never provisioned in production");
 }
 
 async function features(connection) {
@@ -202,9 +205,9 @@ function summarize(plan) {
 }
 
 async function provision(values) {
+  guardTarget(values);
   const rows = loadRoster(values);
   const connection = await connect(values.target);
-  guardTarget(connection, values);
   const batchSize = Number(values["batch-size"] || 25);
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 50) die("--batch-size must be 1–50");
   const { state, taken } = await hostedState(connection, rows);
@@ -249,9 +252,9 @@ async function provision(values) {
 }
 
 async function status(values) {
+  guardTarget(values);
   const rows = loadRoster(values);
   const connection = await connect(values.target);
-  guardTarget(connection, values);
   const { state, taken } = await hostedState(connection, rows);
   const byEmail = new Map(state.map((row) => [row.provider_email, row]));
   const extra = { mustChangePassword: 0, signedIn: 0, suspended: 0, recoveryPending: 0 };
@@ -332,7 +335,7 @@ const options = {
   reason: { type: "string" }, list: { type: "boolean" }, set: { type: "string" }, "confirm-production": { type: "boolean" },
 };
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const [command, ...rest] = process.argv.slice(2);
   const { values } = parseArgs({ args: rest, options, strict: true });
   const commands = {

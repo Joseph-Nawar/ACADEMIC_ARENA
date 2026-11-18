@@ -157,3 +157,11 @@
 /* V1.2 mobile header: one dark navigation row (brand, EUE, icons) and one thin account row. */
 @media(max-width:500px){.rail{flex-wrap:nowrap;padding:8px 10px;gap:8px}.brand-lockup{flex-direction:row;align-items:center;gap:8px;min-width:0}.brand{padding:0;gap:4px}.brand-mark{width:17px;height:18px}.brand-type{font-size:13px}.brand-type strong{font-size:16px}.eue-endorsement{max-width:78px;padding:3px}.eue-endorsement img{width:72px;max-height:24px}.rail-navigation{margin-left:auto;gap:2px}.nav-link{width:34px;height:40px;padding:6px}.nav-link svg{width:20px;height:20px}.topbar{height:46px}.topbar .hide-micro{display:none}.topbar-actions{gap:8px}}
 @media(max-width:360px){.eue-endorsement{display:none}}
+/* V1.2: avatar opt-in, artwork note, welcome dialog, student next step. */
+.artwork-note{font-size:11px;text-align:center;color:#63706a;margin:4px 0 0;font-weight:700}
+.optin-row{display:flex;align-items:center;gap:10px;font-weight:850;font-size:14px;cursor:pointer}.optin-row input{width:20px;height:20px;accent-color:var(--coral)}
+.about-signin{border-top:2px solid var(--ink);margin-top:26px;padding-top:16px}.about-signin h2{font-family:var(--display);font-style:italic;font-size:28px;margin:0 0 6px}
+.welcome-dialog{position:relative;max-width:520px}.welcome-dialog h2{font-family:var(--display);font-style:italic;font-size:clamp(34px,7vw,52px);line-height:.95;margin:6px 0 12px}.welcome-dialog h2 span{color:var(--coral)}
+.welcome-close{position:absolute;top:8px;right:10px;width:40px;height:40px;border:2px solid var(--ink);background:var(--paper);font-size:22px;font-weight:900;line-height:1}
+.welcome-dialog .dialog-footer{flex-wrap:wrap;gap:10px}
+.student-next{border:2px solid var(--ink);padding:12px;margin:12px 0;background:#fff1d5}.student-next h3{margin:0 0 4px;font-size:14px;letter-spacing:1px}.student-next p{margin:0 0 10px;font-size:13px}

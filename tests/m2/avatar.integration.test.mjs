@@ -51,12 +51,14 @@ test("same-origin avatar BFF stores only the caller's character fields and honor
   assert.deepEqual(saved, {
     saved: true,
     avatar: { base: "mariam", style: "cartoon3d", tone: "coral", badge: "⚡" },
-  });
+    showOnLeaderboard: false,
+  }, "public leaderboard display stays off unless the student opts in");
 
   const own = await api("/api/me/avatar", { headers: { Cookie: first.cookie } });
   assert.equal(own.status, 200);
   assert.deepEqual(await json(own), {
     avatar: { base: "mariam", style: "cartoon3d", tone: "coral", badge: "⚡" },
+    showOnLeaderboard: false,
   });
 
   const secondIdentity = await createIdentity(context, "avatar-owner-b");
@@ -65,7 +67,7 @@ test("same-origin avatar BFF stores only the caller's character fields and honor
     headers: { Cookie: second.cookie },
   });
   assert.equal(other.status, 200);
-  assert.deepEqual(await json(other), { avatar: null }, "a caller cannot select a different account's avatar");
+  assert.deepEqual(await json(other), { avatar: null, showOnLeaderboard: false }, "a caller cannot select a different account's avatar");
 
   const concurrentAvatars = [
     { base: "omar", style: "ink", tone: "blue", badge: "★" },

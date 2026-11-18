@@ -145,6 +145,73 @@
     }
   }
 
+  let linkCsv = "";
+  let linkPublication = "";
+
+  async function loadLinkPublications() {
+    const select = $("links-publication");
+    select.replaceChildren();
+    try {
+      const publications = (await api.staff.publicationHistory())
+        .filter((item) => item.format === "level_only" && item.state !== "draft");
+      for (const item of publications) {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = `v${item.version} · ${item.releaseLabel || ""} · ${stateLabels[item.state]}`;
+        select.append(option);
+      }
+    } catch (error) {
+      failure(error, "Publications are unavailable.");
+    }
+  }
+
+  const linkStates = { new: "new link", changed: "changed since previous version", unchanged: "same as previous version" };
+
+  async function previewLinks(event) {
+    event.preventDefault();
+    $("links-errors").replaceChildren();
+    $("links-preview").hidden = true;
+    linkCsv = "";
+    const file = $("links-file").files[0];
+    if (!file || file.size > 4096) {
+      status("Choose a link CSV of at most 4 KB.", "unavailable");
+      return;
+    }
+    try {
+      const csv = await file.text();
+      const publicationId = $("links-publication").value;
+      const result = await api.staff.previewRankingLinks(publicationId, csv);
+      const list = $("links-list");
+      list.replaceChildren();
+      if (!result.links.length) list.append(textNode("li", "No links: approving clears every link for this publication."));
+      for (const item of result.links) {
+        list.append(textNode("li", `Level ${item.level} · rank ${item.position} · ${item.publicName} → ${item.username} (${item.providerEmail}, ${item.accountStatus}) · ${linkStates[item.previous] || item.previous}`));
+      }
+      linkCsv = csv;
+      linkPublication = publicationId;
+      $("links-preview").hidden = false;
+      status("Check every identity privately, then approve.", "ready");
+    } catch (error) {
+      for (const detail of error?.details || []) {
+        $("links-errors").append(textNode("li", detail.line ? `Line ${detail.line}: ${detail.message}` : detail.message));
+      }
+      failure(error, "The link file could not be validated.");
+    }
+  }
+
+  async function approveLinks() {
+    if (!linkCsv || !window.confirm("Approve these private account links for this publication?")) return;
+    try {
+      const result = await api.staff.approveRankingLinks(linkPublication, linkCsv);
+      status(`${result.linked} account link(s) approved.`, "ready");
+      $("links-preview").hidden = true;
+      $("links-form").reset();
+      linkCsv = "";
+    } catch (error) {
+      failure(error, "Links were not changed.");
+    }
+  }
+
   async function publishDraft() {
     if (!draftId || !window.confirm("Publish this version? It replaces the live rankings for every board.")) return;
     try {
@@ -235,6 +302,8 @@
     $("publish-draft").addEventListener("click", publishDraft);
     $("withdraw-rankings").addEventListener("click", withdraw);
     $("public-name-form").addEventListener("submit", savePublicName);
+    $("links-form").addEventListener("submit", previewLinks);
+    $("approve-links").addEventListener("click", approveLinks);
     document.querySelectorAll("[data-queue]").forEach((element) => element.addEventListener("click", () => setQueue(element.dataset.queue)));
     $("staff-nav").addEventListener("click", () => {
       if (canPublish) void loadHistory();
@@ -254,6 +323,8 @@
     $("staff-rankings").hidden = !canPublish;
     $("staff-moderation").hidden = !canModerate;
     $("staff-accounts").hidden = !(verifiedStaff && user.role === "admin");
+    $("staff-links").hidden = !(verifiedStaff && user.role === "admin");
+    if (verifiedStaff && user.role === "admin") void loadLinkPublications();
     if (!verifiedStaff) {
       if (!$("page-staff").hidden) showPage("leaderboard");
       return;

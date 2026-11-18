@@ -46,7 +46,8 @@ export async function staffSession(context, label, role, { mfa = true } = {}) {
   assert.equal(enrollment.status, 200);
   const { secret } = await json(enrollment);
   const code = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(secret) }).generate();
-  const verify = await api("/api/auth/mfa/verify", { method: "POST", origin, headers: headersFor(session), body: { code } });
+  // Own documentation-range client IP, like login, so the shared per-IP limit is not exhausted across files.
+  const verify = await api("/api/auth/mfa/verify", { method: "POST", origin, headers: { ...headersFor(session), "CF-Connecting-IP": nextIp() }, body: { code } });
   assert.equal(verify.status, 200);
   return session;
 }

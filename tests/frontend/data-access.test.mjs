@@ -42,7 +42,7 @@ test("public_board_query_encodes_all_filters_and_allowlists_rows", async () => {
     state: "ok",
     publishedAt: null,
     releaseLabel: null,
-    rows: [{ position: 1, name: "Fictional Student", avatar: "amara", style: "cartoon3d" }],
+    rows: [{ position: 1, name: "Fictional Student", avatar: "amara", style: "cartoon3d", personalized: false }],
   });
   await assert.rejects(api.public.getLeaderboard({ level: "7" }), /valid level/u, "unknown levels are rejected client-side");
 });
@@ -329,7 +329,32 @@ test("demo_avatar_settings_are_owned_by_the_current_preview_account", async () =
 
   assert.equal(await api.student.getMyCharacter(), null);
   await api.student.saveCharacter({ ...avatar, role: "admin", account_id: "fictional-other-account" });
-  assert.deepEqual(await api.student.getMyCharacter(), avatar);
+  assert.deepEqual(await api.student.getMyCharacter(), { ...avatar, showOnLeaderboard: false }, "public display defaults to off");
+  await api.student.saveCharacter(avatar, true);
+  assert.deepEqual(await api.student.getMyCharacter(), { ...avatar, showOnLeaderboard: true });
+});
+
+test("personalized_rows_keep_only_allowlisted_artwork_fields", async () => {
+  const api = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async () => response({ rows: [
+      { position: 1, name: "Fictional One", avatar: "zein", style: "ink", tone: "lilac", badge: "⚡", personalized: true,
+        account_id: "private", username: "private", email: "private@example.invalid" },
+      { position: 2, name: "Fictional Two", avatar: "omar", style: "ink", tone: "url(javascript:alert(1))", badge: "★", personalized: true },
+      { position: 3, name: "Fictional Three", avatar: "omar", style: "ink", personalized: false },
+    ] }),
+  });
+  const { rows } = await api.public.getLeaderboard({ level: "5" });
+  assert.deepEqual(rows[0], { position: 1, name: "Fictional One", avatar: "zein", style: "ink", tone: "lilac", badge: "⚡", personalized: true });
+  assert.deepEqual(rows[1], { position: 2, name: "Fictional Two", avatar: "omar", style: "ink", personalized: false }, "invalid styling falls back to default artwork");
+  assert.equal(rows[2].personalized, false);
+});
+
+test("features_default_to_off_on_any_failure", async () => {
+  const failing = createArenaDataAccess({ mode: "production", fetchImpl: async () => { throw new Error("offline"); } });
+  assert.deepEqual(await failing.public.getFeatures(), { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false });
+  const odd = createArenaDataAccess({ mode: "production", fetchImpl: async () => response({ studentSignIn: "yes", welcomeDialog: 1 }) });
+  assert.deepEqual(await odd.public.getFeatures(), { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false });
 });
 
 test("demo_leaderboard_fixture_changes_only_with_level", async () => {

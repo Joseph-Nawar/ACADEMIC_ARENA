@@ -65,7 +65,11 @@
     const avatar = CHARACTER_IDS.has(value.avatar) ? value.avatar : null;
     const style = AVATAR_STYLES.has(value.style) ? value.style : null;
     if (!Number.isInteger(position) || position < 1 || position > 10 || !name || !avatar || !style) return null;
-    return { position, name, avatar, style };
+    // A student's own opted-in character (allowlisted fields only).
+    if (value.personalized === true && TONES.has(value.tone) && BADGES.has(value.badge)) {
+      return { position, name, avatar, style, tone: value.tone, badge: value.badge, personalized: true };
+    }
+    return { position, name, avatar, style, personalized: false };
   }
 
   function sanitizeWin(value, includeViewerReaction = false) {
@@ -299,6 +303,22 @@
         }
       },
 
+      // Rollout switches decided by the database owner; anything unexpected means off.
+      async getFeatures() {
+        const off = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false };
+        if (mode === "demo") return { studentSignIn: true, avatarPersonalization: true, welcomeDialog: false };
+        try {
+          const payload = await request("GET", "/public/features");
+          return {
+            studentSignIn: payload?.studentSignIn === true,
+            avatarPersonalization: payload?.avatarPersonalization === true,
+            welcomeDialog: payload?.welcomeDialog === true,
+          };
+        } catch {
+          return off;
+        }
+      },
+
       async getLeaderboard(input) {
         const filters = validFilters(input);
         if (mode === "demo") {
@@ -439,25 +459,31 @@
 
     const student = {
       async getMyCharacter() {
-        if (mode === "demo") return sanitizeAvatar(storageRead("arena-v1-demo-avatar", null));
+        if (mode === "demo") {
+          const saved = sanitizeAvatar(storageRead("arena-v1-demo-avatar", null));
+          return saved ? { ...saved, showOnLeaderboard: storageRead("arena-v1-demo-show", false) === true } : null;
+        }
         try {
           const payload = await request("GET", "/me/avatar");
-          return sanitizeAvatar(payload.avatar);
+          const saved = sanitizeAvatar(payload.avatar);
+          return saved ? { ...saved, showOnLeaderboard: payload.showOnLeaderboard === true } : null;
         } catch (error) {
           if (error.code === "unauthorized") return null;
           throw error;
         }
       },
-      async saveCharacter(input) {
+      async saveCharacter(input, showOnLeaderboard) {
         const avatar = sanitizeAvatar(input);
         if (!avatar) throw new ArenaDataError("Choose a valid character.", "invalid_avatar");
+        const withChoice = typeof showOnLeaderboard === "boolean";
         if (mode === "demo") {
-          if (!storageWrite("arena-v1-demo-avatar", avatar)) {
+          if (!storageWrite("arena-v1-demo-avatar", avatar) || (withChoice && !storageWrite("arena-v1-demo-show", showOnLeaderboard))) {
             throw new ArenaDataError("Browser storage is unavailable. Your preview change was not saved.", "storage_unavailable");
           }
-          return { saved: true, avatar };
+          return { saved: true, avatar, showOnLeaderboard: withChoice ? showOnLeaderboard : storageRead("arena-v1-demo-show", false) === true };
         }
-        return request("PUT", "/me/avatar", { avatar });
+        const payload = await request("PUT", "/me/avatar", withChoice ? { avatar, showOnLeaderboard } : { avatar });
+        return { saved: payload?.saved === true, avatar: sanitizeAvatar(payload?.avatar), showOnLeaderboard: payload?.showOnLeaderboard === true };
       },
       async submitAchievement(input) {
         const type = input && input.type;
@@ -518,6 +544,21 @@
           throw new ArenaDataError("Choose a CSV file of at most 16 KB.", "invalid_upload");
         }
         return request("POST", "/staff/leaderboards/drafts", { academicYear, releaseLabel, csv });
+      },
+      // Admin-only private ranking links (level,rank,username).
+      async previewRankingLinks(publicationId, csv) {
+        if (mode === "demo") throw new ArenaDataError("Account links are unavailable in the fictional preview.", "unauthorized");
+        if (!UUID.test(String(publicationId)) || typeof csv !== "string" || csv.length > 4096) {
+          throw new ArenaDataError("Choose a publication and a link file of at most 4 KB.", "invalid_upload");
+        }
+        return request("POST", "/staff/leaderboards/links/preview", { publicationId, csv });
+      },
+      async approveRankingLinks(publicationId, csv) {
+        if (mode === "demo") throw new ArenaDataError("Account links are unavailable in the fictional preview.", "unauthorized");
+        if (!UUID.test(String(publicationId)) || typeof csv !== "string" || csv.length > 4096) {
+          throw new ArenaDataError("Choose a publication and a link file of at most 4 KB.", "invalid_upload");
+        }
+        return request("POST", "/staff/leaderboards/links/approve", { publicationId, csv });
       },
       async publicationHistory() {
         if (mode === "demo") return [];

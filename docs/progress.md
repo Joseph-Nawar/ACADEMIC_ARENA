@@ -2,6 +2,27 @@
 
 Keep short. Newest first.
 
+## 2026-11-19 — V1.2 Phase B: student account foundation (all switches off)
+
+- Migration `202611190001`, append-only:
+  - default-off switches `student_sign_in`, `student_provisioning`, `avatar_personalization` and `welcome_dialog`, which only the owner can change (audited);
+  - student permissions now also require `student_sign_in`;
+  - a private `published_level_row_links` table (per snapshot), approved by AAL2 admins by username only;
+  - the opt-in `show_on_leaderboard` setting;
+  - the `public_level_leaderboard_v2` projection, which returns only allowlisted artwork;
+  - owner-only provisioning, recovery and status functions, which never write `auth.*`.
+- `scripts/student-accounts.mjs`:
+  - roster validation, bounded and idempotent batches, and explicit orphan adoption;
+  - encrypted credential export with one-at-a-time clipboard delivery;
+  - locked-first recovery, suspension, and the rollout switches.
+- UI:
+  - opt-in toggle in My Character;
+  - private link review in Staff Desk;
+  - a welcome dialog controlled by the backend switch;
+  - a sign-in explanation in How it works.
+- **Artwork limitation:** no new characters were added, because no matching illustration tooling was available. See `docs/design/avatar-library.md`.
+- Runbook: `docs/operations/student-accounts.md`.
+
 ## 2026-11-18 — V1.2 Phase A: short names, single header
 
 - The leaderboard shows first + final name component (`assets/display-names.js`). Names that collide within a level expand with middle components until unique; the full approved name stays as the tooltip and accessible text. No data or CSV change.
