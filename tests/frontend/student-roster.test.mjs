@@ -82,3 +82,10 @@ test("planning resumes idempotently and never re-creates or silently adopts acco
   assert.deepEqual(adopting.map((item) => item.action), ["done", "conflict", "adopt", "orphan", "create", "conflict", "conflict", "orphan"],
     "only unmapped, tool-created, never-signed-in provider users without MFA are adopted");
 });
+
+test("local CLI output parsing tolerates notices and single-line JSON", async () => {
+  const { firstJsonObject } = await import("../../scripts/student-accounts.mjs");
+  assert.deepEqual(firstJsonObject('Connecting...\n{\n "rows": [{"a": "x}{\\"y"}]\n}\nA new version {v3} is available'), { rows: [{ a: 'x}{"y' }] });
+  assert.deepEqual(firstJsonObject('{"rows":[]} trailing notice'), { rows: [] });
+  assert.throws(() => firstJsonObject("no json here"), /no JSON/u);
+});

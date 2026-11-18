@@ -69,6 +69,24 @@ async function fetchJson(url, init, label) {
   return text ? JSON.parse(text) : null;
 }
 
+// The CLI may print notices before or after its JSON document: take the
+// first balanced {...} object (string-aware), whether pretty or single-line.
+export function firstJsonObject(text) {
+  const start = text.indexOf("{");
+  let depth = 0;
+  let inString = false;
+  for (let index = start; start >= 0 && index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (char === "\\") index += 1;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}" && --depth === 0) return JSON.parse(text.slice(start, index + 1));
+  }
+  throw new Error("local SQL returned no JSON result");
+}
+
 // Only the raised message of a database error, with emails redacted.
 function databaseReason(text) {
   const match = /ERROR:\s+(?:[0-9A-Z]{5}:\s+)?([^\n"\\]{1,160})/u.exec(String(text));
@@ -108,10 +126,7 @@ export async function connect(target) {
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }
-        // The CLI may print notices after the JSON document.
-        const start = output.indexOf("{");
-        const end = output.indexOf("\n}", start);
-        return JSON.parse(output.slice(start, end + 2)).rows || [];
+        return firstJsonObject(output).rows || [];
       },
     };
   }
