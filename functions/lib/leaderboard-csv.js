@@ -230,7 +230,7 @@ export const LEVELS = Object.freeze([4, 5, 6]);
 // periods, apostrophes, or hyphens; starts with a letter; at most 80 characters.
 const LEVEL_NAME_PATTERN = /^\p{L}\p{M}{0,3}(?:[ .'’-]{0,2}\p{L}\p{M}{0,3})*\.?$/u;
 // Invisible "letters" and selectors that would render blank or defeat duplicate checks.
-const INVISIBLE = /[\u115F\u1160\u3164\uFFA0\u034F\uFE00-\uFE0F\u{E0100}-\u{E01EF}\u200B-\u200F\u2060-\u2064\u202A-\u202E\u2066-\u2069]/u;
+const INVISIBLE = /[\u115F\u1160\u3164\uFFA0\u034F\u17B4\u17B5\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}\u200B-\u200F\u2060-\u2064\u202A-\u202E\u2066-\u2069]/u;
 const SCRIPTS = [/\p{Script=Latin}/u, /\p{Script=Cyrillic}/u, /\p{Script=Greek}/u];
 
 function safeLevelName(name) {

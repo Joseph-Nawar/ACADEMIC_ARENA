@@ -68,6 +68,7 @@ test("level-only parser rejects malformed, incomplete, duplicated, and unsafe da
     "cyrillic homoglyph": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "M\u0430riam Test"] : row),
     "fullwidth": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "\uFF2E\uFF41\uFF4D\uFF45"] : row),
     "zalgo": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "A" + "\u0301".repeat(10)] : row),
+    "khmer invisible mark": (rows) => rows.map((row, index) => index === 1 ? [row[0], row[1], rows[0][2] + "\u17B4"] : row),
     "zero width space": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "Na\u200Bme"] : row),
     "rtl override": (rows) => rows.map((row, index) => index === 2 ? [row[0], row[1], "Name\u202Etset"] : row),
   };
