@@ -69,10 +69,11 @@ async function fetchJson(url, init, label) {
   return text ? JSON.parse(text) : null;
 }
 
-// The CLI may print notices before or after its JSON document: take the
-// first balanced {...} object (string-aware), whether pretty or single-line.
-export function firstJsonObject(text) {
-  const start = text.indexOf("{");
+// The CLI may print notices before or after its JSON document, and prints
+// either a bare array of rows or (in some environments) {"rows": [...]}.
+// Take the first balanced [...] or {...} value, string-aware.
+export function firstJsonValue(text) {
+  const start = text.search(/[[{]/u);
   let depth = 0;
   let inString = false;
   for (let index = start; start >= 0 && index < text.length; index += 1) {
@@ -81,10 +82,17 @@ export function firstJsonObject(text) {
       if (char === "\\") index += 1;
       else if (char === '"') inString = false;
     } else if (char === '"') inString = true;
-    else if (char === "{") depth += 1;
-    else if (char === "}" && --depth === 0) return JSON.parse(text.slice(start, index + 1));
+    else if (char === "{" || char === "[") depth += 1;
+    else if ((char === "}" || char === "]") && --depth === 0) return JSON.parse(text.slice(start, index + 1));
   }
   throw new Error("local SQL returned no JSON result");
+}
+
+export function queryRows(text) {
+  const value = firstJsonValue(text);
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value.rows)) return value.rows;
+  throw new Error("local SQL returned an unexpected result shape");
 }
 
 // Only the raised message of a database error, with emails redacted.
@@ -126,7 +134,7 @@ export async function connect(target) {
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }
-        return firstJsonObject(output).rows || [];
+        return queryRows(output);
       },
     };
   }

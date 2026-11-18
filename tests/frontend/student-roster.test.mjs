@@ -83,9 +83,10 @@ test("planning resumes idempotently and never re-creates or silently adopts acco
     "only unmapped, tool-created, never-signed-in provider users without MFA are adopted");
 });
 
-test("local CLI output parsing tolerates notices and single-line JSON", async () => {
-  const { firstJsonObject } = await import("../../scripts/student-accounts.mjs");
-  assert.deepEqual(firstJsonObject('Connecting...\n{\n "rows": [{"a": "x}{\\"y"}]\n}\nA new version {v3} is available'), { rows: [{ a: 'x}{"y' }] });
-  assert.deepEqual(firstJsonObject('{"rows":[]} trailing notice'), { rows: [] });
-  assert.throws(() => firstJsonObject("no json here"), /no JSON/u);
+test("local CLI output parsing tolerates notices, single-line JSON, and both result shapes", async () => {
+  const { queryRows } = await import("../../scripts/student-accounts.mjs");
+  assert.deepEqual(queryRows('Connecting...\n{\n "rows": [{"a": "x}{\\"y"}]\n}\nA new version {v3} is available'), [{ a: 'x}{"y' }]);
+  assert.deepEqual(queryRows('[{"result":"created"}] trailing notice'), [{ result: "created" }]);
+  assert.deepEqual(queryRows('Connecting to local database...\n[\n  {"m": 12}\n]\n'), [{ m: 12 }]);
+  assert.throws(() => queryRows("no json here"), /no JSON/u);
 });
