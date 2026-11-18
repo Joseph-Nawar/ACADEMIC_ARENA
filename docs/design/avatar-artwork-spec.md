@@ -55,7 +55,7 @@ Respect rules, which are reviewed before integration:
 
 | File | Format | Size | Notes |
 |---|---|---|---|
-| `<key>-ink.png` | PNG, RGBA, sRGB | **640 × 840** (existing art ranges from 317×495 to 668×829 and renders height-fitted) | Figure centred and bottom-aligned, touching the bottom edge, with a 3–5 % top margin. Optimise to ≤ 800 KB (pngquant or oxipng). |
+| `<key>-ink.png` | PNG, RGBA, sRGB | **640 × 840** (existing art ranges from 317×495 to 668×829 and renders height-fitted) | Figure centred and bottom-aligned, touching the bottom edge, with a 3–5 % top margin. Optimise losslessly (oxipng), keeping RGBA, to ≤ 800 KB. Indexed or palette PNGs are rejected. |
 | `<key>-face.png` | PNG, RGBA | **256 × 256** | Head and shoulders, eyes at about 42 % of the height, transparent. ≤ 150 KB. |
 | `<key>-3d.png` | PNG, RGBA | **418 × 418** | Bottom-aligned, transparent. ≤ 400 KB. |
 | `<key>-3d-face.jpg` | JPEG, quality 85 | **180 × 180** | Head and shoulders on the same light backdrop as the existing `*-3d-face.jpg`. ≤ 40 KB. |
@@ -69,7 +69,7 @@ Respect rules, which are reviewed before integration:
 2. **Allowlists**, kept identical. The test `tests/frontend/avatar-assets.test.mjs` fails if they differ:
    - `assets/app.js`: add the key to `characterIds` and a mood word to `characterLabels`, in the same order;
    - `assets/data-access.js`: `CHARACTER_IDS`;
-   - `functions/lib/validation.js`: `CHARACTER_IDS`;
+   - `functions/lib/validation.js`: `CHARACTER_IDS`. The legacy CSV importer (`functions/lib/leaderboard-csv.js`) reuses this set;
    - `index.html`: the studio count text ("9 different looks").
 3. **Append-only migration** `supabase/migrations/<timestamp>_avatar_library_<batch>.sql`. Never edit an existing migration. Replace each of these four constraints with the full new list:
    - `student_avatar_configs.student_avatar_configs_character_key_check`

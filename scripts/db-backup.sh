@@ -43,20 +43,23 @@ workdir=$(mktemp -d); trap 'rm -rf "$workdir"' EXIT
 flag=(--"$target")
 
 # Live credentials and transient state are never exported: refresh tokens,
-# provider and BFF sessions, MFA challenges, one-time tokens, and rate-limit
-# buckets. Tables seeded by migrations are excluded too, so the restore
+# provider and BFF sessions, MFA challenges, one-time tokens, rate-limit
+# buckets, and pending credential-sync operations. Tables seeded by migrations are excluded too, so the restore
 # applies cleanly and the lifecycle gate and every V1.2 student switch stay at
 # their defaults (off); re-enable switches deliberately after a restore.
 excludes=(
   -x auth.schema_migrations -x auth.refresh_tokens -x auth.sessions -x auth.mfa_amr_claims
   -x auth.mfa_challenges -x auth.one_time_tokens -x auth.flow_state -x auth.audit_log_entries
   -x auth.saml_relay_states
-  -x app_private.bff_sessions -x app_private.login_rate_limit_buckets
+  -x app_private.bff_sessions -x app_private.login_rate_limit_buckets -x app_private.credential_sync_operations
   -x app_private.role_permissions -x app_private.runtime_controls -x app_private.student_feature_controls
 )
 
 if [[ "$command" == export ]]; then
   [[ ! -e "$file" ]] || { echo "Refusing to overwrite $file" >&2; exit 2; }
+  if [[ "$target" == linked ]]; then
+    echo "Exporting from linked project $(cat "$repo_root/supabase/.temp/project-ref" 2>/dev/null || echo '(none)')." >&2
+  fi
   supabase db dump "${flag[@]}" --data-only -s auth,app_private,public "${excludes[@]}" -f "$workdir/data.sql" >/dev/null 2>&1 \
     || { echo "Export failed (details suppressed to avoid printing data)." >&2; exit 1; }
   crypt encrypt "$workdir/data.sql" "$file"

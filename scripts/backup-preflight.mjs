@@ -49,12 +49,15 @@ try {
 // Only the host and port of the saved pooler URL are used; its user part is never printed.
 let host = "";
 let port = 5432;
+let urlRef = "";
 try {
   const url = new URL(read("pooler-url"));
   host = url.hostname;
   port = Number(url.port || 5432);
+  urlRef = decodeURIComponent(url.username).split(".").pop(); // pooler user is postgres.<ref>; never printed
 } catch { /* reported below */ }
-if (!host || linked !== ref) {
+report(urlRef === ref, "saved pooler URL belongs to this project", `stale link metadata; run: npx supabase link --project-ref ${ref}`);
+if (!host || linked !== ref || urlRef !== ref) {
   report(false, "saved session-pooler URL for this project", `run: npx supabase link --project-ref ${ref}`);
 } else {
   const result = await new Promise((resolve) => {

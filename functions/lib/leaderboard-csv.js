@@ -1,3 +1,4 @@
+import { CHARACTER_IDS } from "./validation.js";
 // Strict, bounded parser for staff ranking uploads. The file may contain only
 // what the public board displays; no grades, scores, IDs, or emails.
 
@@ -14,7 +15,8 @@ const KEY_PATTERN = /^[a-z0-9][a-z0-9._-]{0,47}$/u;
 const NAME_PATTERN = /^\p{L}[\p{L}\p{M} .'’-]{0,59}$/u;
 const LABEL_PATTERN = /^[\p{L}\p{N}][\p{L}\p{M}\p{N} .'’()&/:+-]{0,79}$/u;
 const YEAR_PATTERN = /^20\d{2}-\d{2}$/u;
-const AVATARS = new Set(["omar", "mariam", "youssef", "amara", "tariq", "habiba2", "malek", "nour2", "zein"]);
+// Same allowlist as the BFF avatar validation (one source of truth).
+const AVATARS = CHARACTER_IDS;
 const FAMILIES = new Set(["ink", "cartoon3d"]);
 // Characters that never belong in an upload (controls, markup, formula prefixes handled per field).
 const FORBIDDEN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f<>"`\\{}[\]|;=]/u;

@@ -19,6 +19,8 @@ Code: `main` after PRs #10, #11 and #12, deployed to both Pages projects.
 | Check | Staging | Production |
 |---|---|---|
 | Migrations | 12, latest `202611190001` | 11, latest `202611180001`. **V1.2 migration pending the owner backup.** |
+| Production rankings (re-verified 18 Nov, read-only) | — | 1 version (`week 5`, published 18 Nov 12:58 UTC). The database rows, public API rows and the approved local Week 5 file have the identical hash (30 rows). Student switch table absent, so all features report off. 1 account (admin), no students. |
+| Backup route | Export over the IPv4 session pooler, then restore into a local stack: counts identical | Preflight passes (`aws-1-eu-west-1` pooler, 5432). **No production export made; it is the owner's step.** |
 | Fictional lifecycle gate | off | off |
 | Student switches (`student_sign_in`, `student_provisioning`, `avatar_personalization`, `welcome_dialog`) | **on** (fictional test environment) | do not exist yet. They arrive **off** with the migration; `/api/public/features` reports all off. |
 | Public boards | 200, withdrawn (empty) | Week 5 boards unchanged: 10 rows per level, default artwork, via the V1 fallback |
@@ -26,7 +28,7 @@ Code: `main` after PRs #10, #11 and #12, deployed to both Pages projects.
 | Private link routes, anonymous | 401 | 401 |
 | Fictional student flow (2 `.test` accounts provisioned with the CLI) | 27/27 pass: temporary-password login, forced change, avatar plus opt-in, malicious payloads rejected, cross-student isolation, students and anonymous refused links, recovery revokes sessions and old password, suspend/reactivate, sign-in switch off ends sessions while boards stay up | not run (no real or fictional students in production) |
 | Welcome dialog | shows from the backend switch; dismiss works | not shown (switch off) |
-| Admin link approval with a personalized public avatar on a hosted host | **not run**: needs the owner's staging admin session (AAL2). The same flow passes locally and in CI (`v12-student-accounts` integration test). | — |
+| Admin link approval with a personalized public avatar on a hosted host | ✅ (release gate, 18 Nov). Steps: owner AAL2 admin published fictional v1; private preview (username and status only, no emails; a `public_name` file was rejected with 422); approved 2 links. L4 #1 showed the opted-in student's own character; the linked student who had not opted in kept default art. A character change showed without republishing, and opt-out returned default art immediately. v2 had no carried-over links, rollback to v1 restored the link, and everything was withdrawn (0 live). Audit: draft, published, links_approved, draft, published, rolled_back, withdrawn. | — |
 
 ## Hosted acceptance — 18 Nov 2026
 

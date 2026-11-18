@@ -56,6 +56,39 @@ test("browser, BFF, and newest SQL character allowlists are identical", () => {
   assert.equal(new Set(appIds).size, appIds.length);
 });
 
+// Latest definition of each of the four table constraints that allowlist characters:
+// the inline check in the creating migration, or a later named re-definition.
+const CONSTRAINTS = [
+  ["public.student_avatar_configs", "character_key", "student_avatar_configs_character_key_check"],
+  ["app_private.campus_wins_submissions", "approved_avatar_key", "campus_wins_submissions_approved_avatar_key_check"],
+  ["public.published_leaderboard_rows", "avatar_key", "published_leaderboard_rows_avatar_key_check"],
+  ["public.campus_wins_public", "avatar_key", "campus_wins_public_avatar_key_check"],
+];
+function latestConstraintKeys(table, column, name) {
+  let latest = null;
+  for (const file of migrations) {
+    const source = read(`supabase/migrations/${file}`);
+    const created = new RegExp(`create table ${table.replace(".", "\\.")} \\(([\\s\\S]*?)\\n\\);`, "u").exec(source);
+    const inline = created && new RegExp(`${column} in \\(([^)]+)\\)`, "u").exec(created[1]);
+    if (inline) latest = inline[1];
+    for (const match of source.matchAll(new RegExp(`constraint ${name} check \\(\\w+ in \\(([^)]+)\\)`, "gu"))) latest = match[1];
+  }
+  assert.ok(latest, `no definition found for ${name}`);
+  return [...latest.matchAll(/'([a-z0-9]+)'/gu)].map((item) => item[1]).sort();
+}
+
+test("all four character check constraints allow exactly the allowlisted keys", () => {
+  for (const [table, column, name] of CONSTRAINTS) {
+    assert.deepEqual(latestConstraintKeys(table, column, name), [...appIds].sort(), `${name} is out of date`);
+  }
+});
+
+test("the legacy CSV importer reuses the BFF allowlist instead of its own copy", () => {
+  const source = read("functions/lib/leaderboard-csv.js");
+  assert.match(source, /import \{ CHARACTER_IDS \} from "\.\/validation\.js"/u);
+  assert.doesNotMatch(source, /"habiba2"/u);
+});
+
 test("every allowlisted character ships all four files in the delivery format", () => {
   for (const id of appIds) {
     for (const [suffix, parse, valid, maxKb] of FILES) {
