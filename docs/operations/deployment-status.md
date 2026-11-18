@@ -1,4 +1,4 @@
-# Deployment status — 18 November 2026 (V1 level-only release)
+# Deployment status — 18 November 2026 (V1.2 student-account foundation)
 
 ## URLs
 
@@ -11,6 +11,22 @@ Both run the `npm run build:production` output with Pages Functions. Each
 project has its own 6 encrypted settings, loaded with
 `scripts/configure-pages-secrets.sh`. Preview deployments get no secrets and
 fail closed.
+
+## V1.2 release — 18 Nov 2026
+
+Code: `main` after PRs #10, #11 and #12, deployed to both Pages projects.
+
+| Check | Staging | Production |
+|---|---|---|
+| Migrations | 12, latest `202611190001` | 11, latest `202611180001`. **V1.2 migration pending the owner backup.** |
+| Fictional lifecycle gate | off | off |
+| Student switches (`student_sign_in`, `student_provisioning`, `avatar_personalization`, `welcome_dialog`) | **on** (fictional test environment) | do not exist yet. They arrive **off** with the migration; `/api/public/features` reports all off. |
+| Public boards | 200, withdrawn (empty) | Week 5 boards unchanged: 10 rows per level, default artwork, via the V1 fallback |
+| Short names, single header (desktop, 820px, 390px) | ✅ | ✅ (10 unique short names per level, no overflow, tags ≤ 2 lines) |
+| Private link routes, anonymous | 401 | 401 |
+| Fictional student flow (2 `.test` accounts provisioned with the CLI) | 27/27 pass: temporary-password login, forced change, avatar plus opt-in, malicious payloads rejected, cross-student isolation, students and anonymous refused links, recovery revokes sessions and old password, suspend/reactivate, sign-in switch off ends sessions while boards stay up | not run (no real or fictional students in production) |
+| Welcome dialog | shows from the backend switch; dismiss works | not shown (switch off) |
+| Admin link approval with a personalized public avatar on a hosted host | **not run**: needs the owner's staging admin session (AAL2). The same flow passes locally and in CI (`v12-student-accounts` integration test). | — |
 
 ## Hosted acceptance — 18 Nov 2026
 
