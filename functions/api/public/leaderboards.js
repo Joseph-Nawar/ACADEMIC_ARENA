@@ -17,7 +17,11 @@ export async function onRequestGet({ request, env }) {
       !["4", "5", "6"].includes(level)) {
     return jsonResponse({ error: "invalid_filters" }, 400);
   }
-  const { data, error } = await anonymousAuthClient(env).rpc("public_level_leaderboard_v2", { p_level: Number(level) });
+  const client = anonymousAuthClient(env);
+  let { data, error } = await client.rpc("public_level_leaderboard_v2", { p_level: Number(level) });
+  // Before migration 202611190001 is applied the V2 projection does not exist
+  // (PostgREST PGRST202); serve the unchanged V1 rows with default artwork.
+  if (error?.code === "PGRST202") ({ data, error } = await client.rpc("public_level_leaderboard", { p_level: Number(level) }));
   if (error || !Array.isArray(data)) return jsonResponse({ error: "unavailable" }, 503);
   const published = data[0]?.published_at ? new Date(data[0].published_at).toISOString().slice(0, 10) : null;
   return jsonResponse({
