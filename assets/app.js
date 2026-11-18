@@ -45,6 +45,8 @@
     });
     window.scrollTo(0, 0);
     if (target === "wins") void loadWins();
+    // Refetch on every visit so an open tab never keeps showing withdrawn or replaced standings.
+    if (target === "leaderboard") void loadLeaderboard();
   }
 
   function announce(id, message, state = "info") {
@@ -556,7 +558,6 @@
 
   function bindEvents() {
     document.querySelectorAll(".level-tabs [data-level]").forEach((button) => button.addEventListener("click", () => {
-      if (boardState.level === button.dataset.level) return;
       boardState.level = button.dataset.level;
       updateLevelButtons();
       void loadLeaderboard();
