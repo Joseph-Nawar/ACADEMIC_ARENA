@@ -25,7 +25,7 @@ Keep short. Newest first.
   5. **Broad activation:** run roster batches of 25 or fewer, then turn on `welcome_dialog`. The incident switch is `student_sign_in=off`.
   6. **Artwork:** commission the inclusive character set described in `docs/design/avatar-library.md`. No new art ships until it passes review.
 
-## 2026-11-19 — V1.2 Phase B: student account foundation (all switches off)
+## 2026-11-18 — V1.2 Phase B: student account foundation (all switches off)
 
 - Migration `202611190001`, append-only:
   - default-off switches `student_sign_in`, `student_provisioning`, `avatar_personalization` and `welcome_dialog`, which only the owner can change (audited);
