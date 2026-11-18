@@ -72,7 +72,10 @@ for (const file of files) {
     continue;
   }
   const body = readFileSync(path.join(root, "supabase/migrations", file), "utf8");
-  if (/^\s*(begin|commit|rollback|start\s+transaction|end)\s*;/imu.test(body) || /\bconcurrently\b/iu.test(body)) {
+  // Ignore dollar-quoted function bodies: PL/pgSQL `begin … end;` blocks there
+  // are not transaction control.
+  const topLevel = body.replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/gu, "$$$$");
+  if (/^\s*(begin|commit|rollback|start\s+transaction|end)\s*;/imu.test(topLevel) || /\bconcurrently\b/iu.test(topLevel)) {
     throw new Error(`${file} controls transactions itself; apply it manually.`);
   }
   const tag = `aa_mig_${Math.random().toString(36).slice(2)}`;
