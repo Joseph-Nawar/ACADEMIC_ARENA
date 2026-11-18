@@ -2,6 +2,12 @@
 
 Keep short. Newest first.
 
+## 2026-11-18 — V1.2 Phase A: short names, single header
+
+- The leaderboard shows first + final name component (`assets/display-names.js`). Names that collide within a level expand with middle components until unique; the full approved name stays as the tooltip and accessible text. No data or CSV change.
+- Podium tags wrap to at most two lines. The duplicate `.eue-identity-bar` is removed; EUE stays in the sidebar brand area. On mobile there is one dark nav row plus a thin account row.
+- Production Week 5 boards: 10 unique short names per level, none longer than 19 characters.
+
 ## 2026-11-18 — Hosted acceptance complete (PR #9)
 
 - Both databases are migrated (11 migrations) with lifecycle gates off.

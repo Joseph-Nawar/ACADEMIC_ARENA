@@ -63,6 +63,25 @@
     });
   }
 
+  // Visible short label; the complete approved name stays available as a tooltip
+  // and as the accessible name.
+  function setPublicName(element, shortName, fullName) {
+    element.replaceChildren();
+    if (shortName === fullName) {
+      element.textContent = fullName;
+      element.removeAttribute("title");
+      return;
+    }
+    const visible = document.createElement("span");
+    visible.setAttribute("aria-hidden", "true");
+    visible.textContent = shortName;
+    const full = document.createElement("span");
+    full.className = "sr-only";
+    full.textContent = fullName;
+    element.append(visible, full);
+    element.title = fullName;
+  }
+
   function renderBoard(rows) {
     const podium = document.querySelector(".podium-zone");
     const sheet = document.querySelector(".rank-sheet");
@@ -73,6 +92,8 @@
     if (rows.length < 3) return;
 
     $("podium-label").textContent = `LEVEL ${boardState.level} / TOP 3`;
+    const shortNames = window.AcademicArenaDisplayNames.shortDisplayNames(rows.map((row) => row.name));
+    const visibleName = (rowData) => shortNames[rows.indexOf(rowData)];
     $("sheet-subtitle").textContent = "Seven more names. One leaderboard.";
     for (let position = 1; position <= 3; position += 1) {
       const row = rows.find((item) => item.position === position);
@@ -81,12 +102,13 @@
       if (!row) {
         image.removeAttribute("src");
         image.alt = "";
-        name.textContent = "—";
+        name.replaceChildren("—");
+        name.removeAttribute("title");
         continue;
       }
       image.src = artwork(row.avatar, row.style);
       image.alt = `Illustrated character for rank ${position}`;
-      name.textContent = row.name;
+      setPublicName(name, visibleName(row), row.name);
     }
     for (const rowData of rows.filter((row) => row.position > 3).slice(0, 7)) {
       const row = document.createElement("li");
@@ -101,7 +123,7 @@
       portrait.append(image);
       const name = document.createElement("span");
       name.className = "person";
-      name.textContent = rowData.name;
+      setPublicName(name, visibleName(rowData), rowData.name);
       const arrow = document.createElement("span");
       arrow.className = "arrow";
       arrow.setAttribute("aria-hidden", "true");

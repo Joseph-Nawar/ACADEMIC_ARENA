@@ -227,6 +227,61 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.equal(await emptyBoardPage.locator(".podium-zone").isHidden(), true, "a withdrawal shows after re-selecting the level");
   await emptyBoardPage.close();
 
+  // V1.2: long multi-part names show first + final component, collisions expand,
+  // the full approved name stays as tooltip and accessible text, and tags wrap
+  // (at most two lines) without overflowing at desktop, tablet, and phone widths.
+  const longNames = [
+    "Fictional Abdelrahman Mohamed Elsayed Zakariyya", "Testname Hassanein Abdelghany Elbaaly",
+    "Sample Noureldin Khaled Siefeldin Elmahdy", "Sample Kamal Elmahdy", "Sample Fawzy Elmahdy",
+    "Mononym", "Two Parts", "Fictional Omar Ali", "Fictional Omar Hany Ali", "Placeholder Example Person",
+  ];
+  const expectedShort = [
+    "Fictional Zakariyya", "Testname Elbaaly", "Sample Noureldin Elmahdy", "Sample Kamal Elmahdy", "Sample Fawzy Elmahdy",
+    "Mononym", "Two Parts", "Fictional Omar Ali", "Fictional Omar Hany Ali", "Placeholder Person",
+  ];
+  for (const [width, height] of [[1440, 900], [820, 1100], [390, 844]]) {
+    const namesPage = await browser.newPage({ viewport: { width, height } });
+    await namesPage.route("**/api/public/leaderboards**", (route) => route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ releaseLabel: "Week 9", publishedAt: null,
+        rows: longNames.map((name, index) => ({ position: index + 1, name, avatar: "omar", style: "ink" })) }),
+    }));
+    await namesPage.goto(baseUrl);
+    await waitForReady(namesPage);
+    await namesPage.waitForFunction(() => document.getElementById("name-1").title !== "");
+    const layout = await namesPage.evaluate(() => {
+      const visible = (element) => element.querySelector("[aria-hidden]")?.textContent ?? element.textContent;
+      const tags = [1, 2, 3].map((index) => document.getElementById(`name-${index}`));
+      return {
+        width: innerWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        identityBars: document.querySelectorAll(".eue-identity-bar").length,
+        headers: document.querySelectorAll("header.topbar").length,
+        eueVisible: document.querySelector(".eue-endorsement").getBoundingClientRect().width > 0,
+        visibleNames: [...tags, ...document.querySelectorAll("#ranking-rows .person")].map(visible),
+        fullNames: [...tags, ...document.querySelectorAll("#ranking-rows .person")].map((element) => element.title || element.textContent),
+        tags: tags.map((tag) => {
+          const box = tag.getBoundingClientRect();
+          const lineHeight = parseFloat(getComputedStyle(tag).lineHeight);
+          const inner = tag.querySelector("[aria-hidden]") || tag;
+          return { left: box.left, right: box.right, lines: Math.round(inner.getBoundingClientRect().height / lineHeight),
+            clipped: inner.scrollHeight > inner.clientHeight + 1 };
+        }),
+      };
+    });
+    assert.equal(layout.identityBars, 0, "the duplicate EUE identity bar is gone");
+    assert.equal(layout.headers, 1, "one workspace header");
+    assert.equal(layout.eueVisible, true, "EUE branding stays in the navigation brand area");
+    assert.ok(layout.documentWidth <= layout.width + 1, `no horizontal overflow at ${width}px`);
+    assert.deepEqual(layout.visibleNames, expectedShort, "first + final name, collisions expanded");
+    assert.deepEqual(layout.fullNames, longNames, "complete approved names stay available");
+    for (const tag of layout.tags) {
+      assert.ok(tag.left >= 0 && tag.right <= layout.width, `podium tag stays inside the viewport at ${width}px`);
+      assert.ok(tag.lines <= 2 && !tag.clipped, `podium tag wraps to at most two lines without clipping at ${width}px`);
+    }
+    await namesPage.close();
+  }
+
   const racePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   let levelFourStarted = false;
   await racePage.route("**/api/public/leaderboards**", async (route) => {
@@ -262,12 +317,12 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   await racePage.locator('.level-tabs [data-level="5"]').click();
   await levelFourRequest;
   await racePage.locator('.level-tabs [data-level="6"]').click();
-  await racePage.waitForFunction(() => document.getElementById("name-1").textContent.startsWith("Current Level Six"));
+  await racePage.waitForFunction(() => document.getElementById("name-1").title.startsWith("Current Level Six"));
   await new Promise((resolve) => setTimeout(resolve, 500));
   assert.equal(levelFourStarted, true);
   assert.equal(await racePage.locator("#name-1").locator("img").count(), 0);
   assert.equal(await racePage.evaluate(() => window.__arenaInjected || false), false);
-  assert.match(await racePage.locator("#name-1").textContent(), /^Current Level Six <img/);
+  assert.match(await racePage.locator("#name-1 .sr-only").textContent(), /^Current Level Six <img/);
   assert.match(await racePage.locator("#podium-label").textContent(), /LEVEL 6/);
   await racePage.close();
 

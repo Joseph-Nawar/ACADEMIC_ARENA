@@ -91,11 +91,6 @@
 @media(max-width:750px){.podium-scene{height:373px;margin-top:68px}.first{--art-height:270px}.second{--art-height:229px}.third{--art-height:215px}.crown{top:-70px!important}}
 @media(max-width:430px){.podium-scene{height:327px;margin-top:62px}.first{--art-height:230px}.second{--art-height:190px}.third{--art-height:168px}.crown{width:58px;height:44px;top:-65px!important}}
 
-.eue-identity-bar{min-height:70px;background:#fffdf7;border-bottom:3px solid #182526;display:flex;align-items:center;gap:12px;padding:10px clamp(20px,4vw,60px)}
-.eue-identity-big{font-family:Georgia,serif;font-size:38px;font-weight:900;color:#173456;letter-spacing:-3px;line-height:1}
-.eue-identity-copy{font-size:13px;font-weight:950;letter-spacing:.25px;line-height:1.28;color:#182f48}
-.eue-identity-copy strong{font-size:10px;letter-spacing:.8px;font-weight:750}
-.identity-note{margin-left:auto;font-size:10px;font-weight:900;letter-spacing:2px;color:#67716c}
 .account-entry{border:2px solid #182526;background:transparent;padding:8px 12px;font-size:11px;font-weight:900;white-space:nowrap}
 .mfa-panel{margin:12px 0 20px;padding:15px;border:2px solid var(--ink);background:var(--paper)}.mfa-panel[hidden],#mfa-enroll-form[hidden],#mfa-secret-panel[hidden],#mfa-code-form[hidden]{display:none}.mfa-panel h3{font-size:14px;letter-spacing:.8px;margin:0 0 6px}.mfa-panel p{margin:7px 0}.mfa-panel code{display:block;overflow-wrap:anywhere;background:#f1e7d7;border:1px dashed var(--ink);padding:12px;font-size:14px;font-weight:850;user-select:all}
 .dialog input{width:100%;min-height:43px;border:2px solid #182526;background:#fffdf7;padding:9px;margin:6px 0 14px;font-size:15px}
@@ -103,8 +98,8 @@
 .style-options{grid-template-columns:repeat(2,minmax(0,1fr))}
 .style-option{padding:9px 8px;min-height:115px;font-size:13px}
 .style-option img{height:86px;max-width:135px}
-@media(max-width:750px){.eue-identity-bar{min-height:60px;padding:8px 16px}.eue-identity-big{font-size:32px}.eue-identity-copy{font-size:11px}.eue-identity-copy strong{font-size:9px}.identity-note{display:none}.style-option{min-height:105px}}
-@media(max-width:430px){.eue-identity-big{font-size:29px}.eue-identity-copy{font-size:9px}.eue-identity-copy strong{font-size:8px}.account-entry{font-size:9px;padding:6px}}
+@media(max-width:750px){.style-option{min-height:105px}}
+@media(max-width:430px){.account-entry{font-size:9px;padding:6px}}
 /* V6 avatar family thumbnail: full head remains visible in every preset. */
 .base-btn .base-preview{height:116px;align-items:center;background:#f0e7dd}
 .base-btn .base-preview img{height:109px;width:100%;max-width:100%;object-fit:contain;object-position:center}
@@ -153,3 +148,12 @@
 .leaderboard-subtitle span{color:var(--muted);font-size:13px}
 .level-tabs .tab{min-width:92px}
 @media (max-width:560px){.level-tabs{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}.level-tabs .tab{min-width:0}}
+
+/* V1.2: short public names; tags wrap to at most two lines instead of clipping. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.name-tag{white-space:normal;width:max-content;max-width:min(124%,210px);line-height:1.15;overflow-wrap:anywhere;hyphens:none}
+.name-tag>span[aria-hidden]{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+@media(max-width:430px){.name-tag{max-width:112%;padding:5px 6px;font-size:10.5px}}
+/* V1.2 mobile header: one dark navigation row (brand, EUE, icons) and one thin account row. */
+@media(max-width:500px){.rail{flex-wrap:nowrap;padding:8px 10px;gap:8px}.brand-lockup{flex-direction:row;align-items:center;gap:8px;min-width:0}.brand{padding:0;gap:4px}.brand-mark{width:17px;height:18px}.brand-type{font-size:13px}.brand-type strong{font-size:16px}.eue-endorsement{max-width:78px;padding:3px}.eue-endorsement img{width:72px;max-height:24px}.rail-navigation{margin-left:auto;gap:2px}.nav-link{width:34px;height:40px;padding:6px}.nav-link svg{width:20px;height:20px}.topbar{height:46px}.topbar .hide-micro{display:none}.topbar-actions{gap:8px}}
+@media(max-width:360px){.eue-endorsement{display:none}}
