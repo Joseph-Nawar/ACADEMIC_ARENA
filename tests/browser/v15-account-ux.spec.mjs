@@ -55,6 +55,13 @@ function fakeServer(options = {}) {
       state.signedIn = false;
       return route.fulfill({ status: 204 });
     }
+    if (path === "/api/me/avatar" && request.method() === "PUT") {
+      state.lastCsrf = request.headers()["x-csrf-token"] || "";
+      if (!state.signedIn) return fulfill(route, { error: "unauthorized" }, 401);
+      if (state.lastCsrf !== "fictional-csrf") return fulfill(route, { error: "request_rejected" }, 403);
+      const body = request.postDataJSON();
+      return fulfill(route, { saved: true, avatar: body.avatar, showOnLeaderboard: false });
+    }
     if (path === "/api/me/avatar") {
       if (!state.signedIn) return fulfill(route, { error: "unauthorized" }, 401);
       if (state.mustChange) return fulfill(route, { error: "password_change_required" }, 409);
@@ -220,7 +227,45 @@ async function staleAndFailedSessionChecks(browser, baseUrl) {
   await retry.close();
 }
 
+async function backgroundRechecks(browser, baseUrl) {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const server = fakeServer({ signedIn: true, mustChange: false, password: NEW });
+  await page.route("**/api/**", server.handle);
+  await page.goto(baseUrl);
+  await waitForReady(page);
+  await page.waitForFunction(() => document.getElementById("nav-portrait").src.includes("tariq"));
+  const restore = () => page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+
+  // An unsaved studio edit survives a re-check that finds the same session.
+  await page.locator('.nav-link[data-page="avatar"]').click();
+  await page.locator('#base-options button').first().click();
+  const edited = await page.locator("#studio-art").getAttribute("src");
+  assert.doesNotMatch(edited, /tariq/);
+  await restore();
+  await delay(500);
+  assert.equal(await page.locator("#studio-art").getAttribute("src"), edited, "a background re-check keeps unsaved edits");
+
+  // A re-check that fails keeps the session and its CSRF token: saving still works.
+  server.state.sessionFailures = 2;
+  await restore();
+  await delay(1800);
+  assert.equal(await header(page), "ACCOUNT");
+  await page.locator("#save-character").click();
+  await page.waitForFunction(() => /saved to your account/i.test(document.getElementById("save-status").textContent));
+  assert.equal(server.state.lastCsrf, "fictional-csrf", "the CSRF token survives a failed session check");
+
+  // The account dialog keeps keyboard focus inside it.
+  await page.locator("#account-entry").click();
+  await page.locator("#close-account").focus();
+  await page.keyboard.press("Tab");
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest("#login-backdrop"))), true, "Tab stays in the dialog");
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest("#login-backdrop"))), true, "Shift+Tab stays in the dialog");
+  await page.close();
+}
+
 export async function runAccountUxBrowserTests(browser, baseUrl) {
+  await backgroundRechecks(browser, baseUrl);
   await studentJourney(browser, baseUrl, { width: 1440, height: 900 });
   await studentJourney(browser, baseUrl, { width: 390, height: 844 });
   await temporaryPasswordAfterRefresh(browser, baseUrl);

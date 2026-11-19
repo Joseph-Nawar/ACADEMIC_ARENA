@@ -43,6 +43,7 @@
   // change happened while it was in flight.
   let sessionEpoch = 0;
   let lastSessionCheck = 0;
+  let sessionResolved = false;
   let passwordFormOpen = false;
   let lastUsername = "";
   let features = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false };
@@ -363,8 +364,15 @@
       closeWelcome();
       return;
     }
+    trapTab(event, $("welcome-backdrop"));
+  }
+
+  // Keeps Tab inside an open modal dialog (only visible, enabled controls count).
+  function trapTab(event, container) {
     if (event.key !== "Tab") return;
-    const focusable = [...$("welcome-backdrop").querySelectorAll("button")];
+    const focusable = [...container.querySelectorAll("button, input, select, a[href]")]
+      .filter((element) => !element.disabled && element.getClientRects().length > 0);
+    if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (event.shiftKey && document.activeElement === first) {
@@ -406,6 +414,7 @@
 
   function applySession(next) {
     sessionEpoch += 1;
+    sessionResolved = true;
     lastSessionCheck = Date.now();
     const wasAuthenticated = session.authenticated === true;
     session = next && next.authenticated === true ? next : { authenticated: false };
@@ -581,8 +590,23 @@
       next = await api.auth.getSession();
     }
     if (epoch !== sessionEpoch) return;
-    if (next.unavailable && session.authenticated) return; // keep the known state; the next action re-checks
+    lastSessionCheck = Date.now();
+    if (next.unavailable) {
+      // Keep a known signed-in state; never show a failed check as "signed out" silently.
+      if (!session.authenticated) $("account-entry").title = "Couldn’t check your sign-in. Try again shortly.";
+      return;
+    }
+    // Same person, same state: nothing to re-render (keeps unsaved studio edits and staff messages).
+    if (sameSessionState(session, next)) return;
     applySession(next);
+  }
+
+  function sameSessionState(current, next) {
+    if (!sessionResolved || current.authenticated !== next.authenticated) return false;
+    if (!next.authenticated) return true;
+    const a = current.user || {};
+    const b = next.user || {};
+    return ["role", "mustChangePassword", "mfaRequired", "mfaSetupRequired"].every((key) => a[key] === b[key]);
   }
 
   function renderWinCard(post) {
@@ -930,6 +954,7 @@
       openLogin();
     });
     $("welcome-backdrop").addEventListener("keydown", trapWelcomeFocus);
+    $("login-backdrop").addEventListener("keydown", (event) => trapTab(event, $("login-backdrop")));
     $("welcome-backdrop").addEventListener("click", (event) => {
       if (event.target === $("welcome-backdrop")) closeWelcome();
     });

@@ -398,7 +398,8 @@
           csrfToken = text(payload.csrfToken);
           return sanitizeSession(payload);
         } catch (error) {
-          csrfToken = "";
+          // Keep the CSRF token through a transient failure: the session may still be valid.
+          if (error?.code === "unauthorized") csrfToken = "";
           // A network or server failure is "couldn't check", not "signed out":
           // the caller may retry instead of showing a false SIGN IN state.
           return error?.code === "unauthorized" ? { authenticated: false } : { authenticated: false, unavailable: true };
