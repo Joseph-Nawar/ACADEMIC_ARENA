@@ -82,7 +82,7 @@ async function signIn(page, password) {
   await page.locator("#login-username").fill("fictional-student");
   await page.locator("#login-password").fill(password);
   await page.locator('#login-form button[type="submit"]').click();
-  await page.locator("#account-panel").waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.getElementById("account-entry").textContent === "ACCOUNT");
 }
 
 async function studentJourney(browser, baseUrl, viewport) {
@@ -131,10 +131,15 @@ async function studentJourney(browser, baseUrl, viewport) {
   assert.equal(await page.evaluate(() => document.activeElement?.id), "login-password");
   assert.equal(await header(page), "SIGN IN");
 
-  // 3. Normal sign-in: a clear next action, no password form.
+  // 3. Normal sign-in: the dialog closes by itself and My Character is right there.
   await signIn(page, NEW);
   assert.equal(await header(page), "ACCOUNT");
+  assert.equal(await visible(page, "#login-backdrop"), false, `${label}: modal closes automatically after a normal sign-in`);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "account-entry", "focus returns to the ACCOUNT button");
   assert.equal(await page.locator("#account-entry").getAttribute("data-state"), "signed-in");
+  assert.equal(await visible(page, '.nav-link[data-page="avatar"]'), true, "My Character is immediately reachable");
+  // The account dialog still offers the next step and settings when reopened.
+  await page.locator("#account-entry").click();
   assert.equal(await page.locator("#account-status").textContent(), "You’re signed in.");
   assert.equal(await visible(page, "#password-section"), false, `${label}: password form hidden when not required`);
   assert.equal(await visible(page, "#show-password-change"), true, "voluntary change stays available");
@@ -210,11 +215,11 @@ async function staleAndFailedSessionChecks(browser, baseUrl) {
   await page.locator("#login-username").fill("fictional-student");
   await page.locator("#login-password").fill(NEW);
   await page.locator('#login-form button[type="submit"]').click();
-  await page.locator("#account-panel").waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.getElementById("login-backdrop").hidden);
   await waitForReady(page);
   await delay(300);
   assert.equal(await header(page), "ACCOUNT", "a stale session check never flips the header back to SIGN IN");
-  assert.equal(await visible(page, "#account-panel"), true);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.session), "student");
   await page.close();
 
   // A transient failure is retried instead of being shown as signed out.

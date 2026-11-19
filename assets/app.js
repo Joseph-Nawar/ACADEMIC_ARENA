@@ -851,7 +851,11 @@
         $("login-form").reset();
         $("login-status").textContent = "";
         applySession(next);
-        focusAccountAction();
+        // A student with their own password is done: close the dialog so the
+        // board and My Character are right there. Temporary passwords and
+        // staff security checks keep the dialog open for the required step.
+        if (next.user.role === "student" && !next.user.mustChangePassword) closeLogin();
+        else focusAccountAction();
       } catch (error) {
         $("login-password").value = "";
         $("login-status").textContent = error?.code === "rate_limited"
