@@ -78,7 +78,8 @@ export async function runM2AuthBrowserTests(browser, baseUrl) {
   await page.locator('#login-form button[type="submit"]').click();
   await page.locator("#mfa-enroll-form").waitFor({ state: "visible" });
   assert.match(await page.locator("#mfa-status").textContent(), /set up an authenticator/i);
-  assert.equal(await page.locator("#change-password-form").isVisible(), true);
+  assert.equal(await page.locator("#password-section").isVisible(), false, "an optional password change stays tucked away");
+  assert.equal(await page.locator("#show-password-change").isVisible(), true, "staff can still change their password voluntarily");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#mfa-enroll-form button[type="submit"]').click();
@@ -94,7 +95,9 @@ export async function runM2AuthBrowserTests(browser, baseUrl) {
   await page.locator('#mfa-code-form button[type="submit"]').click();
   await page.locator("#mfa-panel").waitFor({ state: "hidden" });
   assert.equal(await page.locator("#mfa-secret").textContent(), "");
-  assert.equal(await page.locator("#account-status").textContent(), "Staff verification is complete.");
+  assert.match(await page.locator("#account-status").textContent(), /Staff verification is complete\./);
+  assert.equal(await page.locator("#staff-next").isVisible(), true, "verified staff get a clear next action");
+  assert.equal(await page.locator("#account-entry").textContent(), "ACCOUNT");
   assert.equal(requests.some(({ body }) => String(body).includes("provider-access-token")), false);
   assert.equal(requests.some(({ body }) => String(body).includes("private@academic-arena.test")), false);
   assert.equal(requests.find(({ path }) => path === "/api/auth/mfa/verify")?.body, JSON.stringify({ code: "123456" }));
@@ -126,13 +129,14 @@ export async function runM2AuthBrowserTests(browser, baseUrl) {
   await passwordPage.locator("#login-password").fill("fictional-initial-password");
   await passwordPage.locator('#login-form button[type="submit"]').click();
   await passwordPage.waitForFunction(() =>
-    document.getElementById("account-status").textContent.toLowerCase().includes("change your initial password"));
-  assert.match(await passwordPage.locator("#account-status").textContent(), /change your initial password/i);
+    document.getElementById("account-status").textContent.toLowerCase().includes("temporary password"));
+  assert.match(await passwordPage.locator("#account-status").textContent(), /set your own password/i);
   await passwordPage.locator("#old-password").fill("fictional-initial-password");
   await passwordPage.locator("#new-password").fill("fictional-new-password-2026");
+  await passwordPage.locator("#confirm-password").fill("fictional-new-password-2026");
   await passwordPage.locator('#change-password-form button[type="submit"]').click();
   await passwordPage.locator("#login-status").waitFor({ state: "visible" });
-  assert.match(await passwordPage.locator("#login-status").textContent(), /sign in again/i);
+  assert.match(await passwordPage.locator("#login-status").textContent(), /sign in with your new password/i);
   assert.equal(await passwordPage.locator("#login-form").isVisible(), true);
   assert.equal(await passwordPage.locator("#account-panel").isVisible(), false);
   assert.deepEqual(errors, []);
