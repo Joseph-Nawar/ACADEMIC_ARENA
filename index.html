@@ -22,14 +22,14 @@
  <div class="workspace">
   <header class="topbar">
    <div class="topbar-kicker"><span class="dot"></span><span class="kicker-long">University of London · Computer Science</span><span class="kicker-short">UoL · Computer Science</span></div>
-   <div class="topbar-actions"><button type="button" id="account-entry" class="account-entry" title="Sign in">SIGN IN</button><span class="demo-stamp" id="mode-stamp" hidden></span><button class="profile-chip" id="profile-link" data-student-only aria-label="Open character studio"><span class="mini-photo" data-art="anonymous"><img id="nav-portrait" src="assets/competitors/thumb-a.svg" alt=""/></span><span>My Character ↗</span></button></div>
+   <div class="topbar-actions"><button type="button" id="account-entry" class="account-entry" aria-haspopup="dialog" title="Sign in">SIGN IN</button><span class="demo-stamp" id="mode-stamp" hidden></span><button class="profile-chip" id="profile-link" data-student-only aria-label="Open character studio"><span class="mini-photo" data-art="anonymous"><img id="nav-portrait" src="assets/competitors/thumb-a.svg" alt=""/></span><span>My Character ↗</span></button></div>
   </header>
   <main class="content">
    <section id="page-leaderboard" class="page" aria-labelledby="leaderboard-title">
     <div class="section-prelude"><span class="prelude-swatch"></span>SHOW UP. STAND OUT.</div>
     <div class="title-row"><h1 id="leaderboard-title" class="hero-title">LEVEL<br/><span>CHAMPIONS.</span></h1>
      <svg class="title-doodle" viewBox="0 0 96 96" fill="none" aria-hidden="true"><path d="m16 61 1-41 23 24 10-35 15 31 21-21-8 44-62-2Z" fill="#f4c856" stroke="#182526" stroke-width="4" stroke-linejoin="round"/><path d="m16 70 63-2" stroke="#182526" stroke-width="6"/><path d="M10 84l15-7M54 91l6-12" stroke="#ef6f56" stroke-width="5" stroke-linecap="round"/></svg></div>
-    <p class="leaderboard-subtitle"><strong id="leaderboard-subtitle">Quiz Leaderboard</strong><span>Ranked by quiz participation, then quiz scores.</span></p>
+    <p class="leaderboard-subtitle"><strong id="leaderboard-subtitle">Quiz Leaderboard</strong><span>Ranked by quizzes attended, then quiz scores.</span></p>
     <div class="filters" role="group" aria-label="Leaderboard selection">
      <div class="view-tabs level-tabs" role="group" aria-label="Level"><button class="tab active" data-level="4" aria-pressed="true">Level 4</button><button class="tab" data-level="5" aria-pressed="false">Level 5</button><button class="tab" data-level="6" aria-pressed="false">Level 6</button></div>
     </div>
@@ -147,7 +147,38 @@
      <p id="public-name-status" role="status"></p>
     </section>
    </section>
-   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>HOW IT WORKS</div><h1 id="about-title">TOP TEN.<br/>EVERY LEVEL.</h1><p>Academic Arena celebrates the top quiz performers in Levels 4, 5 and 6 of UOL Computer Science at EUE. Anyone can view the standings, no sign-in needed.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Switch between Level 4, 5 and 6 to see each level’s top ten.</p></div></div><div class="about-step"><b>02</b><div><h3>How the ranking works</h3><p>Students are ranked by quiz participation first, then quiz scores. Only names and positions are published.</p></div></div><div class="about-step"><b>03</b><div><h3>The characters</h3><p>Every ranked student appears as an illustrated 3D character, never a photo or a likeness. Staff choose a default character for each published ranking, and students with an Arena account can swap in their own.</p></div></div></div><div class="about-signin" data-student-only><h2>SIGNING IN</h2><p>University staff give each student an Arena username and a temporary password. After your first sign-in you set your own password, then open My Character to pick your look. It appears on the leaderboard only once staff confirm your ranking and you switch it on.</p></div></section>
+   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title">
+    <div class="section-prelude"><span class="prelude-swatch"></span>HOW IT WORKS</div>
+    <h1 id="about-title">SHOW UP.<br/><span>SCORE UP.</span></h1>
+    <p class="about-lead">Academic Arena celebrates the students who keep turning up. Every quiz you attend moves you forward, and every warning sets you back. Consistency is what gets you on the board.</p>
+
+    <section class="score-card" aria-labelledby="score-title">
+     <h2 id="score-title">YOUR <em>ACADEMIC SCORE</em></h2>
+     <ul class="score-rules">
+      <li class="score-rule" data-kind="start"><span class="score-chip">0</span><div><h3>Everyone starts at zero</h3><p>Same starting line for every student.</p></div></li>
+      <li class="score-rule" data-kind="plus"><span class="score-chip">+1</span><div><h3>Each quiz you attend</h3><p>Show up and take part. Every quiz counts.</p></div></li>
+      <li class="score-rule" data-kind="minus"><span class="score-chip">−1</span><div><h3>Each warning received</h3><p>Attendance warnings take a point away.</p></div></li>
+      <li class="score-rule" data-kind="zero"><span class="score-chip">±0</span><div><h3>Normal attendance</h3><p>It’s the expected minimum, so it earns no extra points. It keeps warnings away.</p></div></li>
+     </ul>
+     <div class="score-example" aria-labelledby="example-title">
+      <h3 id="example-title">EXAMPLE</h3>
+      <p class="score-sum" aria-label="Example: 5 quizzes attended is plus 5. 2 warnings is minus 2. Academic Score: 3."><span class="sum-part" data-kind="plus" aria-hidden="true">5 quizzes attended <b>+5</b></span><span class="sum-op" aria-hidden="true">+</span><span class="sum-part" data-kind="minus" aria-hidden="true">2 warnings <b>−2</b></span><span class="sum-op" aria-hidden="true">=</span><span class="sum-total" aria-hidden="true">ACADEMIC SCORE <b>3</b></span></p>
+     </div>
+     <div class="score-ranking"><h3>HOW THE BOARD IS ORDERED</h3><p>Highest Academic Score first. If two students are level, the one with the higher total of quiz scores goes ahead.</p></div>
+    </section>
+
+    <div class="about-tips" aria-label="How to climb">
+     <div class="about-tip"><b>01</b><h3>Never skip a quiz</h3><p>Each one you attend adds a point to your score.</p></div>
+     <div class="about-tip"><b>02</b><h3>Stay warning-free</h3><p>Steady attendance keeps your points safe.</p></div>
+     <div class="about-tip"><b>03</b><h3>Keep it consistent</h3><p>Week after week, showing up is what climbs the board.</p></div>
+    </div>
+
+    <p class="about-privacy"><strong>Private by design.</strong> Only names and positions are published. Academic Scores, quiz marks, attendance and warnings are never shown.</p>
+    <p class="about-note" id="methodology-note"><strong>About the Week 5 boards:</strong> warnings weren’t part of the Week 5 data, so those boards rank quizzes attended, then quiz scores. For a student with no warnings, that’s the same as the Academic Score.</p>
+
+    <div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Switch between Level 4, 5 and 6 to see each level’s top ten. Anyone can view the standings; no sign-in needed.</p></div></div><div class="about-step"><b>02</b><div><h3>The characters</h3><p>Every ranked student appears as an illustrated 3D character, never a photo or a likeness. Staff choose a default character for each published ranking, and students with an Arena account can swap in their own.</p></div></div></div>
+    <div class="about-signin" data-student-only><h2>SIGNING IN</h2><p>University staff give each student an Arena username and a temporary password. After your first sign-in you set your own password, then sign in again with it and open My Character to pick your look. It appears on the leaderboard only once staff confirm your ranking and you switch it on.</p></div>
+   </section>
   </main>
  </div>
 </div>
@@ -162,7 +193,7 @@
    <p id="login-status" role="status"></p>
   </form>
   <div id="account-panel" hidden>
-   <p id="account-status"></p>
+   <p id="account-status" role="status" aria-live="polite"></p>
    <section id="mfa-panel" class="mfa-panel" hidden aria-labelledby="mfa-title">
     <h3 id="mfa-title">STAFF SECURITY CHECK</h3>
     <p id="mfa-status" role="status" aria-live="polite"></p>
@@ -180,12 +211,19 @@
     </form>
    </section>
    <section id="student-next" class="student-next" hidden aria-labelledby="student-next-title"><h3 id="student-next-title">NEXT: YOUR CHARACTER</h3><p>Pick your look in My Character. Showing it on a leaderboard needs a staff-verified ranking link and your opt-in.</p><button type="button" class="button-solid" id="open-studio">OPEN MY CHARACTER ↗</button></section>
-   <form id="change-password-form">
-    <label for="old-password">Current password</label><input id="old-password" type="password" autocomplete="current-password" required maxlength="256" />
-    <label for="new-password">New password (15–128 characters)</label><input id="new-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />
-    <button type="submit" class="button-solid">CHANGE PASSWORD</button>
-   </form>
-   <div class="dialog-footer"><button type="button" class="outline-btn" id="close-account">CLOSE</button><button type="button" class="outline-btn" id="logout-btn">SIGN OUT</button></div>
+   <section id="staff-next" class="student-next" hidden aria-labelledby="staff-next-title"><h3 id="staff-next-title">NEXT: STAFF DESK</h3><p>Your staff tools are ready.</p><button type="button" class="button-solid" id="open-staff-desk">OPEN STAFF DESK ↗</button></section>
+   <section id="password-section" class="password-section" hidden aria-labelledby="password-title">
+    <h3 id="password-title">CHANGE PASSWORD</h3>
+    <p id="password-help">Choose a new password of 15–128 characters. You’ll then sign in again with it.</p>
+    <form id="change-password-form">
+     <label for="old-password">Current password</label><input id="old-password" type="password" autocomplete="current-password" required maxlength="256" />
+     <label for="new-password">New password (15–128 characters)</label><input id="new-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />
+     <label for="confirm-password">Confirm new password</label><input id="confirm-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />
+     <p id="password-status" class="dialog-status" role="status" aria-live="polite"></p>
+     <div class="dialog-footer"><button type="button" class="outline-btn" id="cancel-password-change">CANCEL</button><button type="submit" class="button-solid">SAVE NEW PASSWORD</button></div>
+    </form>
+   </section>
+   <div class="dialog-footer account-actions"><button type="button" class="outline-btn" id="show-password-change">CHANGE PASSWORD</button><button type="button" class="outline-btn" id="logout-btn">SIGN OUT</button><button type="button" class="outline-btn" id="close-account">CLOSE</button></div>
   </div>
  </div>
 </div>

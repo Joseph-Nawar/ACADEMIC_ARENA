@@ -2,6 +2,26 @@
 
 Keep short. Newest first.
 
+## 2026-11-19 — V1.5 pilot fixes
+
+Pilot started: 2 student accounts, `student_sign_in` and `student_provisioning` on; `avatar_personalization` and `welcome_dialog` off.
+
+- **`user-two`'s character (read-only check, no data changed):** account active, password changed, a character is saved. It is not public for three rollout reasons, none of them a bug:
+  1. `avatar_personalization` is off;
+  2. `show_on_leaderboard` is false (the opt-in box is hidden while that switch is off);
+  3. there is no verified link to any Week 5 row (0 links in the current publication).
+  The public projection behaves correctly: 30 rows with staff-approved defaults, 0 personalized. The new pgTAP file `v15_avatar_publication_conditions` covers each condition.
+- **Account UX fixes:**
+  - The password form shows only when it is required or chosen (CHANGE PASSWORD), and needs a confirmation.
+  - After a change, the form clears and the dialog says to sign in with the new password (username kept, focus on password).
+  - Normal sign-in gives one next action: My Character or Staff Desk.
+  - A temporary password reopens the dialog after a refresh.
+  - The saved character loads after sign-in and is cleared on sign-out (before, it loaded only at page start).
+  - **Bug fixed:** a slow initial session check could overwrite a fresh sign-in, so the header showed SIGN IN while signed in. Session results are now versioned; a failed check is retried; the state is re-checked after a back/forward restore or a long time in the background.
+  - New browser spec: `tests/browser/v15-account-ux.spec.mjs` (desktop and mobile).
+- **How it works:** rewritten around the Academic Score (start 0, +1 per quiz attended, −1 per warning, normal attendance ±0, ties by total quiz score), with a 5 − 2 = 3 example. Scores stay private.
+- **Methodology check:** the Week 5 source workbook ranks quizzes attended, then quiz scores, and has **no warnings column**. The site says so: the subtitle reads "Ranked by quizzes attended, then quiz scores." There is also a Week 5 note. Warning-adjusted boards need approved warnings data. The Level 4 rank 10 is fully tied with rank 11 in the source.
+
 ## 2026-11-20 — V1.4 final release pass
 
 - **Board characters.** The original 3D Cartoon cast is back on every board.

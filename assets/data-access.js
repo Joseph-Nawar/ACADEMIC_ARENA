@@ -397,9 +397,11 @@
           const payload = await request("GET", "/auth/session", undefined, false);
           csrfToken = text(payload.csrfToken);
           return sanitizeSession(payload);
-        } catch {
+        } catch (error) {
           csrfToken = "";
-          return { authenticated: false };
+          // A network or server failure is "couldn't check", not "signed out":
+          // the caller may retry instead of showing a false SIGN IN state.
+          return error?.code === "unauthorized" ? { authenticated: false } : { authenticated: false, unavailable: true };
         }
       },
       async signIn(credentials) {

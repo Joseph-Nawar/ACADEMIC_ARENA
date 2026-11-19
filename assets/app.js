@@ -36,7 +36,15 @@
   const viewerReactions = new Map();
   let activeTotpSecret = "";
   let selectedCategory = "all";
-  let choices = { base: "amara", style: "ink", tone: "mint", badge: "✦" };
+  const DEFAULT_CHOICES = Object.freeze({ base: "amara", style: "ink", tone: "mint", badge: "✦" });
+  let choices = { ...DEFAULT_CHOICES };
+  // Every session change goes through applySession(); the epoch lets a slow
+  // background session check be discarded if a sign-in, sign-out or password
+  // change happened while it was in flight.
+  let sessionEpoch = 0;
+  let lastSessionCheck = 0;
+  let passwordFormOpen = false;
+  let lastUsername = "";
   let features = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false };
   const WELCOME_KEY = "arena-welcome-dismissed";
   const WELCOME_VERSION = "v1";
@@ -276,18 +284,46 @@
   }
 
   async function loadSavedCharacter() {
+    const epoch = sessionEpoch;
     try {
       const saved = await api.student.getMyCharacter();
+      if (epoch !== sessionEpoch) return;
       if (saved) {
         const { showOnLeaderboard, ...look } = saved;
         choices = { ...choices, ...look };
         $("show-on-leaderboard").checked = showOnLeaderboard === true;
         showSavedPortrait();
       }
-    } catch {
-      if (mode === "production") $("save-note").textContent = "Sign in with your Arena account to load your saved character.";
+    } catch (error) {
+      if (epoch !== sessionEpoch) return;
+      if (error?.code === "unauthorized") return void sessionEnded();
+      if (mode === "production") $("save-note").textContent = "Your saved character could not be loaded. Try again later.";
     }
     renderStudio();
+  }
+
+  // Back to the default studio look (sign-out on a shared device leaves nothing behind).
+  function resetCharacter() {
+    choices = { ...DEFAULT_CHOICES };
+    $("show-on-leaderboard").checked = false;
+    $("save-status").textContent = "";
+    resetPortrait();
+    renderStudio();
+  }
+
+  // The studio's note always matches who is signed in.
+  function renderSaveNote() {
+    if (mode !== "production") return;
+    const user = session.user || {};
+    let note = "Sign in with your Arena account to save.";
+    if (session.authenticated && user.role !== "student") note = "Saving a character is for student accounts.";
+    else if (session.authenticated && user.mustChangePassword) note = "Set your own password first (ACCOUNT, top right), then save your character.";
+    else if (session.authenticated) {
+      note = features.avatarPersonalization
+        ? "Saved to your Arena account."
+        : "Saved to your Arena account. Showing characters on public leaderboards isn’t switched on yet.";
+    }
+    $("save-note").textContent = note;
   }
 
   function welcomeDismissed() {
@@ -343,9 +379,22 @@
   function openLogin() {
     $("login-backdrop").hidden = false;
     $("login-status").textContent = "";
-    renderAccountPanel();
-    if (session.authenticated) $("account-status").textContent = "You’re signed in.";
-    else $("login-username").focus();
+    renderAccountForms();
+    focusAccountAction();
+  }
+
+  // Puts focus on the one thing the visitor should do next.
+  function focusAccountAction() {
+    if ($("login-backdrop").hidden) return;
+    const user = session.user || {};
+    if (!session.authenticated) {
+      if (lastUsername && !$("login-username").value) $("login-username").value = lastUsername;
+      ($("login-username").value ? $("login-password") : $("login-username")).focus();
+    } else if (!$("password-section").hidden) $("old-password").focus();
+    else if (user.mfaRequired) $("mfa-panel").querySelector("form:not([hidden]) button, form:not([hidden]) input")?.focus();
+    else if (!$("student-next").hidden) $("open-studio").focus();
+    else if (!$("staff-next").hidden) $("open-staff-desk").focus();
+    else $("close-account").focus();
   }
 
   function clearTotpSetup() {
@@ -355,9 +404,26 @@
     $("mfa-code-form").reset();
   }
 
-  function renderAccountPanel() {
+  function applySession(next) {
+    sessionEpoch += 1;
+    lastSessionCheck = Date.now();
+    const wasAuthenticated = session.authenticated === true;
+    session = next && next.authenticated === true ? next : { authenticated: false };
+    if (!session.authenticated) {
+      passwordFormOpen = false;
+      clearTotpSetup();
+      $("change-password-form").reset();
+      $("password-status").textContent = "";
+      if (wasAuthenticated) resetCharacter();
+    }
     renderAccountForms();
     void onSessionChanged();
+  }
+
+  // The server ended the session (expiry, revocation): show it honestly.
+  function sessionEnded(message = "Your session has ended. Sign in again to continue.") {
+    applySession({ authenticated: false });
+    showLoginRequired(message);
   }
 
   const submissionLabels = Object.freeze({
@@ -398,16 +464,28 @@
   }
 
   // Runs after every session change: account button, student-private data, staff desk.
+  function renderHeader() {
+    const user = session.user || {};
+    const entry = $("account-entry");
+    entry.textContent = session.authenticated ? "ACCOUNT" : "SIGN IN";
+    entry.title = session.authenticated ? "Your Arena account" : "Sign in";
+    entry.dataset.state = !session.authenticated ? "signed-out"
+      : user.mustChangePassword || user.mfaRequired ? "action-needed" : "signed-in";
+    document.documentElement.dataset.session = !session.authenticated ? "none" : user.role === "student" ? "student" : "staff";
+  }
+
   async function onSessionChanged() {
+    const epoch = sessionEpoch;
     if (!session.authenticated) resetPortrait();
-    $("account-entry").textContent = session.authenticated ? "ACCOUNT" : "SIGN IN";
+    renderHeader();
+    renderSaveNote();
     window.dispatchEvent(new CustomEvent("arena:session", { detail: { session, api, showPage } }));
     if (mode !== "production") return;
     const user = session.user || {};
     const student = session.authenticated && user.role === "student" && !user.mustChangePassword;
-    $("student-next").hidden = !student;
     if (session.authenticated) closeWelcome(false);
     viewerReactions.clear();
+    if (student) void loadSavedCharacter();
     if (!student) {
       renderSubmissions([]);
       if (currentPage === "wins") void loadWins();
@@ -415,12 +493,21 @@
     }
     try {
       const [reactions, submissions] = await Promise.all([api.student.getMyReactions(), api.student.getMySubmissions()]);
+      if (epoch !== sessionEpoch) return;
       for (const [id, reaction] of Object.entries(reactions)) viewerReactions.set(id, reaction);
       renderSubmissions(submissions);
     } catch {
       renderSubmissions([]);
     }
     if (currentPage === "wins") void loadWins();
+  }
+
+  function accountStatusText() {
+    const user = session.user || {};
+    if (user.mustChangePassword) return "You’re signed in with a temporary password. Set your own password to continue.";
+    if (user.mfaRequired) return "Complete the staff security check to continue.";
+    if (user.role !== "student") return "Signed in to your staff account. Staff verification is complete.";
+    return "You’re signed in.";
   }
 
   function renderAccountForms() {
@@ -435,6 +522,20 @@
     const user = session.user || {};
     const mustChangePassword = user.mustChangePassword === true;
     const needsMfa = user.mfaRequired === true;
+    const ready = !mustChangePassword && !needsMfa;
+    $("account-status").textContent = accountStatusText();
+    $("student-next").hidden = !(ready && user.role === "student");
+    $("staff-next").hidden = !(ready && user.role !== "student");
+    // The password form appears only when it is required (temporary password)
+    // or when the person chose CHANGE PASSWORD; otherwise it stays tucked away.
+    const showPassword = mustChangePassword || passwordFormOpen;
+    $("password-section").hidden = !showPassword;
+    $("password-title").textContent = mustChangePassword ? "SET YOUR OWN PASSWORD" : "CHANGE PASSWORD";
+    $("password-help").textContent = mustChangePassword
+      ? "You signed in with a temporary password from university staff. Choose your own (15–128 characters). You’ll then sign in again with it."
+      : "Choose a new password of 15–128 characters. You’ll then sign in again with it.";
+    $("cancel-password-change").hidden = mustChangePassword;
+    $("show-password-change").hidden = showPassword;
     $("mfa-panel").hidden = !needsMfa;
     if (!needsMfa) return;
     if (mustChangePassword) {
@@ -469,13 +570,19 @@
     $("login-status").textContent = message;
   }
 
+  // Asks the server who is signed in. A result is dropped if the session
+  // changed meanwhile; a failed check is retried once rather than shown as
+  // signed out.
   async function renderSession() {
-    try {
-      session = await api.auth.getSession();
-    } catch {
-      session = { authenticated: false };
+    const epoch = sessionEpoch;
+    let next = await api.auth.getSession();
+    if (next.unavailable && epoch === sessionEpoch) {
+      await new Promise((resolve) => { setTimeout(resolve, 1200); });
+      next = await api.auth.getSession();
     }
-    await onSessionChanged();
+    if (epoch !== sessionEpoch) return;
+    if (next.unavailable && session.authenticated) return; // keep the known state; the next action re-checks
+    applySession(next);
   }
 
   function renderWinCard(post) {
@@ -653,6 +760,14 @@
       showLoginRequired("Sign in with your Arena account to save your character.");
       return;
     }
+    if (mode === "production" && session.user?.mustChangePassword) {
+      openLogin();
+      return;
+    }
+    if (mode === "production" && session.user?.role !== "student") {
+      $("save-status").textContent = "Saving a character is for student accounts.";
+      return;
+    }
     try {
       const publicChoice = features.avatarPersonalization ? $("show-on-leaderboard").checked : undefined;
       const result = await api.student.saveCharacter(choices, publicChoice);
@@ -663,8 +778,9 @@
           ? `${base} Public display is on: it appears on a leaderboard once staff have verified your ranking.`
           : `${base} Public display is off: leaderboards show the anonymous illustration.`;
       if (currentPage === "leaderboard" || publicChoice !== undefined) void loadLeaderboard();
-    } catch {
-      $("save-status").textContent = "Your character could not be saved. Sign in and try again.";
+    } catch (error) {
+      if (error?.code === "unauthorized") return void sessionEnded("Your session has ended. Sign in again to save your character.");
+      $("save-status").textContent = "Your character could not be saved. Try again later.";
     }
   }
 
@@ -699,22 +815,28 @@
     });
     $("login-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      const button = $("login-form").querySelector('button[type="submit"]');
+      button.disabled = true;
       $("login-status").textContent = "Signing in…";
+      const username = $("login-username").value;
       try {
-        session = await api.auth.signIn({
-          username: $("login-username").value,
-          password: $("login-password").value,
-        });
-        if (!session.authenticated) throw new Error("Sign-in failed");
+        const next = await api.auth.signIn({ username, password: $("login-password").value });
+        if (!next.authenticated) throw new Error("Sign-in failed");
+        lastUsername = username.trim();
         viewerReactions.clear();
         $("login-form").reset();
-        $("account-entry").textContent = "ACCOUNT";
-        renderAccountPanel();
-        $("account-status").textContent = "You’re signed in.";
-        if (session.user.mustChangePassword) $("account-status").textContent += " Change your initial password before continuing.";
-        else if (session.user.mfaRequired) $("account-status").textContent = "Complete the staff security check to continue.";
-      } catch {
-        $("login-status").textContent = "Could not sign you in. Check your details or try again later.";
+        $("login-status").textContent = "";
+        applySession(next);
+        focusAccountAction();
+      } catch (error) {
+        $("login-password").value = "";
+        $("login-status").textContent = error?.code === "rate_limited"
+          ? "Too many attempts. Wait a few minutes, then try again."
+          : error?.code === "invalid_credentials"
+            ? "Could not sign you in. Check your username and password."
+            : "Sign-in is temporarily unavailable. Try again later.";
+      } finally {
+        button.disabled = false;
       }
     });
     $("mfa-enroll-form").addEventListener("submit", async (event) => {
@@ -724,7 +846,7 @@
         const enrollment = await api.auth.enrollMfa();
         activeTotpSecret = enrollment.secret;
         $("mfa-secret").textContent = enrollment.secret;
-        renderAccountPanel();
+        renderAccountForms();
         $("mfa-code").focus();
       } catch {
         $("mfa-status").textContent = "Authenticator setup could not be started. Try again later.";
@@ -736,11 +858,11 @@
       button.disabled = true;
       $("mfa-status").textContent = "Checking your authenticator…";
       try {
-        session = await api.auth.verifyMfa($("mfa-code").value);
-        if (!session.authenticated || session.user.mfaRequired) throw new Error("MFA verification failed");
+        const next = await api.auth.verifyMfa($("mfa-code").value);
+        if (!next.authenticated || next.user.mfaRequired) throw new Error("MFA verification failed");
         clearTotpSetup();
-        renderAccountPanel();
-        $("account-status").textContent = "Staff verification is complete.";
+        applySession(next);
+        focusAccountAction();
       } catch {
         $("mfa-code").value = "";
         $("mfa-status").textContent = "Code could not be verified. Check it and try again.";
@@ -748,22 +870,53 @@
         button.disabled = false;
       }
     });
+    $("show-password-change").addEventListener("click", () => {
+      passwordFormOpen = true;
+      renderAccountForms();
+      $("old-password").focus();
+    });
+    $("cancel-password-change").addEventListener("click", () => {
+      passwordFormOpen = false;
+      $("change-password-form").reset();
+      $("password-status").textContent = "";
+      renderAccountForms();
+      $("show-password-change").focus();
+    });
     $("change-password-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const oldPassword = $("old-password").value;
       const newPassword = $("new-password").value;
+      const problem = newPassword.length < 15 || newPassword.length > 128 ? "Choose a new password of 15–128 characters."
+        : newPassword !== $("confirm-password").value ? "The two new passwords don’t match."
+          : newPassword === oldPassword ? "Choose a new password that differs from the current one." : "";
+      if (problem) {
+        $("password-status").textContent = problem;
+        return;
+      }
+      const button = $("change-password-form").querySelector('button[type="submit"]');
+      button.disabled = true;
+      $("password-status").textContent = "Saving your new password…";
       try {
         await api.auth.changePassword(oldPassword, newPassword);
-        $("change-password-form").reset();
-        session = { authenticated: false };
-        clearTotpSetup();
-        $("account-entry").textContent = "SIGN IN";
-        renderAccountPanel();
-        $("login-status").textContent = "Password changed. Sign in again to continue.";
-        $("login-form").hidden = false;
-      } catch {
-        $("account-status").textContent = "Password change could not be completed. Check the new password or try again later.";
+        // The server ends this session after a password change: sign in again.
+        applySession({ authenticated: false });
+        $("login-status").textContent = "Password changed. Sign in with your new password.";
+        focusAccountAction();
+      } catch (error) {
+        if (error?.code === "unauthorized") return void sessionEnded();
+        $("old-password").value = "";
+        $("password-status").textContent = error?.code === "password_change_unavailable"
+          ? "A password reset is in progress for this account. Contact the Arena staff team."
+          : error?.code === "password_change_failed"
+            ? "Password not changed. Check your current password and try a different new one."
+            : "Password change is temporarily unavailable. Try again later.";
+      } finally {
+        button.disabled = false;
       }
+    });
+    $("open-staff-desk").addEventListener("click", () => {
+      closeLogin();
+      showPage("staff");
     });
     $("close-account").addEventListener("click", closeLogin);
     $("open-studio").addEventListener("click", () => {
@@ -783,11 +936,8 @@
     $("logout-btn").addEventListener("click", async () => {
       try {
         await api.auth.signOut();
-        session = { authenticated: false };
         viewerReactions.clear();
-        clearTotpSetup();
-        $("account-entry").textContent = "SIGN IN";
-        renderAccountPanel();
+        applySession({ authenticated: false });
         $("login-status").textContent = "You are signed out.";
       } catch {
         $("account-status").textContent = "Sign-out could not be confirmed. Close this browser session and try again.";
@@ -823,9 +973,17 @@
     // Student-only navigation and promotions appear only once the owner enables student sign-in.
     document.documentElement.dataset.students = features.studentSignIn ? "on" : "off";
     $("public-avatar-group").hidden = !features.avatarPersonalization;
-    await Promise.all([loadLeaderboard(), loadWins(), renderSession(), loadSavedCharacter()]);
+    await Promise.all([loadLeaderboard(), loadWins(), renderSession(), mode === "demo" ? loadSavedCharacter() : null]);
     document.documentElement.dataset.appReady = "true";
-    maybeShowWelcome();
+    // A temporary password or a pending staff check must be dealt with first.
+    if (session.authenticated && (session.user.mustChangePassword || session.user.mfaRequired)) openLogin();
+    else maybeShowWelcome();
+    // Re-check after back/forward cache restores or a long time in the background,
+    // so the header never keeps showing a stale signed-in or signed-out state.
+    window.addEventListener("pageshow", (event) => { if (event.persisted) void renderSession(); });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && mode === "production" && Date.now() - lastSessionCheck > 60_000) void renderSession();
+    });
   }
 
   void start();
