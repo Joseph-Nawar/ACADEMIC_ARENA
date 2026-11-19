@@ -2,10 +2,13 @@ import { anonymousAuthClient } from "../../lib/provider.js";
 import { jsonResponse } from "../../lib/response.js";
 import { CHARACTER_BADGES, CHARACTER_FAMILIES, CHARACTER_IDS, CHARACTER_TONES } from "../../lib/validation.js";
 
-// Rows carry artwork only when the database confirms a linked, active,
-// opted-in student's own allowlisted character. Every other row is
-// { position, name, personalized: false } and the page shows the anonymous
-// competitor illustration: nothing is inferred from a name or rank.
+// Artwork precedence for each row:
+//   1. a linked, active, opted-in student's own allowlisted character
+//      ({ personalized: true, avatar, style, tone, badge });
+//   2. the character staff approved for this exact publication row
+//      ({ personalized: false, avatar });
+//   3. neither: { personalized: false } and the page shows a neutral illustration.
+// Nothing is inferred here from a name, rank, or any other record.
 export async function onRequestGet({ request, env }) {
   const params = new URL(request.url).searchParams;
   const level = params.get("level");
@@ -14,10 +17,14 @@ export async function onRequestGet({ request, env }) {
     return jsonResponse({ error: "invalid_filters" }, 400);
   }
   const client = anonymousAuthClient(env);
-  let { data, error } = await client.rpc("public_level_leaderboard_v2", { p_level: Number(level) });
-  // Before migration 202611190001 is applied the V2 projection does not exist
-  // (PostgREST PGRST202); serve the unchanged V1 rows, all anonymous.
-  if (error?.code === "PGRST202") ({ data, error } = await client.rpc("public_level_leaderboard", { p_level: Number(level) }));
+  // Newest projection first; older ones while a database is not yet migrated
+  // (PostgREST PGRST202 = function not found). Older ones carry fewer fields.
+  let data;
+  let error;
+  for (const name of ["public_level_leaderboard_v3", "public_level_leaderboard_v2", "public_level_leaderboard"]) {
+    ({ data, error } = await client.rpc(name, { p_level: Number(level) }));
+    if (error?.code !== "PGRST202") break;
+  }
   if (error || !Array.isArray(data)) return jsonResponse({ error: "unavailable" }, 503);
   const published = data[0]?.published_at ? new Date(data[0].published_at).toISOString().slice(0, 10) : null;
   return jsonResponse({
@@ -30,6 +37,9 @@ export async function onRequestGet({ request, env }) {
       if (chosen) {
         return { position: row.position, name: row.public_name, avatar: row.avatar_key, style: row.avatar_family,
           tone: row.avatar_tone, badge: row.avatar_badge, personalized: true };
+      }
+      if (CHARACTER_IDS.has(row.default_avatar_key)) {
+        return { position: row.position, name: row.public_name, avatar: row.default_avatar_key, personalized: false };
       }
       return { position: row.position, name: row.public_name, personalized: false };
     }),

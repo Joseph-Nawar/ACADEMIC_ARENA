@@ -68,7 +68,9 @@
         TONES.has(value.tone) && BADGES.has(value.badge)) {
       return { position, name, avatar: value.avatar, style: value.style, tone: value.tone, badge: value.badge, personalized: true };
     }
-    // Everyone else gets the anonymous competitor illustration (chosen by the page).
+    // Otherwise the staff-approved character for this publication row, if any;
+    // with none, the page shows a neutral illustration.
+    if (value.personalized !== true && CHARACTER_IDS.has(value.avatar)) return { position, name, avatar: value.avatar, personalized: false };
     return { position, name, personalized: false };
   }
 
@@ -544,6 +546,22 @@
           throw new ArenaDataError("Choose a CSV file of at most 16 KB.", "invalid_upload");
         }
         return request("POST", "/staff/leaderboards/drafts", { academicYear, releaseLabel, csv });
+      },
+      // Staff-reviewed default board characters for one publication.
+      async boardCharacters(publicationId) {
+        if (mode === "demo") throw new ArenaDataError("Board characters are unavailable in the fictional preview.", "unauthorized");
+        if (!UUID.test(String(publicationId))) throw new ArenaDataError("Choose a publication.", "invalid_publication");
+        const payload = await request("GET", "/staff/leaderboards/artwork?" + new URLSearchParams({ publicationId }).toString());
+        return Array.isArray(payload?.rows) ? payload.rows.filter((row) => row && [4, 5, 6].includes(row.level) &&
+          Number.isInteger(row.position) && typeof row.publicName === "string")
+          .map((row) => ({ level: row.level, position: row.position, publicName: row.publicName,
+            character: CHARACTER_IDS.has(row.character) ? row.character : null })) : [];
+      },
+      async approveBoardCharacters(publicationId, assignments) {
+        if (mode === "demo") throw new ArenaDataError("Board characters are unavailable in the fictional preview.", "unauthorized");
+        const clean = (Array.isArray(assignments) ? assignments : []).filter((item) => CHARACTER_IDS.has(item.character))
+          .map((item) => ({ level: item.level, rank: item.rank, character: item.character }));
+        return request("POST", "/staff/leaderboards/artwork", { publicationId, assignments: clean });
       },
       // Admin-only private ranking links (level,rank,username).
       async previewRankingLinks(publicationId, csv) {

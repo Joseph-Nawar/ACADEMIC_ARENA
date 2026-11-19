@@ -100,6 +100,9 @@
     } catch (error) {
       failure(error, "Publication history is unavailable.");
     }
+    // Keep the publication pickers in step with history (new publish, rollback).
+    if (!$("staff-artwork").hidden) void loadArtworkPublications();
+    if (!$("staff-links").hidden) void loadLinkPublications();
   }
 
   function renderDiff(result) {
@@ -142,6 +145,158 @@
         $("ranking-errors").append(textNode("li", detail.line ? `Line ${detail.line}: ${detail.message}` : detail.message));
       }
       failure(error, "The file could not be validated.");
+    }
+  }
+
+  // ---- Board characters (staff-reviewed defaults, 3D family)
+  const CHARACTERS = [["omar", "Wave"], ["mariam", "Bold"], ["youssef", "Chill"], ["amara", "Spark"], ["tariq", "Casual"],
+    ["habiba2", "Brave"], ["malek", "Sunny"], ["nour2", "Creative"], ["zein", "Calm"]];
+  let artworkPublication = "";
+  let artworkRows = [];
+
+  function closeArtworkReview() {
+    $("artwork-review").hidden = true;
+    $("artwork-rows").replaceChildren();
+    artworkRows = [];
+    artworkPublication = "";
+  }
+
+  async function loadArtworkPublications() {
+    const select = $("artwork-publication");
+    const previous = select.value;
+    select.replaceChildren();
+    try {
+      for (const item of (await api.staff.publicationHistory()).filter((entry) => entry.format === "level_only")) {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = `v${item.version} · ${item.releaseLabel || ""} · ${stateLabels[item.state]}`;
+        option.dataset.version = String(item.version);
+        select.append(option);
+      }
+      // Keep the staff member's current choice; otherwise default to the live version.
+      const keep = [...select.options].find((option) => option.value === previous);
+      const live = [...select.options].find((option) => option.textContent.endsWith(stateLabels.live));
+      if (keep) keep.selected = true;
+      else if (live) live.selected = true;
+      // A review list must always belong to the publication shown in the picker.
+      if (artworkPublication && select.value !== artworkPublication) closeArtworkReview();
+    } catch (error) {
+      failure(error, "Publications are unavailable.");
+    }
+  }
+
+  // Every pre-filled or flagged row needs its own tick before anything can be approved.
+  function refreshArtworkState() {
+    const items = [...$("artwork-rows").querySelectorAll("li")];
+    const chosen = items.filter((item) => item.querySelector("select").value).length;
+    const pending = items.filter((item) => item.dataset.pending === "true").length;
+    $("artwork-summary").textContent = `${chosen} of ${items.length} rows have a character` +
+      (pending ? ` · ${pending} row(s) still need your check` : " · every row checked") + ".";
+    $("approve-artwork").disabled = pending > 0 || items.length === 0;
+  }
+
+  function renderArtworkRows(suggestions = null) {
+    const list = $("artwork-rows");
+    list.replaceChildren();
+    const suggested = new Map((suggestions || []).map((item) => [`${item.level}:${item.position}`, item]));
+    for (const row of artworkRows) {
+      const item = document.createElement("li");
+      const label = textNode("span", `L${row.level} · ${String(row.position).padStart(2, "0")} · ${row.publicName}`, "artwork-name");
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", `Character for Level ${row.level} rank ${row.position}`);
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "Neutral illustration";
+      select.append(none);
+      for (const [key, mood] of CHARACTERS) {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = `${mood} (${key.replace(/\d+$/u, "")})`;
+        select.append(option);
+      }
+      // An earlier staff decision always wins over a new suggestion.
+      const suggestion = row.character ? null : suggested.get(`${row.level}:${row.position}`);
+      select.value = row.character || suggestion?.character || "";
+      const preview = document.createElement("img");
+      preview.className = "artwork-preview";
+      preview.alt = "";
+      const note = suggestion?.flag === "ambiguous" ? "Unisex name: decide this row yourself."
+        : suggestion?.flag ? "Name not recognised: decide this row yourself."
+          : suggestion?.character ? "Suggested from the first name: check it." : "";
+      const check = document.createElement("label");
+      check.className = "artwork-check";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      check.append(box, document.createTextNode(" Checked"));
+      const flag = textNode("span", note, "artwork-flag");
+      const needsCheck = Boolean(suggestion);
+      check.hidden = !needsCheck;
+      flag.hidden = !note;
+      if (suggestion?.flag) item.dataset.flag = suggestion.flag;
+      const setPending = () => {
+        item.dataset.pending = String(needsCheck && !box.checked);
+        refreshArtworkState();
+      };
+      const update = () => {
+        preview.hidden = !select.value;
+        if (select.value) preview.src = `assets/characters/${select.value}-3d-face.jpg`;
+      };
+      select.addEventListener("change", () => {
+        box.checked = true;
+        update();
+        setPending();
+      });
+      box.addEventListener("change", setPending);
+      item.append(preview, label, select, check, flag);
+      list.append(item);
+      update();
+      setPending();
+    }
+    refreshArtworkState();
+  }
+
+  async function loadArtwork(event) {
+    event.preventDefault();
+    const publicationId = $("artwork-publication").value;
+    try {
+      artworkRows = await api.staff.boardCharacters(publicationId);
+      artworkPublication = publicationId;
+      renderArtworkRows();
+      $("artwork-review").hidden = false;
+      status("Review each row, then approve.", "ready");
+    } catch (error) {
+      failure(error, "Rows could not be loaded.");
+    }
+  }
+
+  function suggestArtwork() {
+    // Runs only in this browser; nothing about the suggestion is sent or stored.
+    const suggestions = window.AcademicArenaCharacterSuggestions.suggestCharacters(
+      artworkRows.map((row) => ({ level: row.level, position: row.position, name: row.publicName })));
+    renderArtworkRows(suggestions);
+    status("Suggestions filled in for rows without a character. Tick each row once you have checked it.", "ready");
+  }
+
+  async function approveArtwork() {
+    const select = $("artwork-publication");
+    if (!artworkPublication || select.value !== artworkPublication) {
+      closeArtworkReview();
+      status("The publication changed. Load its rows again before approving.", "unavailable");
+      return;
+    }
+    if ([...$("artwork-rows").querySelectorAll("li")].some((item) => item.dataset.pending === "true")) return;
+    const assignments = [...$("artwork-rows").querySelectorAll("li")].map((item, index) => ({
+      level: artworkRows[index].level, rank: artworkRows[index].position, character: item.querySelector("select").value,
+    })).filter((item) => item.character);
+    const version = select.selectedOptions[0]?.textContent || "this publication";
+    if (!window.confirm(`Approve ${assignments.length} board characters for ${version}? Rows on "Neutral illustration" show a neutral figure.`)) return;
+    try {
+      const result = await api.staff.approveBoardCharacters(artworkPublication, assignments);
+      status(`${result.approved} board character(s) approved for ${version}.`, "ready");
+      artworkRows = await api.staff.boardCharacters(artworkPublication);
+      renderArtworkRows();
+    } catch (error) {
+      failure(error, "Characters were not changed.");
     }
   }
 
@@ -303,6 +458,12 @@
     $("withdraw-rankings").addEventListener("click", withdraw);
     $("public-name-form").addEventListener("submit", savePublicName);
     $("links-form").addEventListener("submit", previewLinks);
+    $("artwork-form").addEventListener("submit", loadArtwork);
+    $("artwork-publication").addEventListener("change", () => {
+      if (artworkPublication && $("artwork-publication").value !== artworkPublication) closeArtworkReview();
+    });
+    $("suggest-artwork").addEventListener("click", suggestArtwork);
+    $("approve-artwork").addEventListener("click", approveArtwork);
     $("approve-links").addEventListener("click", approveLinks);
     document.querySelectorAll("[data-queue]").forEach((element) => element.addEventListener("click", () => setQueue(element.dataset.queue)));
     $("staff-nav").addEventListener("click", () => {
@@ -324,6 +485,8 @@
     $("staff-moderation").hidden = !canModerate;
     $("staff-accounts").hidden = !(verifiedStaff && user.role === "admin");
     $("staff-links").hidden = !(verifiedStaff && user.role === "admin");
+    $("staff-artwork").hidden = !canPublish;
+    if (canPublish) void loadArtworkPublications();
     if (verifiedStaff && user.role === "admin") void loadLinkPublications();
     if (!verifiedStaff) {
       if (!$("page-staff").hidden) showPage("leaderboard");
