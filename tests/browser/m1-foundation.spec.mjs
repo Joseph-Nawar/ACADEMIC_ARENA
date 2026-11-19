@@ -279,6 +279,11 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
       assert.ok(tag.left >= 0 && tag.right <= layout.width, `podium tag stays inside the viewport at ${width}px`);
       assert.ok(tag.lines <= 2 && !tag.clipped, `podium tag wraps to at most two lines without clipping at ${width}px`);
     }
+    const thumbnails = await namesPage.locator("#ranking-rows img").evaluateAll((images) => images.map((image) => image.getAttribute("src")));
+    assert.equal(thumbnails.length, 7);
+    assert.ok(thumbnails.every((src) => /^assets\/competitors\/thumb-[abc]\.svg$/u.test(src)), "ranks 4-10 use anonymous thumbnails");
+    assert.ok(await namesPage.evaluate(() => [...document.images].filter((image) => image.getBoundingClientRect().width > 0)
+      .every((image) => image.complete && image.naturalWidth > 0)), "no broken artwork");
     await namesPage.close();
   }
 
@@ -333,8 +338,11 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.equal(await welcomePage.locator("#welcome-backdrop").isHidden(), true, "shown once per browser");
   assert.equal(await welcomePage.locator("#art-1").getAttribute("alt"), "Character chosen by the rank 1 student");
   assert.match(await welcomePage.locator("#art-1").getAttribute("src"), /zein-3d\.png$/u, "an opted-in student's own character is shown");
-  assert.equal(await welcomePage.locator("#art-2").getAttribute("alt"), "Default illustrated character for rank 2");
-  assert.match(await welcomePage.locator(".artwork-note").textContent(), /Default illustrated characters are shown until students choose their own/u);
+  assert.equal(await welcomePage.locator("#art-2").getAttribute("alt"), "Anonymous competitor illustration for rank 2");
+  assert.match(await welcomePage.locator("#art-2").getAttribute("src"), /^assets\/competitors\/podium-2\.svg$/u, "unchosen ranks show the anonymous competitor");
+  assert.match(await welcomePage.locator("#art-3").getAttribute("src"), /^assets\/competitors\/podium-3\.svg$/u);
+  assert.equal(await welcomePage.locator(".artwork-note").textContent(), "Characters are illustrative until students choose their own.");
+  assert.equal(await welcomePage.locator(".artwork-note").count(), 1, "the character note appears once");
   await welcomePage.evaluate(() => localStorage.clear());
   signedIn = true;
   await welcomePage.reload();

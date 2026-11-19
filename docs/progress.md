@@ -2,6 +2,21 @@
 
 Keep short. Newest first.
 
+## 2026-11-19 — V1.3 production polish
+
+- **Anonymous default artwork.** Ranks without a verified, opted-in student character now show original anonymous competitor art (`assets/competitors/`, made by `scripts/generate-competitors.mjs`):
+  - faceless hooded figures with no skin, hair, face or religious cues;
+  - gold, silver and bronze differ only by colour, pose and emblem;
+  - ranks 4–10 use three coordinated thumbnails.
+- The public API no longer sends artwork for default rows: they are `{position, name, personalized: false}`. Rank-assigned human presets (`RANK_ARTWORK`) are gone. Student-chosen characters, links, opt-in and opt-out are unchanged.
+- **Copy.** Removed:
+  - the sidebar development notes;
+  - the "draft wordmark" graphic, replaced by a plain-text EUE wordmark;
+  - prototype and filler copy.
+  How it works is rewritten. "Characters are illustrative until students choose their own." now appears once, under the podium.
+- **Student-only promotions** (My Character, the profile chip, character CTA, Share a win, the Signing in section) follow the backend `student_sign_in` switch, so they are hidden in production today.
+- No migration, no data change, no switch change.
+
 ## 2026-11-18 — V1.2 release gates (PR #14)
 
 V1.2 shipped in PRs #10–#13. Both sites run `main`. Known CI flake: `v12-student-accounts` once hung ("Promise resolution is still pending") and passed on rerun. Older owner checklists further down are superseded by the one below.

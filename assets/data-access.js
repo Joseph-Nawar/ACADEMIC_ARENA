@@ -62,14 +62,14 @@
     if (!value || typeof value !== "object") return null;
     const position = Number(value.position);
     const name = text(value.name);
-    const avatar = CHARACTER_IDS.has(value.avatar) ? value.avatar : null;
-    const style = AVATAR_STYLES.has(value.style) ? value.style : null;
-    if (!Number.isInteger(position) || position < 1 || position > 10 || !name || !avatar || !style) return null;
-    // A student's own opted-in character (allowlisted fields only).
-    if (value.personalized === true && TONES.has(value.tone) && BADGES.has(value.badge)) {
-      return { position, name, avatar, style, tone: value.tone, badge: value.badge, personalized: true };
+    if (!Number.isInteger(position) || position < 1 || position > 10 || !name) return null;
+    // A student's own opted-in character, only when every artwork field is allowlisted.
+    if (value.personalized === true && CHARACTER_IDS.has(value.avatar) && AVATAR_STYLES.has(value.style) &&
+        TONES.has(value.tone) && BADGES.has(value.badge)) {
+      return { position, name, avatar: value.avatar, style: value.style, tone: value.tone, badge: value.badge, personalized: true };
     }
-    return { position, name, avatar, style, personalized: false };
+    // Everyone else gets the anonymous competitor illustration (chosen by the page).
+    return { position, name, personalized: false };
   }
 
   function sanitizeWin(value, includeViewerReaction = false) {

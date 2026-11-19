@@ -143,7 +143,8 @@ test("V1.2 student accounts: provisioning, first login, opt-in avatars, private 
   const linked = await board(4);
   assert.deepEqual(linked.rows[0], { position: 1, name: aliceName, avatar: "zein", style: "cartoon3d", tone: "lilac", badge: "⚡", personalized: true },
     "the linked, opted-in student's own character, with allowlisted fields only");
-  assert.ok(linked.rows.slice(1).every((row) => row.personalized === false), "every other row keeps default artwork");
+  assert.ok(linked.rows.slice(1).every((row) => row.personalized === false && !("avatar" in row) && !("style" in row)),
+    "every other row is anonymous: no character artwork fields at all");
   for (const level of [5, 6]) assert.ok((await board(level)).rows.every((row) => !row.personalized), "an unlinked student is never shown");
   assert.doesNotMatch(JSON.stringify(linked), new RegExp(`${alpha.username}|${alpha.email}|account|email|username`, "u"), "no identifiers in public responses");
 
@@ -164,7 +165,8 @@ test("V1.2 student accounts: provisioning, first login, opt-in avatars, private 
   assert.equal((await save(alphaSession, { ...alphaLook, base: "mariam" })).status, 200);
   assert.equal((await board(4)).rows[0].avatar, "mariam", "a new look appears without republishing ranks");
   assert.equal((await save(alphaSession, { ...alphaLook, base: "mariam" }, false)).status, 200);
-  assert.equal((await board(4)).rows[0].personalized, false, "opt-out returns to default artwork immediately");
+  const optedOut = (await board(4)).rows[0];
+  assert.deepEqual(Object.keys(optedOut).sort(), ["name", "personalized", "position"], "opt-out returns to the anonymous competitor immediately");
   assert.equal((await save(alphaSession, { ...alphaLook, base: "mariam" }, true)).status, 200);
 
   // ---- the owner switch turns personalization off without touching rankings

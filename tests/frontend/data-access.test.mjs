@@ -42,7 +42,7 @@ test("public_board_query_encodes_all_filters_and_allowlists_rows", async () => {
     state: "ok",
     publishedAt: null,
     releaseLabel: null,
-    rows: [{ position: 1, name: "Fictional Student", avatar: "amara", style: "cartoon3d", personalized: false }],
+    rows: [{ position: 1, name: "Fictional Student", personalized: false }],
   });
   await assert.rejects(api.public.getLeaderboard({ level: "7" }), /valid level/u, "unknown levels are rejected client-side");
 });
@@ -346,7 +346,7 @@ test("personalized_rows_keep_only_allowlisted_artwork_fields", async () => {
   });
   const { rows } = await api.public.getLeaderboard({ level: "5" });
   assert.deepEqual(rows[0], { position: 1, name: "Fictional One", avatar: "zein", style: "ink", tone: "lilac", badge: "⚡", personalized: true });
-  assert.deepEqual(rows[1], { position: 2, name: "Fictional Two", avatar: "omar", style: "ink", personalized: false }, "invalid styling falls back to default artwork");
+  assert.deepEqual(rows[1], { position: 2, name: "Fictional Two", personalized: false }, "invalid styling falls back to the anonymous competitor");
   assert.equal(rows[2].personalized, false);
 });
 
@@ -419,4 +419,32 @@ test("demo_runtime_mode_is_disabled_outside_loopback_hosts", async () => {
   assert.equal(result.state, "unavailable");
   assert.equal(requests.every((url) => url.startsWith("/api/")), true);
   assert.equal(requests.some((url) => url.includes("fixtures/demo")), false);
+});
+
+test("default rows never carry character artwork; only confirmed personal characters do", async () => {
+  const api = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async () => response({ rows: [
+      { position: 1, name: "Fictional A", personalized: false },
+      { position: 2, name: "Fictional B", avatar: "mariam", style: "ink", personalized: false },
+      { position: 3, name: "Fictional C", avatar: "mariam", style: "ink", tone: "gold", badge: "★" },
+      { position: 4, name: "Fictional D", avatar: "../../etc/passwd", style: "ink", tone: "gold", badge: "★", personalized: true },
+      { position: 5, name: "Fictional E", avatar: "zein", style: "https://evil.example/x.png", tone: "gold", badge: "★", personalized: true },
+      { position: 6, name: "Fictional F", avatar: "zein", style: "cartoon3d", tone: "mint", badge: "", personalized: true },
+    ] }),
+  });
+  const { state, rows } = await api.public.getLeaderboard({ level: "4" });
+  assert.equal(state, "ok", "missing or invalid artwork never breaks the board");
+  for (const row of rows.slice(0, 5)) {
+    assert.deepEqual(Object.keys(row).sort(), ["name", "personalized", "position"], `rank ${row.position} is anonymous`);
+    assert.equal(row.personalized, false);
+  }
+  assert.deepEqual(rows[5], { position: 6, name: "Fictional F", avatar: "zein", style: "cartoon3d", tone: "mint", badge: "", personalized: true });
+});
+
+test("demo boards use anonymous competitors too", async () => {
+  const api = createArenaDataAccess({ mode: "demo", hostname: "127.0.0.1", fetchImpl: async () => response(demoFixture) });
+  const { rows } = await api.public.getLeaderboard({ level: "5" });
+  assert.equal(rows.length, 10);
+  assert.ok(rows.every((row) => row.personalized === false && !("avatar" in row)));
 });

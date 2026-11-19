@@ -65,8 +65,9 @@ test("level-only publication: validation, preview, atomic publish, concurrency, 
     assert.deepEqual(live.rows.map((row) => row.name), expected.filter((row) => row[0] === String(level)).map((row) => row[2]),
       `Level ${level} keeps the uploaded order and spelling`);
     for (const row of live.rows) {
-      assert.deepEqual(Object.keys(row).sort(), ["avatar", "name", "personalized", "position", "style"]);
-      assert.equal(row.personalized, false, "unlinked rows use default artwork");
+      assert.deepEqual(Object.keys(row).sort(), ["name", "personalized", "position"],
+        "unlinked rows carry no character artwork (the page shows the anonymous competitor)");
+      assert.equal(row.personalized, false);
     }
   }
   assert.equal((await api("/api/public/leaderboards?level=7")).status, 400, "unknown level is rejected");

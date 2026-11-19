@@ -1,29 +1,28 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-students="off">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="theme-color" content="#182526" />
-<title>Academic Arena · European Universities in Egypt · V6</title>
+<title>Academic Arena · European Universities in Egypt</title>
 <link rel="stylesheet" href="assets/app.css" />
 </head>
 <body>
 <div class="app">
  <aside class="rail" aria-label="Primary navigation">
-  <div class="brand-lockup"><div class="brand"><svg class="brand-mark" viewBox="0 0 30 32" aria-hidden="true"><path d="M3 24 7 8l8 8 7-13 5 22H3Z" fill="#f4c856" stroke="#f4c856" stroke-width="2"/><path d="M3 29h24" stroke="#f4c856" stroke-width="4"/></svg><div class="brand-type">ACADEMIC<strong>ARENA</strong></div></div><a class="eue-endorsement" href="https://eue.edu.eg/" target="_blank" rel="noopener" title="EUE university website"><img src="assets/eue-wordmark-draft.svg" alt="EUE — European Universities in Egypt (draft wordmark; awaiting approved logo)"/></a></div>
+  <div class="brand-lockup"><div class="brand"><svg class="brand-mark" viewBox="0 0 30 32" aria-hidden="true"><path d="M3 24 7 8l8 8 7-13 5 22H3Z" fill="#f4c856" stroke="#f4c856" stroke-width="2"/><path d="M3 29h24" stroke="#f4c856" stroke-width="4"/></svg><div class="brand-type">ACADEMIC<strong>ARENA</strong></div></div><a class="eue-endorsement" href="https://eue.edu.eg/" target="_blank" rel="noopener" aria-label="European Universities in Egypt (opens the EUE website)"><span class="eue-mark">EUE</span><span class="eue-name">European Universities<br/>in Egypt</span></a></div>
   <nav class="rail-navigation">
    <button class="nav-link active" data-page="leaderboard" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 20h18M5 17V9h4v8M10 17V4h4v13M15 17v-6h4v6"/></svg>Leaderboards</button>
    <button class="nav-link" data-page="wins"><span class="nav-emoji" aria-hidden="true">✦</span>Campus Wins</button>
-   <button class="nav-link" data-page="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2c0-5 16-5 16 0v2"/></svg>My Character</button>
+   <button class="nav-link" data-page="avatar" data-student-only><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2c0-5 16-5 16 0v2"/></svg>My Character</button>
    <button class="nav-link" data-page="staff" id="staff-nav" hidden><span class="nav-emoji" aria-hidden="true">★</span>Staff Desk</button>
    <button class="nav-link" data-page="about"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v2"/></svg>How it works</button>
   </nav>
-  <div class="rail-bottom"><strong>NO PHOTOS. NO GRADES.</strong><br/>JUST CHARACTERS AND CLASSROOM BRAGGING RIGHTS.<span class="eue-caption">EUE identity · Official logo file pending approval</span></div>
  </aside>
  <div class="workspace">
   <header class="topbar">
    <div class="topbar-kicker"><span class="dot"></span>UOL COMPUTER SCIENCE <span class="hide-micro"> / EUE</span></div>
-   <div class="topbar-actions"><button type="button" id="account-entry" class="account-entry" title="Sign in to your character account">SIGN IN</button><span class="demo-stamp" id="mode-stamp" hidden>FICTIONAL DEMO</span><button class="profile-chip" id="profile-link" aria-label="Open character studio"><span class="mini-photo" data-tone="mint"><img id="nav-portrait" src="assets/characters/amara-ink.png" alt=""/></span><span>My Character ↗</span></button></div>
+   <div class="topbar-actions"><button type="button" id="account-entry" class="account-entry" title="Sign in">SIGN IN</button><span class="demo-stamp" id="mode-stamp" hidden></span><button class="profile-chip" id="profile-link" data-student-only aria-label="Open character studio"><span class="mini-photo" data-art="anonymous"><img id="nav-portrait" src="assets/competitors/thumb-a.svg" alt=""/></span><span>My Character ↗</span></button></div>
   </header>
   <main class="content">
    <section id="page-leaderboard" class="page" aria-labelledby="leaderboard-title">
@@ -40,43 +39,42 @@
       <div class="burst-shape" aria-hidden="true"></div><div class="small-scribble" aria-hidden="true">✳</div>
       <div class="podium-header" id="podium-heading"><i></i><span id="podium-label">LEVEL 4 / TOP 3</span></div>
       <div class="podium-scene">
-       <div class="competitor second"><img class="champion-art" id="art-2" src="assets/characters/omar-ink.png" alt=""/><div class="name-tag" id="name-2">—</div><div class="pedestal"><span class="rank-num">2</span><span class="medal-text">RUNNER-UP</span></div></div>
-       <div class="competitor first"><svg class="crown" viewBox="0 0 82 62" aria-hidden="true"><path d="M7 46 5 10l24 22L41 5l17 27L78 10l-4 36H7Z" fill="#f4c856" stroke="#182526" stroke-width="4.5" stroke-linejoin="round"/><path d="M9 53h63" stroke="#182526" stroke-width="7" stroke-linecap="round"/></svg><img class="champion-art" id="art-1" src="assets/characters/amara-ink.png" alt=""/><div class="name-tag" id="name-1">—</div><div class="pedestal"><span class="rank-num">1</span><span class="medal-text">CHAMPION</span></div></div>
-       <div class="competitor third"><img class="champion-art" id="art-3" src="assets/characters/youssef-ink.png" alt=""/><div class="name-tag" id="name-3">—</div><div class="pedestal"><span class="rank-num">3</span><span class="medal-text">THIRD PLACE</span></div></div>
+       <div class="competitor second"><img class="champion-art" id="art-2" src="assets/competitors/podium-2.svg" alt=""/><div class="name-tag" id="name-2">—</div><div class="pedestal"><span class="rank-num">2</span><span class="medal-text">RUNNER-UP</span></div></div>
+       <div class="competitor first"><svg class="crown" viewBox="0 0 82 62" aria-hidden="true"><path d="M7 46 5 10l24 22L41 5l17 27L78 10l-4 36H7Z" fill="#f4c856" stroke="#182526" stroke-width="4.5" stroke-linejoin="round"/><path d="M9 53h63" stroke="#182526" stroke-width="7" stroke-linecap="round"/></svg><img class="champion-art" id="art-1" src="assets/competitors/podium-1.svg" alt=""/><div class="name-tag" id="name-1">—</div><div class="pedestal"><span class="rank-num">1</span><span class="medal-text">CHAMPION</span></div></div>
+       <div class="competitor third"><img class="champion-art" id="art-3" src="assets/competitors/podium-3.svg" alt=""/><div class="name-tag" id="name-3">—</div><div class="pedestal"><span class="rank-num">3</span><span class="medal-text">THIRD PLACE</span></div></div>
       </div>
-      <p class="podium-caption">Officially approved places only — no grades or scores shown</p>
-      <p class="artwork-note">Default illustrated characters are shown until students choose their own.</p>
+      <p class="artwork-note">Characters are illustrative until students choose their own.</p>
      </section>
      <section class="rank-sheet" aria-labelledby="sheet-heading" hidden>
       <h2 id="sheet-heading" class="sheet-title">THE <em>TOP 10</em></h2>
       <p class="sheet-subtitle" id="sheet-subtitle"></p>
       <ol class="ranks" id="ranking-rows" start="4"></ol>
-      <div class="sheet-footer">Public names and positions appear only after university approval.</div>
+      <div class="sheet-footer">Names and positions are published by the university. Scores stay private.</div>
      </section>
     </div>
-    <div class="bottom-note"><h2>CLIMB THE BOARD.<br/>KEEP THE CHARACTER.</h2><p>The students set the style. The university approves the standings. No scores, quiz grades, or attendance histories go on this page.</p><button class="button-solid" id="create-button">MAKE YOUR CHARACTER ↗</button></div>
-    <div class="wins-sneak"><div><div class="kicker">✦ CAMPUS WINS / STUDENT SPOTLIGHT</div><h2>GIVE SOMEONE THEIR FLOWERS.</h2><p>Share a milestone. Celebrate classmates with reactions. No comments, no photos, no grades.</p></div><button class="button-solid" id="see-wins">EXPLORE CAMPUS WINS ↗</button></div>
+    <div class="bottom-note" data-student-only><h2>YOUR RANK.<br/>YOUR CHARACTER.</h2><p>Have an Arena account? Pick a character and choose whether it appears next to your name.</p><button class="button-solid" id="create-button">MAKE YOUR CHARACTER ↗</button></div>
+    <div class="wins-sneak"><div><div class="kicker">✦ CAMPUS WINS</div><h2>CELEBRATE EACH OTHER.</h2><p>Milestones from across the cohort, reviewed by staff before they go up.</p></div><button class="button-solid" id="see-wins">SEE CAMPUS WINS ↗</button></div>
    </section>
    <section id="page-wins" class="page" hidden aria-labelledby="wins-title">
-    <div class="section-prelude"><span class="prelude-swatch"></span>SMALL WINS. BIG ENERGY.</div>
-    <div class="wins-page-head"><h1 class="hero-title" id="wins-title">CAMPUS<br/><span>WINS.</span></h1><p class="aside">A place to celebrate what students do, not just where they rank.</p></div>
-    <div class="wins-guardrail">Approved templates · positive reactions only · every submission requires staff review before publication.</div>
-    <div class="wins-toolbar"><div class="wins-filters" role="group" aria-label="Filter achievements"><button class="wins-filter current" data-filter="all" aria-pressed="true">All wins</button><button class="wins-filter" data-filter="academic" aria-pressed="false">Academic</button><button class="wins-filter" data-filter="consistency" aria-pressed="false">Consistency</button><button class="wins-filter" data-filter="community" aria-pressed="false">Community</button></div><button id="open-composer" class="button-solid">+ SHARE A WIN</button></div>
+    <div class="section-prelude"><span class="prelude-swatch"></span>STUDENT SPOTLIGHT</div>
+    <div class="wins-page-head"><h1 class="hero-title" id="wins-title">CAMPUS<br/><span>WINS.</span></h1><p class="aside">Celebrating what students do, not just where they rank.</p></div>
+    <div class="wins-guardrail">Every win is reviewed by staff before it appears.</div>
+    <div class="wins-toolbar"><div class="wins-filters" role="group" aria-label="Filter achievements"><button class="wins-filter current" data-filter="all" aria-pressed="true">All wins</button><button class="wins-filter" data-filter="academic" aria-pressed="false">Academic</button><button class="wins-filter" data-filter="consistency" aria-pressed="false">Consistency</button><button class="wins-filter" data-filter="community" aria-pressed="false">Community</button></div><button id="open-composer" class="button-solid" data-student-only>+ SHARE A WIN</button></div>
     <p id="wins-status" class="data-status" role="status" aria-live="polite">Loading approved Campus Wins…</p>
-    <div class="pending-panel" id="pending-panel" hidden><h3>SUBMITTED FOR REVIEW</h3><p id="pending-description"></p><ul id="my-submissions" class="staff-list"></ul><button id="approve-demo" class="outline-btn">APPROVE IN DEMO</button><p class="pending-demo-note">This preview control is local to fictional demo data. Production moderation is staff-only.</p></div>
+    <div class="pending-panel" id="pending-panel" hidden><h3>SUBMITTED FOR REVIEW</h3><p id="pending-description"></p><ul id="my-submissions" class="staff-list"></ul><button id="approve-demo" class="outline-btn">APPROVE IN DEMO</button><p class="pending-demo-note" id="pending-demo-note"></p></div>
     <div id="wins-feed" class="wins-feed"></div>
    </section>
    <section id="page-avatar" class="page" hidden aria-labelledby="avatar-title">
-    <div class="studio-heading"><div class="section-prelude"><span class="prelude-swatch"></span>THE EUE CHARACTER STUDIO</div><h1 class="hero-title" id="avatar-title">MAKE IT<br/><span>YOUR OWN.</span></h1><p>Choose a character, an art family, a backdrop and a sticker. Students with a university-issued Arena account can save their character and, if they choose, show it on the public leaderboard.</p></div>
+    <div class="studio-heading"><div class="section-prelude"><span class="prelude-swatch"></span>THE EUE CHARACTER STUDIO</div><h1 class="hero-title" id="avatar-title">MAKE IT<br/><span>YOUR OWN.</span></h1><p>Pick a character, an art style, a backdrop and a sticker. Save it to your Arena account, and choose whether it shows on the leaderboard.</p></div>
     <div class="studio-grid">
      <div class="studio-stage" id="studio-stage" data-tone="mint"><div class="studio-scribble">YOUR ALTER EGO / PREVIEW</div><span class="studio-badge" id="studio-badge">✦</span><img id="studio-art" class="studio-art" src="assets/characters/amara-ink.png" alt="Selected illustrated character"/><div class="studio-namebar"><strong id="studio-name">YOUR CHARACTER</strong><span>READY FOR THE BOARD</span></div></div>
-     <div class="studio-controls"><h2>CHARACTER SELECT.</h2><p>No uploads, no photos, and no personal details. Pick any character in either art family; nothing is pre-selected from your name or account.</p>
+     <div class="studio-controls"><h2>CHARACTER SELECT.</h2><p>Any look, either art style. No uploads or photos.</p>
       <div class="picker-group"><div class="picker-head"><h3>01 / Choose your character</h3><span>9 different looks</span></div><div class="base-options" id="base-options"></div></div>
-      <div class="picker-group"><div class="picker-head"><h3>02 / Character family</h3><span>2 complete art families</span></div><div class="style-options" id="style-options"></div><div class="studio-status-small">Comic Original and 3D Cartoon are independently illustrated avatar families. Choose the one that feels most like you.</div></div>
+      <div class="picker-group"><div class="picker-head"><h3>02 / Character family</h3><span>2 art styles</span></div><div class="style-options" id="style-options"></div></div>
       <div class="picker-group"><div class="picker-head"><h3>03 / Pick a backdrop</h3><span>tap a color</span></div><div class="swatches"><button class="swatch selected" data-tone="mint" aria-label="Mint backdrop" aria-pressed="true"></button><button class="swatch" data-tone="coral" aria-label="Coral backdrop" aria-pressed="false"></button><button class="swatch" data-tone="gold" aria-label="Gold backdrop" aria-pressed="false"></button><button class="swatch" data-tone="paper" aria-label="Paper backdrop" aria-pressed="false"></button><button class="swatch" data-tone="blue" aria-label="Blue backdrop" aria-pressed="false"></button><button class="swatch" data-tone="lilac" aria-label="Lilac backdrop" aria-pressed="false"></button></div></div>
       <div class="picker-group"><div class="picker-head"><h3>04 / Choose your sticker</h3><span>a little personality</span></div><div class="badge-choices"><button class="badge-choice selected" data-badge="✦" aria-label="Star sticker" aria-pressed="true">✦</button><button class="badge-choice" data-badge="⚡" aria-label="Lightning sticker" aria-pressed="false">⚡</button><button class="badge-choice" data-badge="♥" aria-label="Heart sticker" aria-pressed="false">♥</button><button class="badge-choice" data-badge="★" aria-label="Solid star sticker" aria-pressed="false">★</button><button class="badge-choice" data-badge="" aria-label="No sticker" aria-pressed="false">—</button></div></div>
-      <div class="picker-group" id="public-avatar-group" hidden><div class="picker-head"><h3>05 / Public leaderboard</h3><span>your choice</span></div><label class="optin-row"><input type="checkbox" id="show-on-leaderboard"/><span>Show my character on public leaderboards</span></label><div class="studio-status-small">Your character appears only after university staff verify which published ranking is yours, and only while this is switched on. Turn it off any time to return to the default illustration.</div></div>
-      <div class="studio-actions"><button class="button-solid" id="save-character">SAVE CHARACTER ↗</button><div class="save-note" id="save-note">Fictional demo changes stay in this browser. Production saves require your staff-issued account.</div></div><div class="save-status" id="save-status" role="status" aria-live="polite"></div>
+      <div class="picker-group" id="public-avatar-group" hidden><div class="picker-head"><h3>05 / Public leaderboard</h3><span>your choice</span></div><label class="optin-row"><input type="checkbox" id="show-on-leaderboard"/><span>Show my character on public leaderboards</span></label><div class="studio-status-small">Your character appears only after staff confirm which ranking is yours, and only while this is on. Switch it off any time.</div></div>
+      <div class="studio-actions"><button class="button-solid" id="save-character">SAVE CHARACTER ↗</button><div class="save-note" id="save-note">Sign in with your Arena account to save.</div></div><div class="save-status" id="save-status" role="status" aria-live="polite"></div>
      </div>
     </div>
    </section>
@@ -136,14 +134,14 @@
      <p id="public-name-status" role="status"></p>
     </section>
    </section>
-   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>THE IDEA</div><h1 id="about-title">BIG ENERGY.<br/>SMALL SCOPE.</h1><p>Academic Arena starts with one thing: a visually exciting home for the university's approved top-ten rankings. Ranked students appear as comic-style illustrations, never personal photographs. Everyone can view the standings without signing in.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Choose Level 4, 5, or 6 to see that level's approved top ten.</p></div></div><div class="about-step"><b>02</b><div><h3>Meet the characters</h3><p>Board artwork is assigned by rank from the illustrated cast. Default illustrated characters are shown until students choose their own; they are not likenesses of the students. No personal images and no image uploads.</p></div></div><div class="about-step"><b>03</b><div><h3>See who tops the board</h3><p>Show approved names and ranked positions, never individual grades, scores, or attendance records.</p></div></div></div><div class="about-signin"><h2>SIGNING IN</h2><p>Students receive an Academic Arena username and temporary password individually from university staff; there is no public sign-up. After the first sign-in you choose a new password, then open My Character to pick your look. Your character shows on a public leaderboard only after staff verify your ranking and you switch public display on.</p></div><p class="illustration-credit">Rankings are published by authorized university staff from approved quiz results and show only names and positions. Characters on the board are illustrations assigned by rank, not photos or likenesses of students.</p></section>
+   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>HOW IT WORKS</div><h1 id="about-title">TOP TEN.<br/>EVERY LEVEL.</h1><p>Academic Arena celebrates the top quiz performers in Levels 4, 5 and 6 of UOL Computer Science at EUE. Anyone can view the standings, no sign-in needed.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Switch between Level 4, 5 and 6 to see each level’s top ten.</p></div></div><div class="about-step"><b>02</b><div><h3>How the ranking works</h3><p>Students are ranked by quiz participation first, then quiz scores. Only names and positions are published.</p></div></div><div class="about-step"><b>03</b><div><h3>The characters</h3><p>Every ranked student appears as an illustration, never a photo. Unless a student has chosen their own, it’s an anonymous competitor.</p></div></div></div><div class="about-signin" data-student-only><h2>SIGNING IN</h2><p>University staff give each student an Arena username and a temporary password. After your first sign-in you set your own password, then open My Character to pick your look. It appears on the leaderboard only once staff confirm your ranking and you switch it on.</p></div></section>
   </main>
  </div>
 </div>
 <div class="dialog-backdrop" id="login-backdrop" hidden>
  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="login-title">
   <h2 id="login-title">YOUR ARENA ACCOUNT</h2>
-  <p>Staff-issued username and password. There is no public registration or email/SMS login. Contact authorized staff if you lose access. Public leaderboards do not require login.</p>
+  <p>Use the username and password issued by university staff. There’s no public sign-up. Lost access? Contact the Arena staff team.</p>
   <form id="login-form">
    <label for="login-username">Username</label><input id="login-username" name="username" autocomplete="username" required minlength="2" maxlength="80" />
    <label for="login-password">Password</label><input id="login-password" type="password" name="password" autocomplete="current-password" required maxlength="256" />
@@ -178,7 +176,7 @@
   </div>
  </div>
 </div>
-<div class="dialog-backdrop" id="composer-backdrop" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="composer-title"><h2 id="composer-title">SHARE YOUR WIN ✦</h2><p>Choose an approved milestone. Submissions stay private until staff review.</p><form id="achievement-form"><label for="achievement-type">Milestone</label><select id="achievement-type" required><option value="top3">Made the top three</option><option value="workshop">Completed a workshop challenge</option><option value="project">Finished a project</option><option value="helped">Helped classmates</option></select><p id="submission-hint">No text, photos, comments, or links are collected. Production submissions require an authorized student account.</p><div class="dialog-footer"><button type="button" class="outline-btn" id="close-composer">CANCEL</button><button class="button-solid" type="submit">SUBMIT FOR REVIEW</button></div><div id="composer-status" class="dialog-status" role="status"></div></form></div></div>
+<div class="dialog-backdrop" id="composer-backdrop" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="composer-title"><h2 id="composer-title">SHARE YOUR WIN ✦</h2><p>Choose an approved milestone. Submissions stay private until staff review.</p><form id="achievement-form"><label for="achievement-type">Milestone</label><select id="achievement-type" required><option value="top3">Made the top three</option><option value="workshop">Completed a workshop challenge</option><option value="project">Finished a project</option><option value="helped">Helped classmates</option></select><p id="submission-hint">Just pick a milestone, no text or photos needed. Staff review every win before it’s posted.</p><div class="dialog-footer"><button type="button" class="outline-btn" id="close-composer">CANCEL</button><button class="button-solid" type="submit">SUBMIT FOR REVIEW</button></div><div id="composer-status" class="dialog-status" role="status"></div></form></div></div>
 <div class="dialog-backdrop welcome-backdrop" id="welcome-backdrop" hidden><div class="dialog welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title" aria-describedby="welcome-copy"><button type="button" class="welcome-close" id="welcome-close" aria-label="Close welcome message">×</button><div class="section-prelude"><span class="prelude-swatch"></span>WELCOME TO THE ARENA</div><h2 id="welcome-title">YOUR NAME.<br/><span>YOUR CHARACTER.</span></h2><p id="welcome-copy">Academic Arena celebrates your achievements. Students with university-issued Arena accounts can sign in and make their character their own.</p><div class="dialog-footer"><button type="button" class="outline-btn" id="welcome-explore">EXPLORE LEADERBOARDS</button><button type="button" class="button-solid" id="welcome-signin">SIGN IN &amp; PERSONALIZE</button></div></div></div>
 <script src="assets/runtime-config.js" defer></script>
 <script src="assets/data-access.js" defer></script>

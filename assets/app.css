@@ -165,3 +165,13 @@
 .welcome-close{position:absolute;top:8px;right:10px;width:40px;height:40px;border:2px solid var(--ink);background:var(--paper);font-size:22px;font-weight:900;line-height:1}
 .welcome-dialog .dialog-footer{flex-wrap:wrap;gap:10px}
 .student-next{border:2px solid var(--ink);padding:12px;margin:12px 0;background:#fff1d5}.student-next h3{margin:0 0 4px;font-size:14px;letter-spacing:1px}.student-next p{margin:0 0 10px;font-size:13px}
+/* V1.3: anonymous competitor art (bust thumbnails fill their frame). */
+.mini-photo[data-art="anonymous"]{background:#f4d599}.profile-chip .mini-photo[data-art="anonymous"] img{width:100%;height:100%;margin:0;object-fit:cover}
+.rank-row .pic[data-art="anonymous"] img{object-fit:cover;object-position:center 30%}
+/* V1.3: plain-text EUE wordmark; student-only elements follow the backend switch. */
+.eue-endorsement{display:flex;align-items:center;gap:9px;color:var(--ink)}
+.eue-mark{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:27px;letter-spacing:-.5px;color:#173456;line-height:1}
+.eue-name{font-size:9.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;line-height:1.25;color:#173456;border-left:1px solid #173456;padding-left:8px}
+@media(max-width:940px){.eue-mark{font-size:20px}.eue-name{font-size:8px}}
+@media(max-width:500px){.eue-endorsement{gap:5px;padding:4px 6px}.eue-mark{font-size:16px}.eue-name{display:none}}
+html[data-students="off"] [data-student-only]{display:none!important}
