@@ -226,3 +226,4 @@ html[data-students="off"] [data-student-only]{display:none!important}
 .about-tip{border-top:4px solid var(--ink);padding-top:10px}.about-tip b{font-family:var(--display);font-size:28px;color:var(--coral)}.about-tip h3{margin:2px 0 4px;font-size:15px}.about-page .about-tip p{margin:0;font-size:13px;line-height:1.5;color:#54615b}
 .about-page .about-privacy{margin-top:26px;font-size:14px}.about-page .about-note{font-size:13px;color:#54615b;border-left:4px solid var(--gold);padding-left:12px}
 @media(max-width:640px){.score-rules,.about-tips{grid-template-columns:1fr}.score-card{padding:16px;box-shadow:5px 5px 0 var(--ink)}.score-card h2{font-size:30px}.about-page h1{font-size:54px}}
+.artwork-result{font-weight:800;margin-top:10px;min-height:18px}.artwork-result[data-state="unavailable"]{color:#a3321f}.artwork-result[data-state="ready"]{color:#1d5c4f}

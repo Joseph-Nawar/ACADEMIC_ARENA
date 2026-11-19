@@ -43,13 +43,12 @@
        <div class="competitor first"><svg class="crown" viewBox="0 0 82 62" aria-hidden="true"><path d="M7 46 5 10l24 22L41 5l17 27L78 10l-4 36H7Z" fill="#f4c856" stroke="#182526" stroke-width="4.5" stroke-linejoin="round"/><path d="M9 53h63" stroke="#182526" stroke-width="7" stroke-linecap="round"/></svg><img class="champion-art" id="art-1" src="assets/competitors/podium-1.svg" alt=""/><div class="name-tag" id="name-1">—</div><div class="pedestal"><span class="rank-num">1</span><span class="medal-text">CHAMPION</span></div></div>
        <div class="competitor third"><img class="champion-art" id="art-3" src="assets/competitors/podium-3.svg" alt=""/><div class="name-tag" id="name-3">—</div><div class="pedestal"><span class="rank-num">3</span><span class="medal-text">THIRD PLACE</span></div></div>
       </div>
-      <p class="artwork-note">Characters are illustrative until students choose their own.</p>
      </section>
      <section class="rank-sheet" aria-labelledby="sheet-heading" hidden>
       <h2 id="sheet-heading" class="sheet-title">THE <em>TOP 10</em></h2>
       <p class="sheet-subtitle" id="sheet-subtitle"></p>
       <ol class="ranks" id="ranking-rows" start="4"></ol>
-      <div class="sheet-footer">Names and positions are published by the university. Scores stay private.</div>
+      <div class="sheet-footer">Names and positions are published by the Program Director. Scores stay private.</div>
      </section>
     </div>
     <div class="bottom-note" data-student-only><h2>YOUR RANK.<br/>YOUR CHARACTER.</h2><p>Have an Arena account? Pick a character and choose whether it appears next to your name.</p><button class="button-solid" id="create-button">MAKE YOUR CHARACTER ↗</button></div>
@@ -119,6 +118,7 @@
       <div class="artwork-actions"><button class="outline-btn" type="button" id="suggest-artwork">SUGGEST FROM FIRST NAMES</button><span id="artwork-summary"></span></div>
       <ol id="artwork-rows" class="artwork-rows"></ol>
       <button class="button-solid" type="button" id="approve-artwork">APPROVE THESE CHARACTERS</button>
+      <p id="artwork-result" class="artwork-result" role="status" aria-live="polite"></p>
      </div>
     </section>
     <section class="staff-panel" id="staff-links" hidden aria-labelledby="links-heading">

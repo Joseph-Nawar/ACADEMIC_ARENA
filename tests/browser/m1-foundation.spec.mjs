@@ -344,8 +344,7 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.equal(await welcomePage.locator("#art-3").getAttribute("alt"), "Neutral illustration for rank 3");
   assert.match(await welcomePage.locator("#art-3").getAttribute("src"), /^assets\/competitors\/podium-3\.svg$/u, "no approved character: neutral fallback");
   assert.equal(await welcomePage.locator("#art-1").getAttribute("src"), "assets/characters/zein-3d.png", "the student's own character, in 3D");
-  assert.equal(await welcomePage.locator(".artwork-note").textContent(), "Characters are illustrative until students choose their own.");
-  assert.equal(await welcomePage.locator(".artwork-note").count(), 1, "the character note appears once");
+  assert.equal(await welcomePage.locator(".artwork-note").count(), 0, "no 'illustrative' caption under the podium");
   await welcomePage.evaluate(() => localStorage.clear());
   signedIn = true;
   await welcomePage.reload();

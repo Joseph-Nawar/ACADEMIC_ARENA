@@ -32,7 +32,7 @@ test("worked_example_is_arithmetically_correct", () => {
 
 test("scores_and_attendance_details_stay_private", () => {
   assert.match(plain, /Only names and positions are published\. Academic Scores, quiz marks, attendance and warnings are never shown\./);
-  assert.match(html, /Names and positions are published by the university\. Scores stay private\./);
+  assert.match(html, /Names and positions are published by the Program Director\. Scores stay private\./);
 });
 
 test("week_5_methodology_is_described_as_verified_not_warning_adjusted", () => {
