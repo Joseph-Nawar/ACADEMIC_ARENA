@@ -11,6 +11,23 @@ Keep short. Newest first.
   - Precedence: student's own opted-in character, then the reviewed default, then a neutral illustration. The podium and thumbnails are always 3D.
 - **EUE identity:** a bold text lockup (no approved logo file exists in the repo) and "University of London · Computer Science" in the header.
 - **UI walkthrough (local, fictional):** 28 of 28 checks pass. One bug fixed: the publication pickers didn't refresh after a publish.
+- **Released** (PR #16, `4bd2f70`). Migration `202611200001` is applied to staging and production (13 migrations), and both sites are deployed. Production rankings were re-verified: one Week 5 version, unchanged hash, no audit writes, all student switches off. **No board characters are approved yet**, so production shows the neutral illustration until staff review Week 5.
+
+### Owner checklist to finish launch
+
+1. **Week 5 board characters** (about 10 minutes):
+   - sign in to production as admin;
+   - Staff Desk → Board characters → v1 Week 5 → Load rows → Suggest from first names;
+   - check all 30 rows: 3 are flagged (2 unrecognised names, 1 unisex) and need your decision;
+   - choose the headscarf or wheelchair character only where you know it is right;
+   - tick each row, then Approve.
+2. **University authorization, in writing:**
+   - processing the roster and institutional emails in Supabase (EU region);
+   - the private credential-delivery channel;
+   - public display of students' chosen characters.
+3. **Pilot**, per `docs/operations/student-accounts.md` → Launch sequence: 3–5 students from the private roster through the local CLI, then batches of 25 or fewer, then the welcome dialog.
+4. **Official EUE logo**, optional: if the university supplies an approved asset, it can replace the text wordmark.
+
 
 ## 2026-11-19 — V1.3 production polish
 
