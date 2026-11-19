@@ -15,7 +15,9 @@ jobs:
   supabase-local:
     name: Local Supabase Auth, Postgres, and RLS tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Stack start + pgTAP + the integration suite (12-minute budget in
+    # scripts/run-m2-local-tests.mjs) + lifecycle-gate test, with headroom.
+    timeout-minutes: 25
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

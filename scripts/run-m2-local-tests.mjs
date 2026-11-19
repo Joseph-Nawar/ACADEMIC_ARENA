@@ -425,8 +425,21 @@ try {
     AA_SESSION_JWE_KEY: jweKey,
     AA_RATE_LIMIT_HMAC_KEY: rateLimitKey,
   };
-  const result = await capture(process.execPath, ["--test", "--test-concurrency=1", ...testFiles], testEnv);
+  // Whole-suite budget. The suite grew from ~222 s to ~300 s on GitHub runners
+  // and hit the old fixed 5-minute limit (exit 124, in-flight test reported as
+  // "Promise resolution is still pending"). Override with AA_M2_TEST_TIMEOUT_MS
+  // (e.g. a small value reproduces that failure on purpose).
+  const suiteBudgetMs = Number(process.env.AA_M2_TEST_TIMEOUT_MS) > 0 ? Number(process.env.AA_M2_TEST_TIMEOUT_MS) : 12 * 60 * 1000;
+  const suiteStarted = Date.now();
+  const result = await capture(process.execPath, ["--test", "--test-concurrency=1", ...testFiles], testEnv, suiteBudgetMs);
   process.stdout.write(result.stdout);
+  const suiteSeconds = ((Date.now() - suiteStarted) / 1000).toFixed(1);
+  if (result.timedOut) {
+    process.stderr.write(`M2 integration suite exceeded its ${suiteBudgetMs / 1000} s budget after ${suiteSeconds} s and was stopped ` +
+      "(exit 124). Tests reported as cancelled or 'still pending' were interrupted by this timeout, not by a test failure.\n");
+  } else {
+    process.stdout.write(`M2 integration suite finished in ${suiteSeconds} s (budget ${suiteBudgetMs / 1000} s).\n`);
+  }
   if (result.code !== 0) {
     process.stderr.write("M2 local integration tests failed. Local provider credentials were not emitted.\n");
     const previewLog = pagesSafeLog?.();
