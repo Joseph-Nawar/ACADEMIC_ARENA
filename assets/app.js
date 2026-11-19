@@ -11,6 +11,10 @@
   const badges = ["✦", "⚡", "♥", "★", ""];
   const artwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d" : "ink"}.png`;
   const faceArtwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d-face.jpg" : "face.png"}`;
+  // Anonymous competitor art for every row without a student-chosen character:
+  // chosen only by board position, never from a name or any record.
+  const competitorArtwork = (position) => `assets/competitors/podium-${position}.svg`;
+  const competitorThumbnail = (position) => `assets/competitors/thumb-${"abc"[(position - 4) % 3]}.svg`;
   const templates = Object.freeze({
     top3: { title: "TOP THREE!", icon: "🏆", category: "academic", tone: "gold" },
     workshop: { title: "WORKSHOP WIN!", icon: "🎯", category: "consistency", tone: "mint" },
@@ -98,7 +102,7 @@
     $("podium-label").textContent = `LEVEL ${boardState.level} / TOP 3`;
     const shortNames = window.AcademicArenaDisplayNames.shortDisplayNames(rows.map((row) => row.name));
     const visibleName = (rowData) => shortNames[rows.indexOf(rowData)];
-    $("sheet-subtitle").textContent = "Seven more names. One leaderboard.";
+    $("sheet-subtitle").textContent = "Ranks 4 to 10";
     for (let position = 1; position <= 3; position += 1) {
       const row = rows.find((item) => item.position === position);
       const image = $(`art-${position}`);
@@ -110,8 +114,9 @@
         name.removeAttribute("title");
         continue;
       }
-      image.src = artwork(row.avatar, row.style);
-      image.alt = row.personalized ? `Character chosen by the rank ${position} student` : `Default illustrated character for rank ${position}`;
+      image.src = row.personalized ? artwork(row.avatar, row.style) : competitorArtwork(position);
+      image.alt = row.personalized ? `Character chosen by the rank ${position} student` : `Anonymous competitor illustration for rank ${position}`;
+      image.closest(".competitor").dataset.art = row.personalized ? "personal" : "anonymous";
       setPublicName(name, visibleName(row), row.name);
     }
     for (const rowData of rows.filter((row) => row.position > 3).slice(0, 7)) {
@@ -122,8 +127,9 @@
       const portrait = document.createElement("span");
       portrait.className = "pic";
       const image = document.createElement("img");
-      image.src = faceArtwork(rowData.avatar, rowData.style);
+      image.src = rowData.personalized ? faceArtwork(rowData.avatar, rowData.style) : competitorThumbnail(rowData.position);
       image.alt = "";
+      portrait.dataset.art = rowData.personalized ? "personal" : "anonymous";
       if (rowData.personalized) portrait.dataset.tone = rowData.tone;
       portrait.append(image);
       const name = document.createElement("span");
@@ -195,8 +201,6 @@
     $("studio-art").src = artwork(choices.base, choices.style);
     $("studio-art").alt = `Illustrated character in ${styles[choices.style]} style`;
     $("studio-badge").textContent = choices.badge;
-    $("nav-portrait").src = artwork(choices.base, choices.style);
-    document.querySelector(".mini-photo").dataset.tone = choices.tone;
     $("base-options").querySelectorAll("img").forEach((image) => {
       image.src = artwork(image.dataset.character, choices.style);
     });
@@ -261,6 +265,13 @@
     }
   }
 
+  // The header portrait shows the signed-in student's saved character, else the anonymous one.
+  function showSavedPortrait() {
+    $("nav-portrait").src = artwork(choices.base, choices.style);
+    document.querySelector(".mini-photo").dataset.tone = choices.tone;
+    document.querySelector(".mini-photo").dataset.art = "personal";
+  }
+
   async function loadSavedCharacter() {
     try {
       const saved = await api.student.getMyCharacter();
@@ -268,9 +279,10 @@
         const { showOnLeaderboard, ...look } = saved;
         choices = { ...choices, ...look };
         $("show-on-leaderboard").checked = showOnLeaderboard === true;
+        showSavedPortrait();
       }
     } catch {
-      if (mode === "production") $("save-note").textContent = "Sign in with your staff-issued account to load your saved character.";
+      if (mode === "production") $("save-note").textContent = "Sign in with your Arena account to load your saved character.";
     }
     renderStudio();
   }
@@ -329,7 +341,7 @@
     $("login-backdrop").hidden = false;
     $("login-status").textContent = "";
     renderAccountPanel();
-    if (session.authenticated) $("account-status").textContent = "You are signed in to your character account.";
+    if (session.authenticated) $("account-status").textContent = "You’re signed in.";
     else $("login-username").focus();
   }
 
@@ -374,8 +386,17 @@
     $("pending-panel").hidden = submissions.length === 0;
   }
 
+  // Back to the anonymous header portrait (e.g. after sign-out on a shared device).
+  function resetPortrait() {
+    $("nav-portrait").src = "assets/competitors/thumb-a.svg";
+    const frame = document.querySelector(".mini-photo");
+    frame.dataset.art = "anonymous";
+    delete frame.dataset.tone;
+  }
+
   // Runs after every session change: account button, student-private data, staff desk.
   async function onSessionChanged() {
+    if (!session.authenticated) resetPortrait();
     $("account-entry").textContent = session.authenticated ? "ACCOUNT" : "SIGN IN";
     window.dispatchEvent(new CustomEvent("arena:session", { detail: { session, api, showPage } }));
     if (mode !== "production") return;
@@ -499,9 +520,14 @@
       button.setAttribute("aria-pressed", String(chosen));
       button.setAttribute("aria-label", `${reactionIcons[index]} reaction to an achievement`);
       button.textContent = `${reactionIcons[index]} ${post.counts[index]}`;
+      // Until student sign-in is enabled, counts are read-only (no dead-end sign-in prompt).
+      if (!features.studentSignIn) {
+        button.disabled = true;
+        button.title = "Reactions open when student accounts launch.";
+      }
       button.addEventListener("click", async () => {
         if (mode === "production" && !session.authenticated) {
-          showLoginRequired("Sign in with your staff-issued account to react.");
+          showLoginRequired("Sign in with your Arena account to react.");
           return;
         }
         try {
@@ -563,7 +589,7 @@
 
   function openComposer() {
     if (mode === "production" && !session.authenticated) {
-      showLoginRequired("Sign in with your staff-issued account to submit a milestone.");
+      showLoginRequired("Sign in with your Arena account to share a milestone.");
       return;
     }
     $("composer-status").textContent = "";
@@ -621,17 +647,18 @@
 
   async function saveCharacter() {
     if (mode === "production" && !session.authenticated) {
-      showLoginRequired("Sign in with your staff-issued account to save your character.");
+      showLoginRequired("Sign in with your Arena account to save your character.");
       return;
     }
     try {
       const publicChoice = features.avatarPersonalization ? $("show-on-leaderboard").checked : undefined;
       const result = await api.student.saveCharacter(choices, publicChoice);
+      showSavedPortrait();
       const base = mode === "demo" ? "Fictional character saved in this browser." : "Character saved to your account.";
       $("save-status").textContent = !features.avatarPersonalization ? base
         : result.showOnLeaderboard
           ? `${base} Public display is on: it appears on a leaderboard once staff have verified your ranking.`
-          : `${base} Public display is off: leaderboards show the default illustration.`;
+          : `${base} Public display is off: leaderboards show the anonymous illustration.`;
       if (currentPage === "leaderboard" || publicChoice !== undefined) void loadLeaderboard();
     } catch {
       $("save-status").textContent = "Your character could not be saved. Sign in and try again.";
@@ -680,7 +707,7 @@
         $("login-form").reset();
         $("account-entry").textContent = "ACCOUNT";
         renderAccountPanel();
-        $("account-status").textContent = "You are signed in to your character account.";
+        $("account-status").textContent = "You’re signed in.";
         if (session.user.mustChangePassword) $("account-status").textContent += " Change your initial password before continuing.";
         else if (session.user.mfaRequired) $("account-status").textContent = "Complete the staff security check to continue.";
       } catch {
@@ -774,18 +801,24 @@
   async function start() {
     document.documentElement.dataset.appMode = mode;
     $("mode-stamp").hidden = mode !== "demo";
+    if (mode === "demo") {
+      $("mode-stamp").textContent = "FICTIONAL DEMO";
+      $("pending-demo-note").textContent = "This preview control is local to fictional demo data. Real moderation is staff-only.";
+    }
     // The hosted staging site only ever holds fictional test data; say so on every page.
     if (/(^|\.)academic-arena-staging\.pages\.dev$/.test(location.hostname)) {
       $("mode-stamp").textContent = "STAGING · FICTIONAL TEST DATA";
       $("mode-stamp").hidden = false;
     }
     $("approve-demo").hidden = mode !== "demo";
-    if (mode === "production") $("save-note").textContent = "Your character is private to your account. Staff-issued sign-in is required to save changes.";
+    if (mode === "production") $("save-note").textContent = "Sign in with your Arena account to save.";
     createPickerOptions();
     renderStudio();
     updateLevelButtons();
     bindEvents();
     features = await api.public.getFeatures();
+    // Student-only navigation and promotions appear only once the owner enables student sign-in.
+    document.documentElement.dataset.students = features.studentSignIn ? "on" : "off";
     $("public-avatar-group").hidden = !features.avatarPersonalization;
     await Promise.all([loadLeaderboard(), loadWins(), renderSession(), loadSavedCharacter()]);
     document.documentElement.dataset.appReady = "true";

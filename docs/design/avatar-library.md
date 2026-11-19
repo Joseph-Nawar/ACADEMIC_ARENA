@@ -13,6 +13,10 @@ Honest gaps against the V1.2 inclusion goals:
 
 These gaps cannot be closed with code. The art is flat raster illustration, and recolouring skin, hair or scarves with filters gives unnatural results. The V1.2 brief forbids that. No image-generation tooling that matches this art was available in this repository, so **no new artwork was added**. Low-quality or inconsistent variants were not released to meet a count.
 
+## Default board artwork (V1.3)
+
+Ranked students without a verified, opted-in character are shown as anonymous competitors: faceless hooded figures in `assets/competitors/`, made by `scripts/generate-competitors.mjs`. They are not selectable characters and never appear in any allowlist.
+
 ## What is ready for new art
 
 - Selection is the student's choice only. Nothing is inferred from names, emails, gender or religion, and nothing is pre-selected.

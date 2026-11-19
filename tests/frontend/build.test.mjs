@@ -45,11 +45,22 @@ test("production_build_excludes_fixtures_and_pilot_backend", () => {
   }
 });
 
-test("pages_bundle_includes_eue_branding_and_both_approved_character_families", () => {
+test("pages_bundle_includes_eue_branding_anonymous_competitors_and_both_character_families", () => {
   const result = build("production");
   try {
+    const page = readFileSync(join(result.outDir, "index.html"), "utf8");
+    assert.match(page, /<span class="eue-mark">EUE<\/span>/u, "plain-text EUE wordmark");
+    const visibleText = page.replace(/<script[\s\S]*?<\/script>/gu, " ").replace(/<[^>]+>/gu, " ");
+    assert.doesNotMatch(visibleText, /draft|pending approval|prototype|fictional|bragging|no photos\. no grades/iu,
+      "no development notes or filler slogans in production copy");
+    assert.equal(existsSync(join(result.outDir, "assets/eue-wordmark-draft.svg")), false, "the draft wordmark is not shipped");
     for (const file of [
-      "assets/eue-wordmark-draft.svg",
+      "assets/competitors/podium-1.svg",
+      "assets/competitors/podium-2.svg",
+      "assets/competitors/podium-3.svg",
+      "assets/competitors/thumb-a.svg",
+      "assets/competitors/thumb-b.svg",
+      "assets/competitors/thumb-c.svg",
       "assets/characters/amara-ink.png",
       "assets/characters/amara-3d.png",
       "assets/characters/amara-face.png",
