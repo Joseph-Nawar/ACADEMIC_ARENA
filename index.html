@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-students="off">
+<html lang="en" data-students="off" data-session="pending" data-character-access="off">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -14,7 +14,7 @@
   <nav class="rail-navigation">
    <button class="nav-link active" data-page="leaderboard" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 20h18M5 17V9h4v8M10 17V4h4v13M15 17v-6h4v6"/></svg>Leaderboards</button>
    <button class="nav-link" data-page="wins"><span class="nav-emoji" aria-hidden="true">✦</span>Campus Wins</button>
-   <button class="nav-link" data-page="avatar" data-student-only><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2c0-5 16-5 16 0v2"/></svg>My Character</button>
+   <button class="nav-link" data-page="avatar" data-requires-student><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2c0-5 16-5 16 0v2"/></svg>My Character</button>
    <button class="nav-link" data-page="staff" id="staff-nav" hidden><span class="nav-emoji" aria-hidden="true">★</span>Staff Desk</button>
    <button class="nav-link" data-page="about"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v2"/></svg>How it works</button>
   </nav>
@@ -22,7 +22,7 @@
  <div class="workspace">
   <header class="topbar">
    <div class="topbar-kicker"><span class="dot"></span><span class="kicker-long">University of London · Computer Science</span><span class="kicker-short">UoL · Computer Science</span></div>
-   <div class="topbar-actions"><button type="button" id="account-entry" class="account-entry" aria-haspopup="dialog" title="Sign in">SIGN IN</button><span class="demo-stamp" id="mode-stamp" hidden></span><button class="profile-chip" id="profile-link" data-student-only aria-label="Open character studio"><span class="mini-photo" data-art="anonymous"><img id="nav-portrait" src="assets/competitors/thumb-a.svg" alt=""/></span><span>My Character ↗</span></button></div>
+   <div class="topbar-actions"><button type="button" id="account-entry" class="account-entry" aria-haspopup="dialog" title="Sign in">SIGN IN</button><span class="demo-stamp" id="mode-stamp" hidden></span><button class="profile-chip" id="profile-link" data-requires-student aria-label="Open character studio"><span class="mini-photo" data-art="anonymous"><img id="nav-portrait" src="assets/competitors/thumb-a.svg" alt=""/></span><span>My Character ↗</span></button></div>
   </header>
   <main class="content">
    <section id="page-leaderboard" class="page" aria-labelledby="leaderboard-title">
@@ -51,14 +51,14 @@
       <div class="sheet-footer">Names and positions are published by the Program Director. Scores stay private.</div>
      </section>
     </div>
-    <div class="bottom-note" data-student-only><h2>YOUR RANK.<br/>YOUR CHARACTER.</h2><p>Have an Arena account? Pick a character and choose whether it appears next to your name.</p><button class="button-solid" id="create-button">MAKE YOUR CHARACTER ↗</button></div>
+    <div class="bottom-note" data-requires-student><h2>YOUR RANK.<br/>YOUR CHARACTER.</h2><p>Have an Arena account? Pick a character and choose whether it appears next to your name.</p><button class="button-solid" id="create-button">MAKE YOUR CHARACTER ↗</button></div>
     <div class="wins-sneak"><div><div class="kicker">✦ CAMPUS WINS</div><h2>CELEBRATE EACH OTHER.</h2><p>Milestones from across the cohort, reviewed by staff before they go up.</p></div><button class="button-solid" id="see-wins">SEE CAMPUS WINS ↗</button></div>
    </section>
    <section id="page-wins" class="page" hidden aria-labelledby="wins-title">
     <div class="section-prelude"><span class="prelude-swatch"></span>STUDENT SPOTLIGHT</div>
     <div class="wins-page-head"><h1 class="hero-title" id="wins-title">CAMPUS<br/><span>WINS.</span></h1><p class="aside">Celebrating what students do, not just where they rank.</p></div>
     <div class="wins-guardrail">Every win is reviewed by staff before it appears.</div>
-    <div class="wins-toolbar"><div class="wins-filters" role="group" aria-label="Filter achievements"><button class="wins-filter current" data-filter="all" aria-pressed="true">All wins</button><button class="wins-filter" data-filter="academic" aria-pressed="false">Academic</button><button class="wins-filter" data-filter="consistency" aria-pressed="false">Consistency</button><button class="wins-filter" data-filter="community" aria-pressed="false">Community</button></div><button id="open-composer" class="button-solid" data-student-only>+ SHARE A WIN</button></div>
+    <div class="wins-toolbar"><div class="wins-filters" role="group" aria-label="Filter achievements"><button class="wins-filter current" data-filter="all" aria-pressed="true">All wins</button><button class="wins-filter" data-filter="academic" aria-pressed="false">Academic</button><button class="wins-filter" data-filter="consistency" aria-pressed="false">Consistency</button><button class="wins-filter" data-filter="community" aria-pressed="false">Community</button></div><button id="open-composer" class="button-solid" data-requires-student>+ SHARE A WIN</button></div>
     <p id="wins-status" class="data-status" role="status" aria-live="polite">Loading approved Campus Wins…</p>
     <div class="pending-panel" id="pending-panel" hidden><h3>SUBMITTED FOR REVIEW</h3><p id="pending-description"></p><ul id="my-submissions" class="staff-list"></ul><button id="approve-demo" class="outline-btn">APPROVE IN DEMO</button><p class="pending-demo-note" id="pending-demo-note"></p></div>
     <div id="wins-feed" class="wins-feed"></div>

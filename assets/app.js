@@ -51,7 +51,21 @@
   const WELCOME_VERSION = "v1";
   let welcomeReturnFocus = null;
 
+  // My Character and other student-only controls need a server-verified student
+  // session with a completed password (the fictional demo has no accounts).
+  function characterAccess() {
+    if (mode === "demo") return true;
+    const user = session.user || {};
+    return session.authenticated === true && features.studentSignIn === true &&
+      user.role === "student" && user.mustChangePassword !== true;
+  }
+
   function showPage(target) {
+    if (target === "avatar" && !characterAccess()) {
+      // A temporary password must be replaced first; anyone else goes to a public page.
+      if (session.authenticated && session.user?.mustChangePassword) openLogin();
+      target = "leaderboard";
+    }
     currentPage = target;
     document.querySelectorAll(".page").forEach((section) => {
       section.hidden = section.id !== `page-${target}`;
@@ -480,7 +494,15 @@
     entry.title = session.authenticated ? "Your Arena account" : "Sign in";
     entry.dataset.state = !session.authenticated ? "signed-out"
       : user.mustChangePassword || user.mfaRequired ? "action-needed" : "signed-in";
-    document.documentElement.dataset.session = !session.authenticated ? "none" : user.role === "student" ? "student" : "staff";
+    document.documentElement.dataset.session = !session.authenticated ? "none"
+      : user.role !== "student" ? "staff" : user.mustChangePassword ? "student-setup" : "student";
+    const access = characterAccess();
+    document.documentElement.dataset.characterAccess = access ? "on" : "off";
+    if (!access) {
+      // Leave a protected page and close student-only dialogs the moment access ends.
+      if (currentPage === "avatar") showPage("leaderboard");
+      if (!$("composer-backdrop").hidden) $("composer-backdrop").hidden = true;
+    }
   }
 
   async function onSessionChanged() {
@@ -726,6 +748,7 @@
       showLoginRequired("Sign in with your Arena account to share a milestone.");
       return;
     }
+    if (!characterAccess()) return;
     $("composer-status").textContent = "";
     $("composer-backdrop").hidden = false;
     $("achievement-type").focus();
