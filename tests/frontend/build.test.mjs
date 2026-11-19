@@ -50,6 +50,9 @@ test("pages_bundle_includes_eue_branding_anonymous_competitors_and_both_characte
   try {
     const page = readFileSync(join(result.outDir, "index.html"), "utf8");
     assert.match(page, /<span class="eue-mark">EUE<\/span>/u, "plain-text EUE wordmark");
+    for (const name of ["app.css", "app.js", "data-access.js", "staff.js", "runtime-config.js"]) {
+      assert.match(page, new RegExp(`"assets/${name.replace(".", "\\.")}\\?v=[0-9a-f]{12}"`, "u"), `${name} is content-versioned`);
+    }
     const visibleText = page.replace(/<script[\s\S]*?<\/script>/gu, " ").replace(/<[^>]+>/gu, " ");
     assert.doesNotMatch(visibleText, /draft|pending approval|prototype|fictional|bragging|no photos\. no grades/iu,
       "no development notes or filler slogans in production copy");
