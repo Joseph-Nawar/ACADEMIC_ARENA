@@ -200,3 +200,6 @@ html[data-students="off"] [data-student-only]{display:none!important}
 @media(min-width:941px){.eue-endorsement{grid-template-columns:1fr;gap:6px;padding:12px 14px 13px;margin-right:4px}.eue-mark{font-size:46px}.eue-name{border-left:0;border-top:2px solid #173456;padding:7px 0 0;font-size:10px;letter-spacing:1px}.eue-name br{display:none}.eue-name{line-height:1.35}}
 @media(min-width:941px) and (max-width:1250px){.eue-endorsement{padding:10px}.eue-mark{font-size:38px}.eue-name{font-size:8.5px;letter-spacing:.6px}}
 @media(min-width:941px){.brand-lockup{margin-bottom:22px}}
+.artwork-check{font-size:12px;font-weight:800;display:flex;align-items:center;gap:4px;grid-column:3}.artwork-check input{width:16px;height:16px}
+#approve-artwork:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:560px){.artwork-check{grid-column:1/3}}

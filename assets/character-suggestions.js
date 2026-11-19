@@ -23,7 +23,7 @@
     yassin yasin yasser youssef yousef youssif yusuf zain zeyad ziad zyad noureldin nour-eldin
   `);
   const FEMININE = words(`
-    aisha aya ayah basma dalia dina doaa engy esraa fatma fatima farah farida ganna gana habiba hagar hala hana hanaa heba hend iman
+    aisha aya ayah basma dalia dina doaa engy esraa fatma fatima farah farida ganna gana habiba hagar hala hana hanaa heba hend
     jana jannah janna jasmine joudy judy laila layla lara lina lobna lojain lujain maha mai malak mariam maryam mariem marina menna
     mennatullah merna mirna mona nada nadia nadine nagwa nermeen noha nouran nourhan omnia rahma rana randa rania reem rodina rokaya
     ruqayya radiya razan rowan salma sama samar sandy sara sarah shahd shaimaa shorouk soha sohaila somaya yara yasmin yasmine yomna
