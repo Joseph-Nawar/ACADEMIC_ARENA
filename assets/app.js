@@ -386,8 +386,17 @@
     $("pending-panel").hidden = submissions.length === 0;
   }
 
+  // Back to the anonymous header portrait (e.g. after sign-out on a shared device).
+  function resetPortrait() {
+    $("nav-portrait").src = "assets/competitors/thumb-a.svg";
+    const frame = document.querySelector(".mini-photo");
+    frame.dataset.art = "anonymous";
+    delete frame.dataset.tone;
+  }
+
   // Runs after every session change: account button, student-private data, staff desk.
   async function onSessionChanged() {
+    if (!session.authenticated) resetPortrait();
     $("account-entry").textContent = session.authenticated ? "ACCOUNT" : "SIGN IN";
     window.dispatchEvent(new CustomEvent("arena:session", { detail: { session, api, showPage } }));
     if (mode !== "production") return;
@@ -511,6 +520,11 @@
       button.setAttribute("aria-pressed", String(chosen));
       button.setAttribute("aria-label", `${reactionIcons[index]} reaction to an achievement`);
       button.textContent = `${reactionIcons[index]} ${post.counts[index]}`;
+      // Until student sign-in is enabled, counts are read-only (no dead-end sign-in prompt).
+      if (!features.studentSignIn) {
+        button.disabled = true;
+        button.title = "Reactions open when student accounts launch.";
+      }
       button.addEventListener("click", async () => {
         if (mode === "production" && !session.authenticated) {
           showLoginRequired("Sign in with your Arena account to react.");

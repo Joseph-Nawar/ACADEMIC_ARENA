@@ -95,7 +95,7 @@ const svg = (viewBox, body, title) =>
 const ranks = [
   ["podium-1", "#f4c856", "#fffdf7", "crossed", "Anonymous champion illustration"],
   ["podium-2", "#bec9c5", "#fffdf7", "pockets", "Anonymous runner-up illustration"],
-  ["podium-3", "#d5a079", "#fffdf7", "strap", "Anonymous third-place illustration"],
+  ["podium-3", "#a8653a", "#fffdf7", "strap", "Anonymous third-place illustration"],
 ];
 for (const [name, jacket, emblem, kind, title] of ranks) {
   // Draw order: body, then arms in front, then the hood/head.
