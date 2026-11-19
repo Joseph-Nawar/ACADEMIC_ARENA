@@ -11,10 +11,12 @@
   const badges = ["✦", "⚡", "♥", "★", ""];
   const artwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d" : "ink"}.png`;
   const faceArtwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d-face.jpg" : "face.png"}`;
-  // Anonymous competitor art for every row without a student-chosen character:
-  // chosen only by board position, never from a name or any record.
-  const competitorArtwork = (position) => `assets/competitors/podium-${position}.svg`;
-  const competitorThumbnail = (position) => `assets/competitors/thumb-${"abc"[(position - 4) % 3]}.svg`;
+  // Leaderboards always use the 3D Cartoon family: a student's own character or
+  // the character staff approved for that publication row. Rows with neither
+  // show a neutral illustration (never a guess from a name, rank, or record).
+  const boardArtwork = (row) => (row.avatar ? artwork(row.avatar, "cartoon3d") : `assets/competitors/podium-${row.position}.svg`);
+  const boardThumbnail = (row) => (row.avatar ? faceArtwork(row.avatar, "cartoon3d") : `assets/competitors/thumb-${"abc"[(row.position - 4) % 3]}.svg`);
+  const artKind = (row) => (row.personalized ? "personal" : row.avatar ? "default" : "neutral");
   const templates = Object.freeze({
     top3: { title: "TOP THREE!", icon: "🏆", category: "academic", tone: "gold" },
     workshop: { title: "WORKSHOP WIN!", icon: "🎯", category: "consistency", tone: "mint" },
@@ -114,9 +116,10 @@
         name.removeAttribute("title");
         continue;
       }
-      image.src = row.personalized ? artwork(row.avatar, row.style) : competitorArtwork(position);
-      image.alt = row.personalized ? `Character chosen by the rank ${position} student` : `Anonymous competitor illustration for rank ${position}`;
-      image.closest(".competitor").dataset.art = row.personalized ? "personal" : "anonymous";
+      image.src = boardArtwork(row);
+      image.alt = row.personalized ? `Character chosen by the rank ${position} student`
+        : row.avatar ? `Illustrated character for rank ${position}` : `Neutral illustration for rank ${position}`;
+      image.closest(".competitor").dataset.art = artKind(row);
       setPublicName(name, visibleName(row), row.name);
     }
     for (const rowData of rows.filter((row) => row.position > 3).slice(0, 7)) {
@@ -127,9 +130,9 @@
       const portrait = document.createElement("span");
       portrait.className = "pic";
       const image = document.createElement("img");
-      image.src = rowData.personalized ? faceArtwork(rowData.avatar, rowData.style) : competitorThumbnail(rowData.position);
+      image.src = boardThumbnail(rowData);
       image.alt = "";
-      portrait.dataset.art = rowData.personalized ? "personal" : "anonymous";
+      portrait.dataset.art = artKind(rowData) === "neutral" ? "anonymous" : artKind(rowData);
       if (rowData.personalized) portrait.dataset.tone = rowData.tone;
       portrait.append(image);
       const name = document.createElement("span");

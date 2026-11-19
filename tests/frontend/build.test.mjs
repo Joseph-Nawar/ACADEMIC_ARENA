@@ -55,6 +55,7 @@ test("pages_bundle_includes_eue_branding_anonymous_competitors_and_both_characte
       "no development notes or filler slogans in production copy");
     assert.equal(existsSync(join(result.outDir, "assets/eue-wordmark-draft.svg")), false, "the draft wordmark is not shipped");
     for (const file of [
+      "assets/character-suggestions.js",
       "assets/competitors/podium-1.svg",
       "assets/competitors/podium-2.svg",
       "assets/competitors/podium-3.svg",

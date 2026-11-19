@@ -63,6 +63,19 @@ Students cannot pick their public name. Staff Desk → Approved public names →
 student username + the approved display name. A student needs one before they
 can share a Campus Win.
 
+## Board characters (publisher or admin, V1.4)
+
+Each published version needs its own reviewed default characters, which are always shown in 3D on the board.
+
+1. Staff Desk → Board characters. Choose the publication and press **Load rows**.
+2. **Suggest from first names** pre-fills a guess from a generic first-name list. It runs only in your browser and is never saved.
+   - Rows with unisex or unrecognised names are flagged: decide those yourself.
+   - The headscarf character and the wheelchair user are never suggested; choose them only when that is appropriate.
+3. Check every row and change anything that looks wrong. Rows left on *Neutral illustration* show a neutral figure.
+4. Press **Approve these characters**. Only the chosen character keys are stored.
+
+A new weekly version starts with no characters (nothing carries over by rank), and rolling back restores that version's approved set. A linked student's own opted-in character always replaces the default.
+
 ## Verified account links (admin, V1.2)
 
 Staff Desk → Verified account links. Pick a published version, upload a private

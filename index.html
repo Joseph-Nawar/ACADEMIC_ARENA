@@ -10,7 +10,7 @@
 <body>
 <div class="app">
  <aside class="rail" aria-label="Primary navigation">
-  <div class="brand-lockup"><div class="brand"><svg class="brand-mark" viewBox="0 0 30 32" aria-hidden="true"><path d="M3 24 7 8l8 8 7-13 5 22H3Z" fill="#f4c856" stroke="#f4c856" stroke-width="2"/><path d="M3 29h24" stroke="#f4c856" stroke-width="4"/></svg><div class="brand-type">ACADEMIC<strong>ARENA</strong></div></div><a class="eue-endorsement" href="https://eue.edu.eg/" target="_blank" rel="noopener" aria-label="European Universities in Egypt (opens the EUE website)"><span class="eue-mark">EUE</span><span class="eue-name">European Universities<br/>in Egypt</span></a></div>
+  <div class="brand-lockup"><div class="brand"><svg class="brand-mark" viewBox="0 0 30 32" aria-hidden="true"><path d="M3 24 7 8l8 8 7-13 5 22H3Z" fill="#f4c856" stroke="#f4c856" stroke-width="2"/><path d="M3 29h24" stroke="#f4c856" stroke-width="4"/></svg><div class="brand-type">ACADEMIC<strong>ARENA</strong></div></div><a class="eue-endorsement" href="https://eue.edu.eg/" target="_blank" rel="noopener" aria-label="European Universities in Egypt (opens the EUE website)"><span class="eue-mark">EUE</span><span class="eue-name">European <br/>Universities <br/>in Egypt</span></a></div>
   <nav class="rail-navigation">
    <button class="nav-link active" data-page="leaderboard" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 20h18M5 17V9h4v8M10 17V4h4v13M15 17v-6h4v6"/></svg>Leaderboards</button>
    <button class="nav-link" data-page="wins"><span class="nav-emoji" aria-hidden="true">✦</span>Campus Wins</button>
@@ -21,7 +21,7 @@
  </aside>
  <div class="workspace">
   <header class="topbar">
-   <div class="topbar-kicker"><span class="dot"></span>UOL COMPUTER SCIENCE <span class="hide-micro"> / EUE</span></div>
+   <div class="topbar-kicker"><span class="dot"></span><span class="kicker-long">University of London · Computer Science</span><span class="kicker-short">UoL · Computer Science</span></div>
    <div class="topbar-actions"><button type="button" id="account-entry" class="account-entry" title="Sign in">SIGN IN</button><span class="demo-stamp" id="mode-stamp" hidden></span><button class="profile-chip" id="profile-link" data-student-only aria-label="Open character studio"><span class="mini-photo" data-art="anonymous"><img id="nav-portrait" src="assets/competitors/thumb-a.svg" alt=""/></span><span>My Character ↗</span></button></div>
   </header>
   <main class="content">
@@ -70,10 +70,10 @@
      <div class="studio-stage" id="studio-stage" data-tone="mint"><div class="studio-scribble">YOUR ALTER EGO / PREVIEW</div><span class="studio-badge" id="studio-badge">✦</span><img id="studio-art" class="studio-art" src="assets/characters/amara-ink.png" alt="Selected illustrated character"/><div class="studio-namebar"><strong id="studio-name">YOUR CHARACTER</strong><span>READY FOR THE BOARD</span></div></div>
      <div class="studio-controls"><h2>CHARACTER SELECT.</h2><p>Any look, either art style. No uploads or photos.</p>
       <div class="picker-group"><div class="picker-head"><h3>01 / Choose your character</h3><span>9 different looks</span></div><div class="base-options" id="base-options"></div></div>
-      <div class="picker-group"><div class="picker-head"><h3>02 / Character family</h3><span>2 art styles</span></div><div class="style-options" id="style-options"></div></div>
+      <div class="picker-group"><div class="picker-head"><h3>02 / Character family</h3><span>2 art styles</span></div><div class="style-options" id="style-options"></div><div class="studio-status-small">Leaderboards always show your character in the 3D Cartoon style. Your style choice is used everywhere else, like Campus Wins.</div></div>
       <div class="picker-group"><div class="picker-head"><h3>03 / Pick a backdrop</h3><span>tap a color</span></div><div class="swatches"><button class="swatch selected" data-tone="mint" aria-label="Mint backdrop" aria-pressed="true"></button><button class="swatch" data-tone="coral" aria-label="Coral backdrop" aria-pressed="false"></button><button class="swatch" data-tone="gold" aria-label="Gold backdrop" aria-pressed="false"></button><button class="swatch" data-tone="paper" aria-label="Paper backdrop" aria-pressed="false"></button><button class="swatch" data-tone="blue" aria-label="Blue backdrop" aria-pressed="false"></button><button class="swatch" data-tone="lilac" aria-label="Lilac backdrop" aria-pressed="false"></button></div></div>
       <div class="picker-group"><div class="picker-head"><h3>04 / Choose your sticker</h3><span>a little personality</span></div><div class="badge-choices"><button class="badge-choice selected" data-badge="✦" aria-label="Star sticker" aria-pressed="true">✦</button><button class="badge-choice" data-badge="⚡" aria-label="Lightning sticker" aria-pressed="false">⚡</button><button class="badge-choice" data-badge="♥" aria-label="Heart sticker" aria-pressed="false">♥</button><button class="badge-choice" data-badge="★" aria-label="Solid star sticker" aria-pressed="false">★</button><button class="badge-choice" data-badge="" aria-label="No sticker" aria-pressed="false">—</button></div></div>
-      <div class="picker-group" id="public-avatar-group" hidden><div class="picker-head"><h3>05 / Public leaderboard</h3><span>your choice</span></div><label class="optin-row"><input type="checkbox" id="show-on-leaderboard"/><span>Show my character on public leaderboards</span></label><div class="studio-status-small">Your character appears only after staff confirm which ranking is yours, and only while this is on. Switch it off any time.</div></div>
+      <div class="picker-group" id="public-avatar-group" hidden><div class="picker-head"><h3>05 / Public leaderboard</h3><span>your choice</span></div><label class="optin-row"><input type="checkbox" id="show-on-leaderboard"/><span>Show my character on public leaderboards</span></label><div class="studio-status-small">Your character, shown in 3D, replaces the default board character only after staff confirm which ranking is yours, and only while this is on. Switch it off any time.</div></div>
       <div class="studio-actions"><button class="button-solid" id="save-character">SAVE CHARACTER ↗</button><div class="save-note" id="save-note">Sign in with your Arena account to save.</div></div><div class="save-status" id="save-status" role="status" aria-live="polite"></div>
      </div>
     </div>
@@ -108,6 +108,19 @@
      </div>
      <ul id="moderation-list" class="staff-list"></ul>
     </section>
+    <section class="staff-panel" id="staff-artwork" hidden aria-labelledby="artwork-heading">
+     <h2 class="sheet-title" id="artwork-heading">BOARD <em>CHARACTERS</em></h2>
+     <p class="staff-note">Choose the default 3D character for each ranked row of a publication. <strong>Suggest from first names</strong> only pre-fills the list. It is a guess, not a verified attribute, and is never saved or sent. Check every row, decide the flagged ones yourself, and don’t assume religious dress or disability. Only the characters you approve are stored. Each publication needs its own approval. A student’s own opted-in character always takes precedence, and rows left on <em>neutral</em> show a neutral illustration.</p>
+     <form id="artwork-form" class="staff-form">
+      <div class="staff-field"><label for="artwork-publication">Publication</label><select id="artwork-publication" required></select></div>
+      <button class="outline-btn" type="submit">LOAD ROWS</button>
+     </form>
+     <div id="artwork-review" class="staff-preview" hidden>
+      <div class="artwork-actions"><button class="outline-btn" type="button" id="suggest-artwork">SUGGEST FROM FIRST NAMES</button><span id="artwork-summary"></span></div>
+      <ol id="artwork-rows" class="artwork-rows"></ol>
+      <button class="button-solid" type="button" id="approve-artwork">APPROVE THESE CHARACTERS</button>
+     </div>
+    </section>
     <section class="staff-panel" id="staff-links" hidden aria-labelledby="links-heading">
      <h2 class="sheet-title" id="links-heading">VERIFIED <em>ACCOUNT LINKS</em></h2>
      <p class="staff-note">Private, administrator-only. Upload <code>level,rank,username</code> for one publication, using Arena usernames you have checked against the authoritative roster on the operator's device (emails are never shown here). Names are never matched automatically. A student's own character appears only for linked rows where the student has switched public display on. Each publication needs its own approved links; rollback restores that version's links.</p>
@@ -134,7 +147,7 @@
      <p id="public-name-status" role="status"></p>
     </section>
    </section>
-   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>HOW IT WORKS</div><h1 id="about-title">TOP TEN.<br/>EVERY LEVEL.</h1><p>Academic Arena celebrates the top quiz performers in Levels 4, 5 and 6 of UOL Computer Science at EUE. Anyone can view the standings, no sign-in needed.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Switch between Level 4, 5 and 6 to see each level’s top ten.</p></div></div><div class="about-step"><b>02</b><div><h3>How the ranking works</h3><p>Students are ranked by quiz participation first, then quiz scores. Only names and positions are published.</p></div></div><div class="about-step"><b>03</b><div><h3>The characters</h3><p>Every ranked student appears as an illustration, never a photo or a likeness. Unless a student has chosen their own, it’s an anonymous competitor.</p></div></div></div><div class="about-signin" data-student-only><h2>SIGNING IN</h2><p>University staff give each student an Arena username and a temporary password. After your first sign-in you set your own password, then open My Character to pick your look. It appears on the leaderboard only once staff confirm your ranking and you switch it on.</p></div></section>
+   <section id="page-about" class="page about-page" hidden aria-labelledby="about-title"><div class="section-prelude"><span class="prelude-swatch"></span>HOW IT WORKS</div><h1 id="about-title">TOP TEN.<br/>EVERY LEVEL.</h1><p>Academic Arena celebrates the top quiz performers in Levels 4, 5 and 6 of UOL Computer Science at EUE. Anyone can view the standings, no sign-in needed.</p><div class="about-steps"><div class="about-step"><b>01</b><div><h3>Find your level</h3><p>Switch between Level 4, 5 and 6 to see each level’s top ten.</p></div></div><div class="about-step"><b>02</b><div><h3>How the ranking works</h3><p>Students are ranked by quiz participation first, then quiz scores. Only names and positions are published.</p></div></div><div class="about-step"><b>03</b><div><h3>The characters</h3><p>Every ranked student appears as an illustrated 3D character, never a photo or a likeness. Staff choose a default character for each published ranking, and students with an Arena account can swap in their own.</p></div></div></div><div class="about-signin" data-student-only><h2>SIGNING IN</h2><p>University staff give each student an Arena username and a temporary password. After your first sign-in you set your own password, then open My Character to pick your look. It appears on the leaderboard only once staff confirm your ranking and you switch it on.</p></div></section>
   </main>
  </div>
 </div>
@@ -181,6 +194,7 @@
 <script src="assets/runtime-config.js" defer></script>
 <script src="assets/data-access.js" defer></script>
 <script src="assets/display-names.js" defer></script>
+<script src="assets/character-suggestions.js" defer></script>
 <script src="assets/app.js" defer></script>
 <script src="assets/staff.js" defer></script>
 </body>

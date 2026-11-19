@@ -63,6 +63,7 @@ const CONSTRAINTS = [
   ["app_private.campus_wins_submissions", "approved_avatar_key", "campus_wins_submissions_approved_avatar_key_check"],
   ["public.published_leaderboard_rows", "avatar_key", "published_leaderboard_rows_avatar_key_check"],
   ["public.campus_wins_public", "avatar_key", "campus_wins_public_avatar_key_check"],
+  ["app_private.published_level_row_artwork", "character_key", "published_level_row_artwork_character_key_check"],
 ];
 function latestConstraintKeys(table, column, name) {
   let latest = null;

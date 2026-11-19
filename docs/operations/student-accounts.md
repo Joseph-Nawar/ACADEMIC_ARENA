@@ -25,6 +25,25 @@ The fictional lifecycle gate (`allow_fictional_account_lifecycle`) and hosted
 `ENVIRONMENT=test` are never used for real students. The in-app staff
 lifecycle routes stay 403 on hosted sites.
 
+## Launch sequence: pilot (3–5 students), then batches
+
+Start only with the university's written authorization to process the roster and institutional emails in Supabase.
+
+1. **Pilot roster.** On the operator device, write a roster file with 3–5 consenting students (format below). Run `validate`, then `provision --dry-run`.
+2. **Switches.** `features --set student_provisioning=on --confirm-production`, then provision the pilot with `--batch-size 5`.
+3. **Delivery.** Deliver each credential individually (see below). Then turn on `student_sign_in=on`.
+4. **Pilot checks**, with each pilot student:
+   - first sign-in forces a password change;
+   - My Character saves a look;
+   - Staff Desk → Verified account links links their row for the live publication;
+   - turn on `avatar_personalization=on`, and the student's opt-in shows their character in 3D on the board;
+   - opt-out returns the reviewed default;
+   - run one supervised `reset` and one `suspend`/`reactivate`.
+5. **Batches** of 25 or fewer from the full roster. After each batch, `status` should show no conflicts and no orphans.
+6. **Welcome dialog** (`welcome_dialog=on`) only once most students have their credentials.
+
+The incident switch is `student_sign_in=off`. It ends student sessions; public boards stay up.
+
 ## Private roster (never committed or shared)
 
 `roster_ref,email,username,eligible`

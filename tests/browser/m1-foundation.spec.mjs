@@ -281,7 +281,8 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
     }
     const thumbnails = await namesPage.locator("#ranking-rows img").evaluateAll((images) => images.map((image) => image.getAttribute("src")));
     assert.equal(thumbnails.length, 7);
-    assert.ok(thumbnails.every((src) => /^assets\/competitors\/thumb-[abc]\.svg$/u.test(src)), "ranks 4-10 use anonymous thumbnails");
+    assert.ok(thumbnails.every((src) => src === "assets/characters/omar-3d-face.jpg"), "approved defaults render as 3D faces");
+    assert.equal(await namesPage.locator("#art-1").getAttribute("src"), "assets/characters/omar-3d.png", "the podium always uses the 3D family");
     assert.ok(await namesPage.evaluate(() => [...document.images].filter((image) => image.getBoundingClientRect().width > 0)
       .every((image) => image.complete && image.naturalWidth > 0)), "no broken artwork");
     await namesPage.close();
@@ -302,7 +303,7 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
     body: JSON.stringify({ releaseLabel: "Week 9", publishedAt: null, rows: [
       { position: 1, name: "Fictional Chosen", avatar: "zein", style: "cartoon3d", tone: "lilac", badge: "⚡", personalized: true },
       { position: 2, name: "Fictional Default", avatar: "omar", style: "ink", personalized: false },
-      { position: 3, name: "Fictional Third", avatar: "mariam", style: "ink", personalized: false },
+      { position: 3, name: "Fictional Third", personalized: false },
     ] }),
   }));
   await welcomePage.goto(baseUrl);
@@ -338,9 +339,11 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.equal(await welcomePage.locator("#welcome-backdrop").isHidden(), true, "shown once per browser");
   assert.equal(await welcomePage.locator("#art-1").getAttribute("alt"), "Character chosen by the rank 1 student");
   assert.match(await welcomePage.locator("#art-1").getAttribute("src"), /zein-3d\.png$/u, "an opted-in student's own character is shown");
-  assert.equal(await welcomePage.locator("#art-2").getAttribute("alt"), "Anonymous competitor illustration for rank 2");
-  assert.match(await welcomePage.locator("#art-2").getAttribute("src"), /^assets\/competitors\/podium-2\.svg$/u, "unchosen ranks show the anonymous competitor");
-  assert.match(await welcomePage.locator("#art-3").getAttribute("src"), /^assets\/competitors\/podium-3\.svg$/u);
+  assert.equal(await welcomePage.locator("#art-2").getAttribute("alt"), "Illustrated character for rank 2");
+  assert.equal(await welcomePage.locator("#art-2").getAttribute("src"), "assets/characters/omar-3d.png", "staff-approved default, always 3D");
+  assert.equal(await welcomePage.locator("#art-3").getAttribute("alt"), "Neutral illustration for rank 3");
+  assert.match(await welcomePage.locator("#art-3").getAttribute("src"), /^assets\/competitors\/podium-3\.svg$/u, "no approved character: neutral fallback");
+  assert.equal(await welcomePage.locator("#art-1").getAttribute("src"), "assets/characters/zein-3d.png", "the student's own character, in 3D");
   assert.equal(await welcomePage.locator(".artwork-note").textContent(), "Characters are illustrative until students choose their own.");
   assert.equal(await welcomePage.locator(".artwork-note").count(), 1, "the character note appears once");
   await welcomePage.evaluate(() => localStorage.clear());

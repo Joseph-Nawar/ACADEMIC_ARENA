@@ -33,7 +33,7 @@ await copyFile(join(root, "public", "_headers"), join(outDir, "_headers"));
 
 const sourceAssets = join(root, "assets");
 const targetAssets = join(outDir, "assets");
-const packagedRootAssets = new Set(["app.css", "app.js", "data-access.js", "display-names.js", "staff.js"]);
+const packagedRootAssets = new Set(["app.css", "app.js", "data-access.js", "display-names.js", "character-suggestions.js", "staff.js"]);
 await mkdir(targetAssets, { recursive: true });
 await cp(sourceAssets, targetAssets, {
   recursive: true,

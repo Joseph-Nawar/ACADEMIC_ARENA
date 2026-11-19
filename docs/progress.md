@@ -2,6 +2,16 @@
 
 Keep short. Newest first.
 
+## 2026-11-20 — V1.4 final release pass
+
+- **Board characters.** The original 3D Cartoon cast is back on every board.
+  - Each publication gets staff-reviewed default characters. Migration `202611200001` adds `app_private.published_level_row_artwork`: position plus an allowlisted key only, with AAL2 publisher approval and an audit entry.
+  - Staff Desk → Board characters can pre-fill from first names in the browser only, flagging unisex and unknown names. It never suggests the headscarf or wheelchair characters. Nothing inferred is stored or sent.
+  - New weeks start empty: no carry-over by rank. Rollback restores that week's set.
+  - Precedence: student's own opted-in character, then the reviewed default, then a neutral illustration. The podium and thumbnails are always 3D.
+- **EUE identity:** a bold text lockup (no approved logo file exists in the repo) and "University of London · Computer Science" in the header.
+- **UI walkthrough (local, fictional):** 28 of 28 checks pass. One bug fixed: the publication pickers didn't refresh after a publish.
+
 ## 2026-11-19 — V1.3 production polish
 
 - **Anonymous default artwork.** Ranks without a verified, opted-in student character now show original anonymous competitor art (`assets/competitors/`, made by `scripts/generate-competitors.mjs`):
