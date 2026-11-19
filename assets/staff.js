@@ -151,11 +151,14 @@
   // ---- Board characters (staff-reviewed defaults, 3D family)
   const CHARACTERS = [["omar", "Wave"], ["mariam", "Bold"], ["youssef", "Chill"], ["amara", "Spark"], ["tariq", "Casual"],
     ["habiba2", "Brave"], ["malek", "Sunny"], ["nour2", "Creative"], ["zein", "Calm"]];
+  // Visible traits staff must know before choosing; the face-only preview hides them.
+  const CHARACTER_NOTES = { habiba2: "headscarf", zein: "wheelchair user" };
   let artworkPublication = "";
   let artworkRows = [];
 
   function closeArtworkReview() {
     $("artwork-review").hidden = true;
+    $("artwork-result").textContent = "";
     $("artwork-rows").replaceChildren();
     artworkRows = [];
     artworkPublication = "";
@@ -211,7 +214,7 @@
       for (const [key, mood] of CHARACTERS) {
         const option = document.createElement("option");
         option.value = key;
-        option.textContent = `${mood} (${key.replace(/\d+$/u, "")})`;
+        option.textContent = `${mood} (${key.replace(/\d+$/u, "")}${CHARACTER_NOTES[key] ? `, ${CHARACTER_NOTES[key]}` : ""})`;
         select.append(option);
       }
       // An earlier staff decision always wins over a new suggestion.
@@ -290,13 +293,38 @@
     })).filter((item) => item.character);
     const version = select.selectedOptions[0]?.textContent || "this publication";
     if (!window.confirm(`Approve ${assignments.length} board characters for ${version}? Rows on "Neutral illustration" show a neutral figure.`)) return;
+    const result = $("artwork-result");
+    const button = $("approve-artwork");
+    button.disabled = true;
+    result.dataset.state = "pending";
+    result.textContent = "Saving…";
     try {
-      const result = await api.staff.approveBoardCharacters(artworkPublication, assignments);
-      status(`${result.approved} board character(s) approved for ${version}.`, "ready");
+      const saved = await api.staff.approveBoardCharacters(artworkPublication, assignments);
+      // Show what is actually stored now, not what the dropdowns said.
       artworkRows = await api.staff.boardCharacters(artworkPublication);
       renderArtworkRows();
+      const stored = artworkRows.filter((row) => row.character).length;
+      result.dataset.state = "ready";
+      result.textContent = `Saved: ${saved.approved} board character(s) for ${version}. ${stored} row(s) now have a character; the public board uses them immediately.`;
+      status(`${saved.approved} board character(s) approved for ${version}.`, "ready");
     } catch (error) {
+      // A failed save must never look like a success: say so next to the button
+      // and put the list back to what is really stored.
+      result.dataset.state = "unavailable";
+      result.textContent = error?.code === "unauthorized"
+        ? "Not saved: your session ended. Sign in again, then load the rows and approve again."
+        : "Not saved. Nothing changed on the public board. Load the rows and try again.";
       failure(error, "Characters were not changed.");
+      if (error?.code !== "unauthorized") {
+        try {
+          artworkRows = await api.staff.boardCharacters(artworkPublication);
+          renderArtworkRows();
+        } catch {
+          // Keep the message; the next Load rows shows what is stored.
+        }
+      }
+    } finally {
+      refreshArtworkState();
     }
   }
 
