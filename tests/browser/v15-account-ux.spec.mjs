@@ -16,10 +16,12 @@ const fulfill = (route, payload, status = 200, headers = {}) =>
 
 // A small stateful fake of the BFF: one student account with a temporary password.
 function fakeServer(options = {}) {
-  const state = { signedIn: false, mustChange: true, password: TEMP, changeCalls: 0, sessionDelayMs: 0, sessionFailures: 0 };
+  const state = { signedIn: false, mustChange: true, password: TEMP, changeCalls: 0, sessionDelayMs: 0, sessionFailures: 0, role: "student", revoked: false };
   Object.assign(state, options);
-  const session = () => (state.signedIn
-    ? { authenticated: true, user: { role: "student", mustChangePassword: state.mustChange }, csrfToken: "fictional-csrf" }
+  const session = () => (state.signedIn && !state.revoked
+    ? { authenticated: true, user: state.role === "student"
+      ? { role: "student", mustChangePassword: state.mustChange }
+      : { role: state.role, mustChangePassword: false, mfaRequired: false, mfaSetupRequired: false }, csrfToken: "fictional-csrf" }
     : { authenticated: false });
   async function handle(route) {
     const request = route.request();
@@ -55,9 +57,10 @@ function fakeServer(options = {}) {
       state.signedIn = false;
       return route.fulfill({ status: 204 });
     }
+    if (path.startsWith("/api/staff/")) return fulfill(route, { publications: [], posts: [] });
     if (path === "/api/me/avatar" && request.method() === "PUT") {
       state.lastCsrf = request.headers()["x-csrf-token"] || "";
-      if (!state.signedIn) return fulfill(route, { error: "unauthorized" }, 401);
+      if (!state.signedIn || state.revoked) return fulfill(route, { error: "unauthorized" }, 401);
       if (state.lastCsrf !== "fictional-csrf") return fulfill(route, { error: "request_rejected" }, 403);
       const body = request.postDataJSON();
       return fulfill(route, { saved: true, avatar: body.avatar, showOnLeaderboard: false });
@@ -199,9 +202,12 @@ async function temporaryPasswordAfterRefresh(browser, baseUrl) {
   assert.equal(await visible(page, "#login-backdrop"), true, "a pending temporary password reopens the account dialog");
   assert.equal(await page.locator("#password-title").textContent(), "SET YOUR OWN PASSWORD");
   await page.locator("#close-account").click();
-  await page.locator('.nav-link[data-page="avatar"]').click();
-  await page.locator("#save-character").click();
-  assert.equal(await visible(page, "#login-backdrop"), true, "saving a character first asks for the new password");
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.session), "student-setup");
+  for (const selector of STUDENT_CONTROLS) assert.equal(await visible(page, selector), false, `temporary password hides ${selector}`);
+  // Even a direct attempt to open My Character leads to the password step instead.
+  await page.evaluate(() => document.querySelector('.nav-link[data-page="avatar"]').click());
+  assert.equal(await visible(page, "#page-avatar"), false);
+  assert.equal(await visible(page, "#login-backdrop"), true, "My Character first asks for the new password");
   await page.close();
 }
 
@@ -269,7 +275,101 @@ async function backgroundRechecks(browser, baseUrl) {
   await page.close();
 }
 
+const STUDENT_CONTROLS = ['.nav-link[data-page="avatar"]', "#profile-link", "#create-button", "#open-composer"];
+const PUBLIC_NAV = ['.nav-link[data-page="leaderboard"]', '.nav-link[data-page="wins"]', '.nav-link[data-page="about"]', "#account-entry"];
+
+async function studentControlsVisible(page) {
+  const states = [];
+  for (const selector of STUDENT_CONTROLS) states.push(await page.locator(selector).isVisible());
+  return states;
+}
+
+async function navigationVisibility(browser, baseUrl) {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    const label = `${viewport.width}px`;
+    // 1. Signed-out visitor with a slow session check: nothing student-only, ever.
+    const page = await browser.newPage({ viewport });
+    const server = fakeServer({ sessionDelayMs: 2000 });
+    await page.route("**/api/**", server.handle);
+    await page.goto(baseUrl);
+    await page.waitForFunction(() => document.querySelector(".nav-link"));
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.session), "pending");
+    assert.deepEqual(await studentControlsVisible(page), [false, false, false, false], `${label}: no flash while the session check is pending`);
+    await page.waitForFunction(() => document.documentElement.dataset.appReady === "true", null, { timeout: 8000 });
+    assert.deepEqual(await studentControlsVisible(page), [false, false, false, false], `${label}: signed-out visitors never see student controls`);
+    for (const selector of PUBLIC_NAV) assert.equal(await page.locator(selector).isVisible(), true, `${label}: ${selector} is public`);
+    await page.locator('.nav-link[data-page="wins"]').click();
+    assert.equal(await page.locator("#open-composer").isVisible(), false, `${label}: no Share a win when signed out`);
+    await page.close();
+
+    // 2. Staff: the staff desk only, no student controls.
+    const staff = await browser.newPage({ viewport });
+    await staff.route("**/api/**", fakeServer({ signedIn: true, mustChange: false, role: "admin" }).handle);
+    await staff.goto(baseUrl);
+    await waitForReady(staff);
+    assert.equal(await staff.locator("#staff-nav").isVisible(), true, `${label}: verified staff see Staff Desk`);
+    assert.deepEqual(await studentControlsVisible(staff), [false, false, false, false], `${label}: staff never see student-only controls`);
+    await staff.close();
+
+    // 3. Fully set-up student: available immediately; gone the moment the session ends.
+    const student = await browser.newPage({ viewport });
+    const studentServer = fakeServer({ signedIn: true, mustChange: false, password: NEW });
+    await student.route("**/api/**", studentServer.handle);
+    await student.goto(baseUrl);
+    await waitForReady(student);
+    assert.deepEqual(await studentControlsVisible(student), [true, true, true, false], `${label}: student sees My Character, chip and CTA`);
+    await student.locator('.nav-link[data-page="avatar"]').click();
+    assert.equal(await student.locator("#page-avatar").isVisible(), true);
+    // A failed background re-check never hides a valid session.
+    studentServer.state.sessionFailures = 2;
+    await student.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+    await delay(1800);
+    assert.equal(await student.locator("#page-avatar").isVisible(), true, `${label}: an unavailable check keeps the session`);
+    // Session revoked server-side: the next save ends it and leaves the protected page.
+    studentServer.state.revoked = true;
+    await student.locator("#save-character").click();
+    await student.locator("#login-backdrop").waitFor({ state: "visible" });
+    assert.match(await student.locator("#login-status").textContent(), /session has ended/i);
+    assert.equal(await student.locator("#page-avatar").isVisible(), false, `${label}: expired session leaves My Character`);
+    assert.equal(await student.locator("#page-leaderboard").isVisible(), true);
+    assert.deepEqual(await studentControlsVisible(student), [false, false, false, false], `${label}: controls disappear on expiry`);
+    await student.close();
+
+    // 4. Revoked session found by a background re-check; then sign-out from the studio.
+    const recheck = await browser.newPage({ viewport });
+    const recheckServer = fakeServer({ signedIn: true, mustChange: false, password: NEW });
+    await recheck.route("**/api/**", recheckServer.handle);
+    await recheck.goto(baseUrl);
+    await waitForReady(recheck);
+    await recheck.locator("#profile-link").click();
+    assert.equal(await recheck.locator("#page-avatar").isVisible(), true);
+    recheckServer.state.revoked = true;
+    await recheck.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+    await recheck.waitForFunction(() => document.documentElement.dataset.characterAccess === "off");
+    assert.equal(await recheck.locator("#page-leaderboard").isVisible(), true, `${label}: revoked session returns to a public page`);
+    assert.equal(await recheck.locator("#account-entry").textContent(), "SIGN IN");
+    recheckServer.state.revoked = false;
+    await recheck.locator("#account-entry").click();
+    await recheck.locator("#login-username").fill("fictional-student");
+    await recheck.locator("#login-password").fill(NEW);
+    await recheck.locator('#login-form button[type="submit"]').click();
+    await recheck.waitForFunction(() => document.documentElement.dataset.characterAccess === "on");
+    assert.equal(await recheck.locator("#login-backdrop").isVisible(), false, "normal sign-in closes the dialog");
+    await recheck.locator('.nav-link[data-page="avatar"]').click();
+    await recheck.locator("#account-entry").click();
+    await recheck.locator("#logout-btn").click();
+    await recheck.waitForFunction(() => document.documentElement.dataset.characterAccess === "off");
+    assert.equal(await recheck.locator("#page-avatar").isVisible(), false, `${label}: sign-out leaves My Character`);
+    assert.deepEqual(await studentControlsVisible(recheck), [false, false, false, false]);
+    await recheck.reload();
+    await waitForReady(recheck);
+    assert.deepEqual(await studentControlsVisible(recheck), [false, false, false, false], `${label}: still hidden after refresh`);
+    await recheck.close();
+  }
+}
+
 export async function runAccountUxBrowserTests(browser, baseUrl) {
+  await navigationVisibility(browser, baseUrl);
   await backgroundRechecks(browser, baseUrl);
   await studentJourney(browser, baseUrl, { width: 1440, height: 900 });
   await studentJourney(browser, baseUrl, { width: 390, height: 844 });

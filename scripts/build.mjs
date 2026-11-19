@@ -1,4 +1,5 @@
-import { cp, copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +52,19 @@ await writeFile(
     ");\n",
   "utf8",
 );
+
+// Version the stylesheet and scripts by content so a new page never runs with
+// a stale cached copy (for example, old CSS that does not hide student-only
+// controls). Only the built index.html changes; source files keep plain paths.
+{
+  const page = join(outDir, "index.html");
+  let html = await readFile(page, "utf8");
+  for (const name of [...packagedRootAssets, "runtime-config.js"]) {
+    const digest = createHash("sha256").update(await readFile(join(targetAssets, name))).digest("hex").slice(0, 12);
+    html = html.replaceAll(`"assets/${name}"`, `"assets/${name}?v=${digest}"`);
+  }
+  await writeFile(page, html, "utf8");
+}
 
 if (mode === "demo") {
   const fixtureSource = join(root, "fixtures", "demo");
