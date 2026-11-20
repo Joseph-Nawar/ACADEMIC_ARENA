@@ -449,3 +449,46 @@ test("demo boards show the fixture characters as non-personal defaults", async (
   assert.equal(rows.length, 10);
   assert.ok(rows.every((row) => row.personalized === false && typeof row.avatar === "string" && !("style" in row)));
 });
+
+test("password_change_keeps_a_student_signed_in_with_the_new_csrf_token_and_sends_passwords_unchanged", async () => {
+  const calls = [];
+  const replies = [
+    response({ authenticated: true, user: { role: "student", mustChangePassword: true }, csrfToken: "csrf-before" }),
+    response({ changed: true, authenticated: true, user: { role: "student", mustChangePassword: false, email: "x@y.test" }, csrfToken: "csrf-after" }),
+    response({ ok: true }),
+  ];
+  const api = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return replies.shift();
+    },
+  });
+  // Leading/trailing spaces are part of a password: never trimmed.
+  await api.auth.signIn({ username: "fictional-student", password: " temp Password 1 " });
+  assert.equal(JSON.parse(calls[0].options.body).password, " temp Password 1 ");
+  const result = await api.auth.changePassword(" temp Password 1 ", "  a-new-fictional-password ");
+  assert.deepEqual(JSON.parse(calls[1].options.body), { oldPassword: " temp Password 1 ", newPassword: "  a-new-fictional-password " });
+  assert.equal(calls[1].options.headers["X-CSRF-Token"], "csrf-before");
+  assert.deepEqual(result, { changed: true, authenticated: true, user: { role: "student", mustChangePassword: false } },
+    "the renewed session is sanitized: no email or token reaches the UI");
+  await api.auth.signOut();
+  assert.equal(calls[2].options.headers["X-CSRF-Token"], "csrf-after", "later requests use the renewed session's CSRF token");
+});
+
+test("password_change_without_a_renewed_session_clears_the_csrf_token_and_uncertain_outcomes_keep_their_code", async () => {
+  const replies = [
+    response({ authenticated: true, user: { role: "admin", mustChangePassword: true }, csrfToken: "csrf-staff" }),
+    response({ changed: true, authenticated: false }),
+  ];
+  const api = createArenaDataAccess({ mode: "production", fetchImpl: async () => replies.shift() });
+  await api.auth.signIn({ username: "fictional-admin", password: "fictional-only-password" });
+  assert.deepEqual(await api.auth.changePassword("fictional-only-password", "a-new-fictional-password"), { changed: true, authenticated: false });
+
+  const uncertain = createArenaDataAccess({
+    mode: "production",
+    fetchImpl: async () => response({ error: "password_change_uncertain" }, 503),
+  });
+  await assert.rejects(uncertain.auth.changePassword("fictional-only-password", "a-new-fictional-password"),
+    (error) => error.code === "password_change_uncertain");
+});

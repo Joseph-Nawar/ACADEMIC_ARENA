@@ -87,7 +87,7 @@ export function serviceRpc(name, args) {
 
 export async function injectProviderFailure(providerUserId, operation) {
   assert.match(providerUserId, /^[0-9a-f-]{36}$/iu);
-  assert.ok(["user-password-update", "user-password-update-ambiguous", "mfa-factor-list"].includes(operation));
+  assert.ok(["user-password-update", "user-password-update-ambiguous", "mfa-factor-list", "self-password-update-lost-response"].includes(operation));
   const response = await fetchForTest("Local fault proxy failure injection", new URL("/__local_test__/fail-next-provider-request", local.supabaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },

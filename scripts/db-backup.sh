@@ -44,7 +44,7 @@ flag=(--"$target")
 
 # Live credentials and transient state are never exported: refresh tokens,
 # provider and BFF sessions, MFA challenges, one-time tokens, rate-limit
-# buckets, and pending credential-sync operations. Tables seeded by migrations are excluded too, so the restore
+# buckets, sign-in diagnostic events, and pending credential-sync operations. Tables seeded by migrations are excluded too, so the restore
 # applies cleanly and the lifecycle gate and every V1.2 student switch stay at
 # their defaults (off); re-enable switches deliberately after a restore.
 excludes=(
@@ -52,6 +52,7 @@ excludes=(
   -x auth.mfa_challenges -x auth.one_time_tokens -x auth.flow_state -x auth.audit_log_entries
   -x auth.saml_relay_states
   -x app_private.bff_sessions -x app_private.login_rate_limit_buckets -x app_private.credential_sync_operations
+  -x app_private.auth_diagnostic_events
   -x app_private.role_permissions -x app_private.runtime_controls -x app_private.student_feature_controls
 )
 

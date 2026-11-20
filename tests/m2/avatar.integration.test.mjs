@@ -30,7 +30,11 @@ async function finishInitialPassword(identity, ipSuffix) {
     body: { oldPassword: identity.password, newPassword: password },
   });
   assert.equal(changed.status, 200);
-  assert.deepEqual(await json(changed), { changed: true, authenticated: false });
+  // V1.6: a student is signed straight back in with the new password.
+  const changedBody = await json(changed);
+  assert.equal(changedBody.changed, true);
+  assert.equal(changedBody.authenticated, true);
+  assert.deepEqual(changedBody.user, { role: "student", mustChangePassword: false });
   const next = await login(identity, password, `192.0.2.${Number(ipSuffix) + 1}`);
   assert.equal(next.response.status, 200);
   assert.equal(next.payload.user.mustChangePassword, false);

@@ -1,11 +1,10 @@
-import { decodeJwt } from "jose";
-import { anonymousAuthClient, revokeProviderRefreshToken, serviceClient } from "../../lib/provider.js";
-import { isStaffRoleSet, listSessionMfaFactors } from "../../lib/staff-mfa.js";
+import { anonymousAuthClient, serviceClient } from "../../lib/provider.js";
+import { isStaffRoleSet } from "../../lib/staff-mfa.js";
 import { sameOriginRequest } from "../../lib/csrf.js";
-import { encryptSessionSecret, randomOpaqueToken, sha256Bytea } from "../../lib/secure-crypto.js";
-import { jsonResponse, sessionCookie } from "../../lib/response.js";
-import { safeRole } from "../../lib/session.js";
-import { consumeLoginAttempt } from "../../lib/rate-limit.js";
+import { jsonResponse } from "../../lib/response.js";
+import { consumeLoginAttempt, releaseLoginAttempt } from "../../lib/rate-limit.js";
+import { authDiagnostics } from "../../lib/auth-diagnostics.js";
+import { issueBffSession } from "../../lib/bff-login.js";
 import {
   delayAuthenticationFailure,
   hasExactKeys,
@@ -23,9 +22,11 @@ function loginIdentityRow(data) {
   return Array.isArray(data) ? data[0] || null : data || null;
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+  const { request, env } = context;
   if (!sameOriginRequest(request)) return jsonResponse({ error: "request_rejected" }, 403);
   const startedAt = performance.now();
+  const diagnostics = authDiagnostics(context, "login");
   const body = await readJsonBody(request, 4096);
   const validShape = hasExactKeys(body, ["username", "password"]);
   const username = validShape ? normalizeUsername(body.username) : null;
@@ -35,9 +36,17 @@ export async function onRequestPost({ request, env }) {
   try {
     allowed = await consumeLoginAttempt(request, env, username);
   } catch {
+    diagnostics.record("lookup_unavailable", "unavailable");
     return jsonResponse({ error: "unavailable" }, 503);
   }
-  if (!allowed || !username || !password) return genericFailure(startedAt);
+  if (!username || !password) {
+    diagnostics.record("invalid_request", "rejected", { username });
+    return genericFailure(startedAt);
+  }
+  if (!allowed) {
+    diagnostics.record("rate_limited", "rejected", { username });
+    return genericFailure(startedAt);
+  }
 
   let identity;
   try {
@@ -46,16 +55,25 @@ export async function onRequestPost({ request, env }) {
       provider.rpc("prune_expired_credential_sync_operations"),
       provider.rpc("resolve_login_identity", { p_username: username }),
     ]);
-    if (cleanup.error || resolution.error) return jsonResponse({ error: "unavailable" }, 503);
-    const { data } = resolution;
-    identity = loginIdentityRow(data);
+    if (cleanup.error || resolution.error) {
+      diagnostics.record("lookup_unavailable", "unavailable");
+      return jsonResponse({ error: "unavailable" }, 503);
+    }
+    identity = loginIdentityRow(resolution.data);
   } catch {
+    diagnostics.record("lookup_unavailable", "unavailable");
     return jsonResponse({ error: "unavailable" }, 503);
   }
-  if (!identity || identity.account_status !== "active" || identity.credential_update_pending === true ||
-      !Array.isArray(identity.role_names) || identity.role_names.length === 0) {
+  const rejectionStage = !identity ? "unknown_username"
+    : identity.account_status !== "active" ? "account_inactive"
+      : identity.credential_update_pending === true ? "credential_update_pending"
+        : !Array.isArray(identity.role_names) || identity.role_names.length === 0 ? "no_role"
+          : null;
+  if (rejectionStage) {
+    diagnostics.record(rejectionStage, "rejected", { accountId: identity?.account_id || null });
     return genericFailure(startedAt);
   }
+  const accountId = identity.account_id;
   // Student-only accounts can sign in only after the owner enables the
   // student rollout switch; the response stays indistinguishable from a
   // wrong password.
@@ -63,9 +81,16 @@ export async function onRequestPost({ request, env }) {
     try {
       const { data, error } = await serviceClient(env).rpc("public_feature_state");
       const features = Array.isArray(data) ? data[0] : data;
-      if (error) return jsonResponse({ error: "unavailable" }, 503);
-      if (features?.student_sign_in !== true) return genericFailure(startedAt);
+      if (error) {
+        diagnostics.record("lookup_unavailable", "unavailable", { accountId });
+        return jsonResponse({ error: "unavailable" }, 503);
+      }
+      if (features?.student_sign_in !== true) {
+        diagnostics.record("student_sign_in_off", "rejected", { accountId });
+        return genericFailure(startedAt);
+      }
     } catch {
+      diagnostics.record("lookup_unavailable", "unavailable", { accountId });
       return jsonResponse({ error: "unavailable" }, 503);
     }
   }
@@ -77,89 +102,22 @@ export async function onRequestPost({ request, env }) {
       password,
     });
   } catch {
-    return genericFailure(startedAt);
-  }
-  const providerSession = authResult?.data?.session;
-  const providerUser = authResult?.data?.user;
-  if (authResult?.error || !providerSession || !providerUser ||
-      providerUser.id !== identity.provider_user_id ||
-      typeof providerUser.email !== "string" || providerUser.email.toLowerCase() !== identity.provider_email ||
-      typeof providerSession.access_token !== "string" ||
-      typeof providerSession.refresh_token !== "string" || providerSession.refresh_token.length === 0) {
-    if (providerSession?.access_token && providerSession?.refresh_token) {
-      await revokeProviderRefreshToken(env, providerSession.access_token, providerSession.refresh_token);
-    }
+    diagnostics.record("provider_unavailable", "rejected", { accountId });
     return genericFailure(startedAt);
   }
 
-  let claims;
-  try {
-    claims = decodeJwt(providerSession.access_token);
-  } catch {
-    await revokeProviderRefreshToken(env, providerSession.access_token, providerSession.refresh_token);
-    return genericFailure(startedAt);
+  const issued = await issueBffSession(env, identity, authResult, {
+    mustChangePassword: identity.force_password_change === true,
+  });
+  if (!issued.ok) {
+    diagnostics.record(issued.stage, issued.outcome, { accountId });
+    return issued.outcome === "unavailable"
+      ? jsonResponse({ error: "unavailable" }, 503)
+      : genericFailure(startedAt);
   }
-  const providerExpiresAt = Number(claims.exp) * 1000;
-  if (claims.sub !== providerUser.id || !/^[0-9a-f-]{36}$/iu.test(String(claims.session_id || "")) ||
-      !Number.isFinite(providerExpiresAt) || providerExpiresAt <= Date.now()) {
-    await revokeProviderRefreshToken(env, providerSession.access_token, providerSession.refresh_token);
-    return genericFailure(startedAt);
-  }
-
-  const staffAccount = isStaffRoleSet(identity.role_names);
-  let hasVerifiedTotp = false;
-  if (staffAccount) {
-    try {
-      const factors = await listSessionMfaFactors(env, providerSession.access_token, providerSession.refresh_token);
-      hasVerifiedTotp = factors.verifiedTotp.length > 0;
-    } catch (error) {
-      await revokeProviderRefreshToken(env, providerSession.access_token, providerSession.refresh_token);
-      if ([0, 429].includes(error?.status) || error?.status >= 500) {
-        return jsonResponse({ error: "unavailable" }, 503);
-      }
-      return genericFailure(startedAt);
-    }
-  }
-
-  const sessionToken = randomOpaqueToken();
-  const csrfToken = randomOpaqueToken();
-  const sessionExpiresAt = Math.min(providerExpiresAt, Date.now() + 8 * 60 * 60 * 1000);
-  try {
-    const sessionTokenHash = await sha256Bytea(sessionToken);
-    const csrfTokenHash = await sha256Bytea(csrfToken);
-    const [csrfJwe, accessJwe, refreshJwe] = await Promise.all([
-      encryptSessionSecret(csrfToken, env.SESSION_JWE_KEY, "AA-CSRF"),
-      encryptSessionSecret(providerSession.access_token, env.SESSION_JWE_KEY, "AA-ACCESS"),
-      encryptSessionSecret(providerSession.refresh_token, env.SESSION_JWE_KEY, "AA-REFRESH"),
-    ]);
-    const { error } = await serviceClient(env).rpc("create_bff_session", {
-      p_session_token_hash: sessionTokenHash,
-      p_csrf_token_hash: csrfTokenHash,
-      p_csrf_token_jwe: csrfJwe,
-      p_account_id: identity.account_id,
-      p_provider_session_id: claims.session_id,
-      p_provider_access_token_jwe: accessJwe,
-      p_provider_refresh_token_jwe: refreshJwe,
-      p_provider_access_expires_at: new Date(providerExpiresAt).toISOString(),
-      p_expires_at: new Date(sessionExpiresAt).toISOString(),
-    });
-    if (error) throw new Error("BFF session could not be saved.");
-  } catch {
-    await revokeProviderRefreshToken(env, providerSession.access_token, providerSession.refresh_token);
-    return jsonResponse({ error: "unavailable" }, 503);
-  }
-
-  const payload = {
-    authenticated: true,
-    user: {
-      role: safeRole(identity.role_names),
-      mustChangePassword: identity.force_password_change === true,
-    },
-    csrfToken,
-  };
-  if (staffAccount) {
-    payload.user.mfaRequired = claims.aal !== "aal2" || !hasVerifiedTotp;
-    payload.user.mfaSetupRequired = !hasVerifiedTotp;
-  }
-  return jsonResponse(payload, 200, { "Set-Cookie": sessionCookie(sessionToken, (sessionExpiresAt - Date.now()) / 1000) });
+  // Auth accepted the password: give a student's limiter attempt back. Staff
+  // keep it counted, because their TOTP checks share the same allowance.
+  if (!isStaffRoleSet(identity.role_names)) await releaseLoginAttempt(request, env, username);
+  diagnostics.record("signed_in", "success", { accountId });
+  return jsonResponse(issued.payload, 200, { "Set-Cookie": issued.cookie });
 }

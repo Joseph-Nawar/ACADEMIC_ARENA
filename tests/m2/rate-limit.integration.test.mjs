@@ -23,8 +23,10 @@ test("persistent username rate limit is atomic under concurrent requests", async
 });
 
 test("persistent client-IP rate limit is atomic and distinct usernames cannot bypass it", async () => {
+  // 100 failed attempts per IP per 15 minutes (V1.6): a campus network can
+  // onboard a cohort, and successful attempts are given back (see below).
   const sharedIpKey = await hmacSha256Bytea(`ip:v1:${crypto.randomUUID()}`, key);
-  const attempts = await Promise.all(Array.from({ length: 45 }, async () => {
+  const attempts = await Promise.all(Array.from({ length: 105 }, async () => {
     const usernameKey = await hmacSha256Bytea(`username:v1:${crypto.randomUUID()}`, key);
     const response = await serviceRpc("consume_login_rate_limit", {
       p_username_key: usernameKey,
@@ -33,8 +35,36 @@ test("persistent client-IP rate limit is atomic and distinct usernames cannot by
     assert.ok(response.ok, "local service can consume a rate-limit attempt");
     return json(response);
   }));
-  assert.equal(attempts.filter(Boolean).length, 40);
+  assert.equal(attempts.filter(Boolean).length, 100);
   assert.equal(attempts.filter((allowed) => !allowed).length, 5);
+});
+
+test("a released attempt is given back once, and only for its own buckets", async () => {
+  const usernameKey = await hmacSha256Bytea(`username:v1:${crypto.randomUUID()}`, key);
+  const ipKey = await hmacSha256Bytea(`ip:v1:${crypto.randomUUID()}`, key);
+  const otherUsernameKey = await hmacSha256Bytea(`username:v1:${crypto.randomUUID()}`, key);
+  const consume = async (usernameKeyValue) => json(await serviceRpc("consume_login_rate_limit", {
+    p_username_key: usernameKeyValue, p_client_ip_key: ipKey,
+  }));
+  for (let index = 0; index < 8; index += 1) assert.equal(await consume(usernameKey), true);
+  // Releasing a different username does not refund this one.
+  const unrelated = await serviceRpc("release_login_attempt", { p_username_key: otherUsernameKey, p_client_ip_key: ipKey });
+  assert.ok(unrelated.ok);
+  // One success gives back exactly one attempt.
+  const released = await serviceRpc("release_login_attempt", { p_username_key: usernameKey, p_client_ip_key: ipKey });
+  assert.ok(released.ok);
+  assert.equal(await consume(usernameKey), true, "the refunded attempt can be used once");
+  assert.equal(await consume(usernameKey), false, "the ninth failure is still refused");
+});
+
+test("browser roles cannot give back rate-limit attempts", async () => {
+  const usernameKey = await hmacSha256Bytea(`username:v1:${crypto.randomUUID()}`, key);
+  const response = await fetch(new URL("/rest/v1/rpc/release_login_attempt", local.supabaseUrl), {
+    method: "POST",
+    headers: { apikey: local.anonKey, Authorization: `Bearer ${local.anonKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_username_key: usernameKey, p_client_ip_key: usernameKey }),
+  });
+  assert.ok(!response.ok, "anonymous callers cannot refund attempts");
 });
 
 test("browser roles cannot query or clear persistent rate-limit records", async () => {

@@ -216,6 +216,7 @@
     <h3 id="password-title">CHANGE PASSWORD</h3>
     <p id="password-help">Choose a new password of 15–128 characters. You’ll then sign in again with it.</p>
     <form id="change-password-form">
+     <input id="password-username" type="text" name="username" autocomplete="username" hidden readonly tabindex="-1" aria-hidden="true" />
      <label for="old-password">Current password</label><input id="old-password" type="password" autocomplete="current-password" required maxlength="256" />
      <label for="new-password">New password (15–128 characters)</label><input id="new-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />
      <label for="confirm-password">Confirm new password</label><input id="confirm-password" type="password" autocomplete="new-password" required minlength="15" maxlength="128" />

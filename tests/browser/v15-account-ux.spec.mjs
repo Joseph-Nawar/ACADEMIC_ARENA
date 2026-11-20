@@ -50,6 +50,9 @@ function fakeServer(options = {}) {
       if (!state.signedIn || body.oldPassword !== state.password) return fulfill(route, { error: "password_change_failed" }, 400);
       state.password = body.newPassword;
       state.mustChange = false;
+      // V1.6: a student is signed straight back in; staff (and any fallback)
+      // sign in again themselves.
+      if (state.renewOnChange) return fulfill(route, { changed: true, ...session() });
       state.signedIn = false;
       return fulfill(route, { changed: true, authenticated: false });
     }
@@ -368,6 +371,52 @@ async function navigationVisibility(browser, baseUrl) {
   }
 }
 
+// V1.6 incident fix: after setting their own password a student stays signed
+// in, so they never have to retype it straight away; password managers get
+// the username next to the new password; later sign-ins use the new password.
+async function studentStaysSignedInAfterChange(browser, baseUrl, viewport) {
+  const label = `${viewport.width}px renewed`;
+  const page = await browser.newPage({ viewport });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const server = fakeServer({ renewOnChange: true });
+  await page.route("**/api/**", server.handle);
+  await page.goto(baseUrl);
+  await waitForReady(page);
+
+  await signIn(page, TEMP);
+  assert.equal(await visible(page, "#password-section"), true);
+  assert.match(await page.locator("#password-help").textContent(), /stay signed in/i, `${label}: students are told they stay signed in`);
+  const hint = page.locator("#change-password-form input[autocomplete='username']");
+  assert.equal(await hint.count(), 1, "the change form carries a username for password managers");
+  assert.equal(await hint.inputValue(), "fictional-student");
+  await page.locator("#old-password").fill(TEMP);
+  await page.locator("#new-password").fill(NEW);
+  await page.locator("#confirm-password").fill(NEW);
+  await page.locator('#change-password-form button[type="submit"]').click();
+  await page.waitForFunction(() => !document.getElementById("password-section") || document.getElementById("password-section").hidden);
+  assert.equal(server.state.changeCalls, 1);
+  assert.equal(await header(page), "ACCOUNT", `${label}: still signed in after the change`);
+  assert.equal(await visible(page, "#login-form"), false, "no second sign-in is asked for");
+  assert.match(await page.locator("#account-status").textContent(), /Password changed\. You’re signed in/u);
+  assert.equal(await visible(page, "#student-next"), true, `${label}: My Character is offered right away`);
+  assert.deepEqual(await page.evaluate(() => ["old-password", "new-password", "confirm-password"].map((id) => document.getElementById(id).value)),
+    ["", "", ""], "no password stays in the form");
+
+  // Later: sign out; the temporary password is refused, the new one works.
+  await page.locator("#logout-btn").click();
+  await page.waitForFunction(() => document.getElementById("account-entry").textContent === "SIGN IN");
+  if (await page.locator("#login-backdrop").isHidden()) await page.locator("#account-entry").click();
+  await page.locator("#login-username").fill("fictional-student");
+  await page.locator("#login-password").fill(TEMP);
+  await page.locator('#login-form button[type="submit"]').click();
+  await page.waitForFunction(() => /Could not sign you in/u.test(document.getElementById("login-status").textContent));
+  await signIn(page, NEW);
+  assert.equal(await visible(page, "#login-backdrop"), false, `${label}: a normal sign-in closes the dialog`);
+  assert.deepEqual(errors, [], `${label}: no page errors`);
+  await page.close();
+}
+
 export async function runAccountUxBrowserTests(browser, baseUrl) {
   await navigationVisibility(browser, baseUrl);
   await backgroundRechecks(browser, baseUrl);
@@ -375,4 +424,6 @@ export async function runAccountUxBrowserTests(browser, baseUrl) {
   await studentJourney(browser, baseUrl, { width: 390, height: 844 });
   await temporaryPasswordAfterRefresh(browser, baseUrl);
   await staleAndFailedSessionChecks(browser, baseUrl);
+  await studentStaysSignedInAfterChange(browser, baseUrl, { width: 1440, height: 900 });
+  await studentStaysSignedInAfterChange(browser, baseUrl, { width: 390, height: 844 });
 }

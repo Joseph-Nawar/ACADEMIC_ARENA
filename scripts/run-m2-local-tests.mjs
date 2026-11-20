@@ -145,7 +145,7 @@ async function startProviderFaultProxy(targetUrl, port) {
       try {
         const instruction = JSON.parse(body.toString("utf8"));
         if (!/^[0-9a-f-]{36}$/iu.test(instruction.providerUserId) ||
-            !["user-password-update", "user-password-update-ambiguous", "mfa-factor-list"].includes(instruction.operation)) {
+            !["user-password-update", "user-password-update-ambiguous", "mfa-factor-list", "self-password-update-lost-response"].includes(instruction.operation)) {
           response.writeHead(400).end();
           return;
         }
@@ -221,6 +221,22 @@ async function startProviderFaultProxy(targetUrl, port) {
       return;
     }
 
+    // Self-service password update (PUT /auth/v1/user) whose write reaches Auth
+    // but whose response is lost on the way back: the BFF must not report a
+    // plain failure. The account is identified by the bearer token's subject.
+    const bearerSubject = () => {
+      try {
+        const token = String(request.headers.authorization || "").replace(/^Bearer\s+/iu, "");
+        return String(JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")).sub || "").toLowerCase();
+      } catch {
+        return "";
+      }
+    };
+    const loseSelfUpdateResponse = pendingFailure?.operation === "self-password-update-lost-response" &&
+      requestUrl.pathname === "/auth/v1/user" && request.method === "PUT" &&
+      bearerSubject() === pendingFailure.providerUserId.toLowerCase();
+    if (loseSelfUpdateResponse) pendingFailure = undefined;
+
     const userUpdateMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})$/iu);
     const factorListMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})\/factors$/iu);
     const shouldFailPassword = ["user-password-update", "user-password-update-ambiguous"].includes(pendingFailure?.operation) &&
@@ -279,6 +295,11 @@ async function startProviderFaultProxy(targetUrl, port) {
       const cookies = upstream.headers.getSetCookie?.();
       if (cookies?.length) response.setHeader("set-cookie", cookies);
       const upstreamBody = request.method === "HEAD" ? undefined : Buffer.from(await upstream.arrayBuffer());
+      if (loseSelfUpdateResponse) {
+        response.writeHead(504, { "content-type": "text/plain", "cache-control": "no-store" })
+          .end("Injected one-time local gateway timeout after the update was applied.");
+        return;
+      }
       if (operationKey) providerRequestCompletionCounts.set(operationKey, (providerRequestCompletionCounts.get(operationKey) || 0) + 1);
       response.end(upstreamBody);
     } catch {
