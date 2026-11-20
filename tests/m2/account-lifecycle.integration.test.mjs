@@ -42,11 +42,23 @@ test("initial password change requires current credentials and revokes the prior
     body: { oldPassword: identity.password, newPassword: nextPassword },
   });
   assert.equal(change.status, 200);
-  assert.deepEqual(await json(change), { changed: true, authenticated: false });
-  assert.match(change.headers.get("set-cookie") || "", /Max-Age=0/u);
+  // V1.6: a student is signed straight back in with the new password, in a
+  // brand-new session; the prior session is still revoked.
+  const changed = await json(change);
+  assert.equal(changed.changed, true);
+  assert.equal(changed.authenticated, true);
+  assert.deepEqual(changed.user, { role: "student", mustChangePassword: false });
+  const renewedCookie = cookieFrom(change);
+  assert.notEqual(renewedCookie, cookie, "the new session never reuses the prior cookie");
+  for (const value of [identity.email, identity.password, nextPassword, identity.providerSession.access_token]) {
+    assert.equal(JSON.stringify(changed).includes(value), false);
+  }
 
   const priorSession = await api("/api/auth/session", { headers: { Cookie: cookie } });
   assert.deepEqual(await json(priorSession), { authenticated: false });
+  const renewedSession = await json(await api("/api/auth/session", { headers: { Cookie: renewedCookie } }));
+  assert.equal(renewedSession.authenticated, true);
+  assert.equal(renewedSession.user.mustChangePassword, false);
 
   const oldCredential = await api("/api/auth/login", {
     method: "POST",

@@ -562,9 +562,14 @@
     const showPassword = mustChangePassword || passwordFormOpen;
     $("password-section").hidden = !showPassword;
     $("password-title").textContent = mustChangePassword ? "SET YOUR OWN PASSWORD" : "CHANGE PASSWORD";
+    const afterChange = user.role === "student"
+      ? "You’ll stay signed in; use it next time you sign in."
+      : "You’ll then sign in again with it.";
     $("password-help").textContent = mustChangePassword
-      ? "You signed in with a temporary password from university staff. Choose your own (15–128 characters). You’ll then sign in again with it."
-      : "Choose a new password of 15–128 characters. You’ll then sign in again with it.";
+      ? `You signed in with a temporary password from university staff. Choose your own (15–128 characters). ${afterChange}`
+      : `Choose a new password of 15–128 characters. ${afterChange}`;
+    // Lets password managers save the new password for the right account.
+    $("password-username").value = lastUsername;
     $("cancel-password-change").hidden = mustChangePassword;
     $("show-password-change").hidden = showPassword;
     $("mfa-panel").hidden = !needsMfa;
@@ -948,8 +953,17 @@
       button.disabled = true;
       $("password-status").textContent = "Saving your new password…";
       try {
-        await api.auth.changePassword(oldPassword, newPassword);
-        // The server ends this session after a password change: sign in again.
+        const result = await api.auth.changePassword(oldPassword, newPassword);
+        if (result?.authenticated === true) {
+          // Students stay signed in: no need to retype the new password now.
+          passwordFormOpen = false;
+          $("change-password-form").reset();
+          applySession(result);
+          $("account-status").textContent = "Password changed. You’re signed in — use your new password next time.";
+          focusAccountAction();
+          return;
+        }
+        // Otherwise the server ended this session: sign in again.
         applySession({ authenticated: false });
         $("login-status").textContent = "Password changed. Sign in with your new password.";
         focusAccountAction();
@@ -960,7 +974,9 @@
           ? "A password reset is in progress for this account. Contact the Arena staff team."
           : error?.code === "password_change_failed"
             ? "Password not changed. Check your current password and try a different new one."
-            : "Password change is temporarily unavailable. Try again later.";
+            : error?.code === "password_change_uncertain"
+              ? "We couldn’t confirm the change. Sign out, then try your new password; if it doesn’t work, use your current one."
+              : "Password change is temporarily unavailable. Try again later.";
       } finally {
         button.disabled = false;
       }

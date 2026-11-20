@@ -437,7 +437,16 @@
           throw new ArenaDataError("Choose a new password with at least 15 characters.", "invalid_password");
         }
         const payload = await request("POST", "/auth/change-password", { oldPassword, newPassword });
-        if (payload?.changed === true && payload?.authenticated === false) csrfToken = "";
+        // Students are signed straight back in with the new password; staff
+        // (and any fallback) sign in again themselves.
+        if (payload?.changed === true && payload?.authenticated === true) {
+          csrfToken = text(payload.csrfToken);
+          return { changed: true, ...sanitizeSession(payload) };
+        }
+        if (payload?.changed === true) {
+          csrfToken = "";
+          return { changed: true, authenticated: false };
+        }
         return payload;
       },
       async enrollMfa() {

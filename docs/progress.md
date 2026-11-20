@@ -2,6 +2,23 @@
 
 Keep short. Newest first.
 
+## 2026-11-20 — V1.6 student sign-in incident hotfix (branch `hotfix/student-login-lifecycle`)
+
+- **Production evidence (read-only):**
+  - 77 student accounts were created once each (77 Auth creates, 0 admin password updates, 0 orphans).
+  - Every Auth failure that could be attributed happened on the first sign-in after that student's own password change: one 4 s after it.
+  - One student was then locked out by the per-username limit, because their own successful sign-in and password change counted as attempts.
+  - The IP limit was never reached (peak 18 per 15 minutes).
+- **Fix** (migration `202611200002`):
+  - The limiter counts failures only for students: 8 per username and 100 per IP per 15 minutes. Staff keep counting successes, because their TOTP checks share that allowance.
+  - Students stay signed in after changing their password.
+  - An Auth update with no answer returns "uncertain" instead of "failed".
+  - The change form carries a hidden `autocomplete=username` field.
+  - Private reason codes go to `app_private.auth_diagnostic_events` (no PII, 7 days, flood budgets).
+- **Investigate a failed sign-in:**
+  - read the private reason codes, newest first: `select occurred_at, flow, stage, outcome, temporary_password from app_private.auth_diagnostic_events where account_id = (select account_id from app_private.identity_mappings where username_normalized = '<username>') order by id desc limit 20`
+  - run it as the owner with `node scripts/hosted-sql.mjs <ref> query "…"`.
+
 ## 2026-11-19 — V1.5 pilot fixes
 
 Pilot started: 2 student accounts, `student_sign_in` and `student_provisioning` on; `avatar_personalization` and `welcome_dialog` off.

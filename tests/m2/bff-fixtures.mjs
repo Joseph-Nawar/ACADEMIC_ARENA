@@ -85,13 +85,14 @@ export function serviceRpc(name, args) {
   });
 }
 
-export async function injectProviderFailure(providerUserId, operation) {
+export async function injectProviderFailure(providerUserId, operation, extra = {}) {
   assert.match(providerUserId, /^[0-9a-f-]{36}$/iu);
-  assert.ok(["user-password-update", "user-password-update-ambiguous", "mfa-factor-list"].includes(operation));
+  assert.ok(["user-password-update", "user-password-update-ambiguous", "mfa-factor-list", "self-password-update-lost-response",
+    "password-grant-unavailable"].includes(operation));
   const response = await fetchForTest("Local fault proxy failure injection", new URL("/__local_test__/fail-next-provider-request", local.supabaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ providerUserId, operation }),
+    body: JSON.stringify({ providerUserId, operation, ...extra }),
   });
   assert.equal(response.status, 204, "loopback test proxy arms a one-time failure for a fictional provider identity");
 }

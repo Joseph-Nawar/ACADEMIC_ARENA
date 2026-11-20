@@ -158,7 +158,11 @@ test("provider recovery blocks login/password changes until the matching reset i
     body: { oldPassword: recoveryPassword, newPassword: changedPassword },
   });
   assert.equal(complete.status, 200);
-  assert.deepEqual(await json(complete), { changed: true, authenticated: false });
+  // V1.6: a student is signed straight back in with the new password.
+  const completeBody = await json(complete);
+  assert.equal(completeBody.changed, true);
+  assert.equal(completeBody.authenticated, true);
+  assert.deepEqual(completeBody.user, { role: "student", mustChangePassword: false });
 
   const oldRecoveryCredential = await api("/api/auth/login", {
     method: "POST",

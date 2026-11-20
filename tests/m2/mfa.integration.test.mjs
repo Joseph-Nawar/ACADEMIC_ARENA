@@ -191,7 +191,11 @@ test("staff TOTP enrollment, login step-up, and privileged account provisioning 
     body: { oldPassword: provisioned.initialPassword, newPassword: firstStudentPassword },
   });
   assert.equal(firstPasswordChange.status, 200);
-  assert.deepEqual(await json(firstPasswordChange), { changed: true, authenticated: false });
+  // V1.6: a student is signed straight back in with the new password.
+  const firstPasswordChangeBody = await json(firstPasswordChange);
+  assert.equal(firstPasswordChangeBody.changed, true);
+  assert.equal(firstPasswordChangeBody.authenticated, true);
+  assert.deepEqual(firstPasswordChangeBody.user, { role: "student", mustChangePassword: false });
   assert.deepEqual(await json(await api("/api/auth/session", { headers: { Cookie: initialStudentSession } })), { authenticated: false });
 
   const oldCredential = await api("/api/auth/login", {
