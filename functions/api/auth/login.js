@@ -103,8 +103,8 @@ export async function onRequestPost(context) {
       password,
     });
   } catch {
-    diagnostics.record("provider_unavailable", "rejected", { accountId });
-    return genericFailure(startedAt);
+    diagnostics.record("provider_unavailable", "unavailable", { accountId });
+    return jsonResponse({ error: "unavailable" }, 503);
   }
 
   const issued = await issueBffSession(env, identity, authResult, {

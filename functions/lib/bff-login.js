@@ -18,9 +18,15 @@ export async function issueBffSession(env, identity, authResult, { mustChangePas
     if (providerSession?.access_token && providerSession?.refresh_token) {
       await revokeProviderRefreshToken(env, providerSession.access_token, providerSession.refresh_token);
     }
+    // Auth throttling (429) or outage (0/5xx) is not a wrong password: say
+    // "temporarily unavailable", so a student with a correct first-time
+    // password is never told to check it. Only Auth's own credential
+    // rejection gets the generic invalid-credentials answer.
     const status = authResult?.error?.status;
-    const unavailable = status === 0 || status === 429 || status >= 500;
-    return { ok: false, stage: unavailable ? "provider_unavailable" : "provider_rejected", outcome: "rejected" };
+    const unavailable = status === undefined || status === 0 || status === 429 || status >= 500;
+    return unavailable
+      ? { ok: false, stage: "provider_unavailable", outcome: "unavailable" }
+      : { ok: false, stage: "provider_rejected", outcome: "rejected" };
   }
   if (providerUser.id !== identity.provider_user_id ||
       typeof providerUser.email !== "string" || providerUser.email.toLowerCase() !== identity.provider_email ||

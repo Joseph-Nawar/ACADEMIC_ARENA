@@ -223,6 +223,31 @@ test("password change: if the automatic sign-in is unavailable, the change still
   assert.ok(stages.includes("changed"), "the fallback is recorded as a completed change without automatic sign-in");
 });
 
+test("first sign-in: a correct temporary password is never answered as a wrong password when Auth is unavailable", async (context) => {
+  const identity = await createIdentity(context, "v16-authdown");
+  await injectProviderFailure(identity.user.id, "password-grant-unavailable", {
+    passwordSha256: createHash("sha256").update(identity.password).digest("hex"),
+  });
+  const during = await login(identity.username, identity.password);
+  assert.equal(during.status, 503, "Auth throttling or outage is reported as unavailable");
+  assert.deepEqual(during.payload, { error: "unavailable" });
+  const after = await login(identity.username, identity.password);
+  assert.equal(after.status, 200, "the same first-time credential works once Auth answers");
+  assert.equal(after.payload.user.mustChangePassword, true);
+  const stages = (await diagnosticsFor(identity.accountId, 2)).map((row) => row.stage);
+  assert.deepEqual(stages.slice(0, 2), ["provider_unavailable", "signed_in"]);
+});
+
+test("first sign-in: the username is accepted however it is capitalised or spaced; the email is not a username", async (context) => {
+  const identity = await createIdentity(context, "v16-typed");
+  const typed = await login(`  ${identity.username.toUpperCase()} `, identity.password);
+  assert.equal(typed.status, 200, "capitals and surrounding spaces in the username do not matter");
+  const byEmail = await login(identity.email, identity.password);
+  assert.equal(byEmail.status, 401, "signing in with the email address instead of the username is refused generically");
+  const stages = (await diagnosticsFor(identity.accountId, 1)).map((row) => row.stage);
+  assert.equal(stages[0], "signed_in");
+});
+
 test("limiter: successful sign-ins never use the allowance, but eight failures still lock the account across IPs", async (context) => {
   const identity = await createIdentity(context, "v16-brute");
   for (let round = 0; round < 12; round += 1) {
