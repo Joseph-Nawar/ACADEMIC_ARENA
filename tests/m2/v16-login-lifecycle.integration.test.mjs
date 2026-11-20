@@ -3,13 +3,14 @@
 // the high-volume tests, which use the shared no-account diagnostic budget.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { api, cleanupProvisionedIdentity, createIdentity, injectProviderFailure, json, local } from "./bff-fixtures.mjs";
 import { queryRows, readExport } from "../../scripts/student-accounts.mjs";
+import { hmacSha256Bytea } from "../../functions/lib/secure-crypto.js";
 
 const origin = new URL(local.pagesUrl).origin;
 const passphrase = `fictional-test-passphrase-${randomBytes(12).toString("hex")}`;
@@ -201,6 +202,27 @@ test("password change: a lost Auth response is reported as uncertain, and the ac
   assert.ok(stages.includes("provider_update_uncertain"), "the uncertain update is recorded for investigation");
 });
 
+test("password change: if the automatic sign-in is unavailable, the change still stands and the student signs in normally", async (context) => {
+  const identity = await createIdentity(context, "v16-noauto");
+  const first = await login(identity.username, identity.password);
+  assert.equal(first.status, 200);
+  const next = newPassword();
+  await injectProviderFailure(identity.user.id, "password-grant-unavailable", {
+    passwordSha256: createHash("sha256").update(next).digest("hex"),
+  });
+  const { response, payload } = await changePassword(first, identity.password, next);
+  assert.equal(response.status, 200);
+  assert.deepEqual(payload, { changed: true, authenticated: false }, "the change is reported as done, with no session");
+  assert.match(response.headers.get("set-cookie") || "", /Max-Age=0/u, "the old cookie is cleared");
+  assert.deepEqual(await sessionState(first.cookie), { authenticated: false }, "the pre-change session is revoked");
+  assert.equal((await login(identity.username, identity.password)).status, 401, "the temporary password no longer works");
+  const again = await login(identity.username, next);
+  assert.equal(again.status, 200, "the student is not trapped: the new password signs in");
+  assert.equal(again.payload.user.mustChangePassword, false, "the change was completed, so no second change is asked for");
+  const stages = (await diagnosticsFor(identity.accountId, 3)).map((row) => row.stage);
+  assert.ok(stages.includes("changed"), "the fallback is recorded as a completed change without automatic sign-in");
+});
+
 test("limiter: successful sign-ins never use the allowance, but eight failures still lock the account across IPs", async (context) => {
   const identity = await createIdentity(context, "v16-brute");
   for (let round = 0; round < 12; round += 1) {
@@ -238,6 +260,13 @@ test("shared campus IP: a cohort completes first sign-in, a typo, password chang
   // 24 students × 4 attempts = 96 limiter calls from one IP (the old limit was
   // 40 attempts, successes included); only the 24 typos count now.
   assert.deepEqual(results, cohort.map(() => "ok"));
+  // Concurrent successes refunded exactly their own attempts: the shared IP
+  // still counts every student's failure, no more and no less.
+  const ipKey = await hmacSha256Bytea(`ip:v1:${campusIp}`, process.env.AA_RATE_LIMIT_HMAC_KEY);
+  assert.match(ipKey, /^\\x[0-9a-f]{64}$/u);
+  const [bucket] = sql(`select attempt_count from app_private.login_rate_limit_buckets
+    where bucket_kind = 'client_ip' and bucket_key = decode('${ipKey.slice(2)}', 'hex')`);
+  assert.equal(Number(bucket?.attempt_count), 24, "the campus IP counts exactly the 24 failures");
 });
 
 test("aggregate abuse from one IP is still stopped, with the same generic response", async (context) => {

@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(21);
+select plan(33);
 
 select has_table('app_private', 'auth_diagnostic_events', 'private sign-in diagnostics exist');
 select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'app_private.auth_diagnostic_events'::regclass),
@@ -15,10 +15,15 @@ select is(
   array['id', 'occurred_at', 'correlation_id', 'flow', 'stage', 'outcome', 'account_id', 'temporary_password', 'credential_epoch'],
   'diagnostics store no username, email, IP, password or token');
 
-select ok(has_function_privilege('service_role', 'public.release_login_attempt(bytea,bytea)', 'execute')
-  and not has_function_privilege('anon', 'public.release_login_attempt(bytea,bytea)', 'execute')
-  and not has_function_privilege('authenticated', 'public.release_login_attempt(bytea,bytea)', 'execute'),
-  'only the BFF can give back a limiter attempt');
+select ok(has_function_privilege('service_role', 'public.release_login_attempt(bytea,bytea,timestamptz,timestamptz)', 'execute')
+  and not has_function_privilege('anon', 'public.release_login_attempt(bytea,bytea,timestamptz,timestamptz)', 'execute')
+  and not has_function_privilege('authenticated', 'public.release_login_attempt(bytea,bytea,timestamptz,timestamptz)', 'execute')
+  and to_regprocedure('public.release_login_attempt(bytea,bytea)') is null,
+  'only the BFF can give back a limiter attempt, and only with its window receipt');
+select ok(has_function_privilege('service_role', 'public.consume_login_attempt(bytea,bytea)', 'execute')
+  and not has_function_privilege('anon', 'public.consume_login_attempt(bytea,bytea)', 'execute')
+  and not has_function_privilege('authenticated', 'public.consume_login_attempt(bytea,bytea)', 'execute'),
+  'the refundable consume is service-only');
 select ok(has_function_privilege('service_role', 'public.record_auth_diagnostic(uuid,text,text,text,uuid,text)', 'execute')
   and not has_function_privilege('anon', 'public.record_auth_diagnostic(uuid,text,text,text,uuid,text)', 'execute')
   and not has_function_privilege('authenticated', 'public.record_auth_diagnostic(uuid,text,text,text,uuid,text)', 'execute'),
@@ -31,17 +36,46 @@ select ok(has_function_privilege('service_role', 'public.consume_login_rate_limi
 select is((select count(*)::integer from generate_series(1, 10) as n
   where public.consume_login_rate_limit(decode(repeat('a1', 32), 'hex'), decode(repeat('b1', 32), 'hex'))), 8,
   'a username is limited to 8 counted attempts');
--- A success gives back exactly one attempt.
-select lives_ok($$select public.release_login_attempt(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex'))$$,
-  'releasing with no bucket is a no-op');
-select is((select count(*)::integer from generate_series(1, 8) as n
-  where public.consume_login_rate_limit(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex'))), 8, 'eight attempts used');
-select lives_ok($$select public.release_login_attempt(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex'))$$,
-  'a success gives back one attempt');
+-- A success gives back exactly its own attempt.
+select lives_ok($$create temporary table v16_success as
+  select * from public.consume_login_attempt(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex'))$$,
+  'a successful request is counted and receives a window receipt');
+select is((select count(*)::integer from generate_series(1, 7) as n
+  where public.consume_login_rate_limit(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex'))), 7, 'seven failures follow');
+select lives_ok($$select public.release_login_attempt(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex'),
+  (select username_window from v16_success), (select client_ip_window from v16_success))$$, 'the success gives back its attempt');
 select is(public.consume_login_rate_limit(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex')), true,
-  'one released attempt can be used again');
+  'the eighth failure is allowed');
 select is(public.consume_login_rate_limit(decode(repeat('a2', 32), 'hex'), decode(repeat('b2', 32), 'hex')), false,
-  'but no more than that');
+  'the ninth failure is refused');
+
+-- Window boundary: a success counted in a window that has since ended never
+-- refunds a failure counted in the new window (username or IP).
+select lives_ok($$create temporary table v16_old_window as
+  select * from public.consume_login_attempt(decode(repeat('a4', 32), 'hex'), decode(repeat('b4', 32), 'hex'))$$,
+  'a successful request is counted in window 1');
+select lives_ok($$update app_private.login_rate_limit_buckets
+  set window_started_at = window_started_at - interval '16 minutes', expires_at = expires_at - interval '16 minutes'
+  where bucket_key in (decode(repeat('a4', 32), 'hex'), decode(repeat('b4', 32), 'hex'))$$, 'window 1 ends before the release');
+select is(public.consume_login_rate_limit(decode(repeat('a4', 32), 'hex'), decode(repeat('b4', 32), 'hex')), true,
+  'a failure is counted in window 2');
+select lives_ok($$select public.release_login_attempt(decode(repeat('a4', 32), 'hex'), decode(repeat('b4', 32), 'hex'),
+  (select username_window from v16_old_window), (select client_ip_window from v16_old_window))$$, 'the late release names window 1');
+select is((select attempt_count from app_private.login_rate_limit_buckets
+  where bucket_kind = 'username' and bucket_key = decode(repeat('a4', 32), 'hex')), 1, 'the window-2 username failure is not refunded');
+select is((select attempt_count from app_private.login_rate_limit_buckets
+  where bucket_kind = 'client_ip' and bucket_key = decode(repeat('b4', 32), 'hex')), 1, 'the window-2 IP failure is not refunded');
+
+-- Shared IP: another student's release cannot refund a different student's failure.
+select lives_ok($$create temporary table v16_student_a as
+  select * from public.consume_login_attempt(decode(repeat('a5', 32), 'hex'), decode(repeat('b5', 32), 'hex'))$$, 'student A succeeds');
+select is(public.consume_login_rate_limit(decode(repeat('a6', 32), 'hex'), decode(repeat('b5', 32), 'hex')), true, 'student B fails on the same IP');
+select lives_ok($$select public.release_login_attempt(decode(repeat('a5', 32), 'hex'), decode(repeat('b5', 32), 'hex'),
+  (select username_window from v16_student_a), (select client_ip_window from v16_student_a))$$, 'student A releases');
+select is((select attempt_count from app_private.login_rate_limit_buckets
+  where bucket_kind = 'client_ip' and bucket_key = decode(repeat('b5', 32), 'hex')), 1, 'the IP still counts B''s failure');
+select is((select attempt_count from app_private.login_rate_limit_buckets
+  where bucket_kind = 'username' and bucket_key = decode(repeat('a6', 32), 'hex')), 1, 'B''s username still counts B''s failure');
 
 -- Per-IP limit: 100 counted attempts across distinct usernames.
 select is((select count(*)::integer from generate_series(1, 105) as n

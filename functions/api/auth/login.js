@@ -2,7 +2,7 @@ import { anonymousAuthClient, serviceClient } from "../../lib/provider.js";
 import { isStaffRoleSet } from "../../lib/staff-mfa.js";
 import { sameOriginRequest } from "../../lib/csrf.js";
 import { jsonResponse } from "../../lib/response.js";
-import { consumeLoginAttempt, releaseLoginAttempt } from "../../lib/rate-limit.js";
+import { consumeRefundableLoginAttempt, releaseLoginAttempt } from "../../lib/rate-limit.js";
 import { authDiagnostics } from "../../lib/auth-diagnostics.js";
 import { issueBffSession } from "../../lib/bff-login.js";
 import {
@@ -33,8 +33,9 @@ export async function onRequestPost(context) {
   const password = validShape && validLoginPassword(body.password) ? body.password : null;
 
   let allowed;
+  let receipt;
   try {
-    allowed = await consumeLoginAttempt(request, env, username);
+    ({ allowed, receipt } = await consumeRefundableLoginAttempt(request, env, username));
   } catch {
     diagnostics.record("lookup_unavailable", "unavailable");
     return jsonResponse({ error: "unavailable" }, 503);
@@ -117,7 +118,7 @@ export async function onRequestPost(context) {
   }
   // Auth accepted the password: give a student's limiter attempt back. Staff
   // keep it counted, because their TOTP checks share the same allowance.
-  if (!isStaffRoleSet(identity.role_names)) await releaseLoginAttempt(request, env, username);
+  if (!isStaffRoleSet(identity.role_names)) await releaseLoginAttempt(env, receipt);
   diagnostics.record("signed_in", "success", { accountId });
   return jsonResponse(issued.payload, 200, { "Set-Cookie": issued.cookie });
 }

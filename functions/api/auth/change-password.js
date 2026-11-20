@@ -2,7 +2,7 @@ import { sameOriginRequest, validCsrfRequest } from "../../lib/csrf.js";
 import { clearSessionCookie, jsonResponse } from "../../lib/response.js";
 import { resolveSession } from "../../lib/session.js";
 import { anonymousAuthClient, revokeProviderRefreshToken, serviceClient, userSessionClient } from "../../lib/provider.js";
-import { consumeLoginAttempt, releaseLoginAttempt } from "../../lib/rate-limit.js";
+import { consumeRefundableLoginAttempt, releaseLoginAttempt } from "../../lib/rate-limit.js";
 import { authDiagnostics } from "../../lib/auth-diagnostics.js";
 import { issueBffSession } from "../../lib/bff-login.js";
 import { isStaffRoleSet } from "../../lib/staff-mfa.js";
@@ -68,6 +68,7 @@ export async function onRequestPost(context) {
 
   let identity;
   let allowed;
+  let receipt;
   try {
     const { data, error } = await serviceClient(env).rpc("resolve_account_identity", {
       p_account_id: accountId,
@@ -77,7 +78,7 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: "unavailable" }, 503);
     }
     identity = Array.isArray(data) ? data[0] || null : data || null;
-    allowed = await consumeLoginAttempt(request, env, identity?.username_normalized || "invalid");
+    ({ allowed, receipt } = await consumeRefundableLoginAttempt(request, env, identity?.username_normalized || "invalid"));
   } catch {
     diagnostics.record("lookup_unavailable", "unavailable", { accountId });
     return jsonResponse({ error: "unavailable" }, 503);
@@ -152,7 +153,7 @@ export async function onRequestPost(context) {
   // Auth has accepted the new password: from here on, the change has happened
   // and the response must say so, even if bookkeeping below fails. Students
   // get the limiter attempt back; staff keep it (shared with their TOTP checks).
-  if (!isStaffRoleSet(session.roleNames)) await releaseLoginAttempt(request, env, identity.username_normalized);
+  if (!isStaffRoleSet(session.roleNames)) await releaseLoginAttempt(env, receipt);
   let completed = false;
   try {
     const { data, error } = await serviceClient(env).rpc("complete_password_change", {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { chmod, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
@@ -145,7 +146,9 @@ async function startProviderFaultProxy(targetUrl, port) {
       try {
         const instruction = JSON.parse(body.toString("utf8"));
         if (!/^[0-9a-f-]{36}$/iu.test(instruction.providerUserId) ||
-            !["user-password-update", "user-password-update-ambiguous", "mfa-factor-list", "self-password-update-lost-response"].includes(instruction.operation)) {
+            !["user-password-update", "user-password-update-ambiguous", "mfa-factor-list", "self-password-update-lost-response",
+              "password-grant-unavailable"].includes(instruction.operation) ||
+            (instruction.operation === "password-grant-unavailable" && !/^[0-9a-f]{64}$/u.test(instruction.passwordSha256 || ""))) {
           response.writeHead(400).end();
           return;
         }
@@ -236,6 +239,24 @@ async function startProviderFaultProxy(targetUrl, port) {
       requestUrl.pathname === "/auth/v1/user" && request.method === "PUT" &&
       bearerSubject() === pendingFailure.providerUserId.toLowerCase();
     if (loseSelfUpdateResponse) pendingFailure = undefined;
+
+    // Password grant for one specific (fictional) password answered as if Auth
+    // were unavailable, without forwarding it: used to make the automatic
+    // sign-in after a password change fail.
+    if (pendingFailure?.operation === "password-grant-unavailable" && requestUrl.pathname === "/auth/v1/token" &&
+        requestUrl.searchParams.get("grant_type") === "password" && request.method === "POST") {
+      let passwordSha256 = "";
+      try {
+        const password = JSON.parse(body.toString("utf8")).password;
+        passwordSha256 = typeof password === "string" ? createHash("sha256").update(password).digest("hex") : "";
+      } catch {}
+      if (passwordSha256 === pendingFailure.passwordSha256) {
+        pendingFailure = undefined;
+        response.writeHead(503, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ msg: "Injected one-time local Auth unavailability." }));
+        return;
+      }
+    }
 
     const userUpdateMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})$/iu);
     const factorListMatch = requestUrl.pathname.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})\/factors$/iu);
