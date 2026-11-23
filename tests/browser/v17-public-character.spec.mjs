@@ -90,6 +90,7 @@ async function studioStates(browser, baseUrl, root, viewport, label) {
   await ready(page);
   await page.locator("#profile-link").click();
   await page.locator("#publication-state").waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.getElementById("publication-state").dataset.state !== "checking");
   const label1 = await page.locator("#publication-state-label").textContent();
   assert.equal(label1, "PUBLIC DISPLAY ON · NOT SHOWN YET", "opted in without a link is never called public");
   assert.equal(await page.locator("#publication-state-unsaved").isVisible(), false);
@@ -109,6 +110,17 @@ async function studioStates(browser, baseUrl, root, viewport, label) {
   await page.locator("#save-character").click();
   await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "display_off");
   assert.equal(await page.locator("#publication-state-label").textContent(), "PUBLIC DISPLAY OFF");
+  // Links and publications change elsewhere: reopening My Character re-asks the
+  // server, so an old answer is never shown (both directions).
+  server.publication = "public";
+  await page.locator('.nav-link[data-page="leaderboard"]').click();
+  await page.locator("#profile-link").click();
+  await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "public");
+  server.publication = "awaiting_link"; // e.g. staff removed the link, or the week was replaced
+  await page.locator('.nav-link[data-page="leaderboard"]').click();
+  await page.locator("#profile-link").click();
+  await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "awaiting_link");
+  assert.notEqual(await page.locator("#publication-state-label").textContent(), "PUBLIC NOW", "a stale public claim is replaced on revisit");
   // A state the browser does not recognise is shown as unavailable, never public.
   server.publication = "something-new";
   await page.locator("#save-character").click();

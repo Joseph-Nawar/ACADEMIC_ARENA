@@ -45,6 +45,8 @@
   // their public-display choice, and whether the public board shows it.
   let savedLook = null;
   let publicationState = null;
+  // Each state request (refresh or save) supersedes the earlier ones.
+  let stateRequest = 0;
   // Every session change goes through applySession(); the epoch lets a slow
   // background session check be discarded if a sign-in, sign-out or password
   // change happened while it was in flight.
@@ -87,6 +89,8 @@
     if (target === "wins") void loadWins();
     // Refetch on every visit so an open tab never keeps showing withdrawn or replaced standings.
     if (target === "leaderboard") void loadLeaderboard();
+    // Links, opt-in and publications change elsewhere: re-ask the server on every visit.
+    if (target === "avatar") void refreshPublicationState();
   }
 
   function announce(id, message, state = "info") {
@@ -339,6 +343,37 @@
     document.querySelector(".mini-photo").dataset.art = "personal";
   }
 
+  // Re-reads only the server's publication state (and the saved look it refers
+  // to), leaving the student's unsaved picker choices alone. Until the answer
+  // arrives the panel says the status is being checked, never an old "public".
+  async function refreshPublicationState() {
+    if (mode !== "production" || !characterAccess() || publicationState === null) return;
+    const epoch = sessionEpoch;
+    const request = ++stateRequest;
+    publicationState = "checking";
+    renderPublicationState();
+    try {
+      const saved = await api.student.getMyCharacter();
+      if (epoch !== sessionEpoch || request !== stateRequest) return;
+      if (saved?.unreadable) {
+        savedLook = null;
+        publicationState = "unknown";
+      } else if (saved) {
+        const { showOnLeaderboard, publication, ...look } = saved;
+        savedLook = { ...look, showOnLeaderboard: showOnLeaderboard === true };
+        publicationState = publication;
+      } else {
+        savedLook = null;
+        publicationState = "not_saved";
+      }
+    } catch (error) {
+      if (epoch !== sessionEpoch || request !== stateRequest) return;
+      if (error?.code === "unauthorized") return void sessionEnded();
+      publicationState = "unknown";
+    }
+    renderPublicationState();
+  }
+
   async function loadSavedCharacter() {
     const epoch = sessionEpoch;
     try {
@@ -379,6 +414,7 @@
     awaiting_link: ["PUBLIC DISPLAY ON · NOT SHOWN YET", "Public display is on, but your character is not on a leaderboard yet. It appears only if you are in a published top 10 and staff have verified which ranking is yours. You don’t need to do anything else."],
     public: ["PUBLIC NOW", "Your character is on the current leaderboard. Changes you save appear there the next time anyone loads it."],
     unknown: ["STATUS UNAVAILABLE", "We couldn’t check whether your character is public. Try again later."],
+    checking: ["CHECKING…", "Checking whether your character is on the leaderboard."],
   });
 
   function hasUnsavedChanges() {
@@ -400,7 +436,7 @@
       $("publication-state-label").textContent = label;
       $("publication-state-text").textContent = text;
     }
-    const unsaved = state !== "not_saved" && state !== "unknown" && hasUnsavedChanges();
+    const unsaved = !["not_saved", "unknown", "checking"].includes(state) && hasUnsavedChanges();
     $("publication-state-unsaved").hidden = !unsaved;
   }
 
@@ -917,6 +953,8 @@
       // this result (or its public state) to whoever is signed in now.
       if (epoch !== sessionEpoch) return;
       showSavedPortrait();
+      // The save's answer is authoritative: drop any refresh still in flight.
+      stateRequest += 1;
       if (mode === "demo") {
         $("save-status").textContent = "Fictional character saved in this browser. The fictional preview never publishes it.";
       } else {
@@ -1153,6 +1191,7 @@
       // An open board tab refetches when it is shown again after a minute away,
       // so changed or withdrawn characters and standings do not linger.
       if (document.visibilityState === "visible" && currentPage === "leaderboard" && Date.now() - lastBoardLoad > 60_000) void loadLeaderboard({ quiet: true });
+      if (document.visibilityState === "visible" && currentPage === "avatar") void refreshPublicationState();
     });
   }
 
