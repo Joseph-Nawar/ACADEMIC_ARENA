@@ -11,11 +11,13 @@
   const badges = ["✦", "⚡", "♥", "★", ""];
   const artwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d" : "ink"}.png`;
   const faceArtwork = (base, style = "ink") => `assets/characters/${base}-${style === "cartoon3d" ? "3d-face.jpg" : "face.png"}`;
-  // Leaderboards always use the 3D Cartoon family: a student's own character or
-  // the character staff approved for that publication row. Rows with neither
-  // show a neutral illustration (never a guess from a name, rank, or record).
-  const boardArtwork = (row) => (row.avatar ? artwork(row.avatar, "cartoon3d") : `assets/competitors/podium-${row.position}.svg`);
-  const boardThumbnail = (row) => (row.avatar ? faceArtwork(row.avatar, "cartoon3d") : `assets/competitors/thumb-${"abc"[(row.position - 4) % 3]}.svg`);
+  // Board artwork: a linked, opted-in student's own character in the style,
+  // backdrop and sticker they saved; otherwise the 3D character staff approved
+  // for that publication row; with neither, a neutral illustration (never a
+  // guess from a name, rank, or record).
+  const boardStyle = (row) => (row.personalized ? row.style : "cartoon3d");
+  const boardArtwork = (row) => (row.avatar ? artwork(row.avatar, boardStyle(row)) : `assets/competitors/podium-${row.position}.svg`);
+  const boardThumbnail = (row) => (row.avatar ? faceArtwork(row.avatar, boardStyle(row)) : `assets/competitors/thumb-${"abc"[(row.position - 4) % 3]}.svg`);
   const artKind = (row) => (row.personalized ? "personal" : row.avatar ? "default" : "neutral");
   const templates = Object.freeze({
     top3: { title: "TOP THREE!", icon: "🏆", category: "academic", tone: "gold" },
@@ -28,6 +30,7 @@
   // V1: one public board per level (4, 5, 6). Semester/module boards are a later version.
   const boardState = { level: "4" };
   let boardSequence = 0;
+  let lastBoardLoad = 0;
   let winsSequence = 0;
   let currentPage = "leaderboard";
   let session = { authenticated: false };
@@ -38,6 +41,10 @@
   let selectedCategory = "all";
   const DEFAULT_CHOICES = Object.freeze({ base: "amara", style: "ink", tone: "mint", badge: "✦" });
   let choices = { ...DEFAULT_CHOICES };
+  // What the server last confirmed for the signed-in student: the saved look,
+  // their public-display choice, and whether the public board shows it.
+  let savedLook = null;
+  let publicationState = null;
   // Every session change goes through applySession(); the epoch lets a slow
   // background session check be discarded if a sign-in, sign-out or password
   // change happened while it was in flight.
@@ -137,12 +144,16 @@
         image.alt = "";
         name.replaceChildren("—");
         name.removeAttribute("title");
+        setPersonalTouches(image.closest(".competitor"), {});
         continue;
       }
       image.src = boardArtwork(row);
       image.alt = row.personalized ? `Character chosen by the rank ${position} student`
         : row.avatar ? `Illustrated character for rank ${position}` : `Neutral illustration for rank ${position}`;
-      image.closest(".competitor").dataset.art = artKind(row);
+      const competitor = image.closest(".competitor");
+      competitor.dataset.art = artKind(row);
+      competitor.dataset.style = boardStyle(row);
+      setPersonalTouches(competitor, row);
       setPublicName(name, visibleName(row), row.name);
     }
     for (const rowData of rows.filter((row) => row.position > 3).slice(0, 7)) {
@@ -156,8 +167,8 @@
       image.src = boardThumbnail(rowData);
       image.alt = "";
       portrait.dataset.art = artKind(rowData) === "neutral" ? "anonymous" : artKind(rowData);
-      if (rowData.personalized) portrait.dataset.tone = rowData.tone;
       portrait.append(image);
+      setPersonalTouches(portrait, rowData);
       const name = document.createElement("span");
       name.className = "person";
       setPublicName(name, visibleName(rowData), rowData.name);
@@ -170,7 +181,26 @@
     }
   }
 
+  // The student's saved backdrop and sticker, only on their own opted-in row.
+  // The sticker is decorative (the image's alt text already names the row).
+  function setPersonalTouches(container, row) {
+    container.querySelector(":scope > .board-sticker")?.remove();
+    if (!row.personalized) {
+      delete container.dataset.tone;
+      return;
+    }
+    container.dataset.tone = row.tone;
+    if (row.badge) {
+      const sticker = document.createElement("span");
+      sticker.className = "board-sticker";
+      sticker.setAttribute("aria-hidden", "true");
+      sticker.textContent = row.badge;
+      container.append(sticker);
+    }
+  }
+
   async function loadLeaderboard() {
+    lastBoardLoad = Date.now();
     const sequence = ++boardSequence;
     const podium = document.querySelector(".podium-zone");
     podium.hidden = true;
@@ -231,6 +261,7 @@
       image.src = artwork(image.dataset.character, choices.style);
     });
     updateCharacterControls();
+    renderPublicationState();
   }
 
   function createPickerOptions() {
@@ -304,22 +335,63 @@
       const saved = await api.student.getMyCharacter();
       if (epoch !== sessionEpoch) return;
       if (saved) {
-        const { showOnLeaderboard, ...look } = saved;
+        const { showOnLeaderboard, publication, ...look } = saved;
         choices = { ...choices, ...look };
         $("show-on-leaderboard").checked = showOnLeaderboard === true;
+        savedLook = { ...look, showOnLeaderboard: showOnLeaderboard === true };
+        publicationState = publication;
         showSavedPortrait();
+      } else {
+        savedLook = null;
+        publicationState = "not_saved";
       }
     } catch (error) {
       if (epoch !== sessionEpoch) return;
       if (error?.code === "unauthorized") return void sessionEnded();
+      savedLook = null;
+      publicationState = "unknown";
       if (mode === "production") $("save-note").textContent = "Your saved character could not be loaded. Try again later.";
     }
     renderStudio();
   }
 
+  // One truthful line about where the saved character is visible. The state
+  // comes from the server (see my_character_publication_state); the browser
+  // never upgrades it, and unsaved edits are called out as not public.
+  const PUBLICATION_COPY = Object.freeze({
+    not_saved: ["NOT SAVED YET", "Nothing is saved or public yet. Save to keep this character on your account."],
+    saved_private: ["SAVED PRIVATELY", "Only you can see it. Showing characters on public leaderboards isn’t switched on yet, so leaderboards show the default character."],
+    display_off: ["PUBLIC DISPLAY OFF", "Saved to your account. Leaderboards show the default character for your rank. To change that, tick “Show my character on public leaderboards” and save."],
+    awaiting_link: ["AWAITING STAFF VERIFICATION", "Public display is on, but your character is not on a leaderboard yet. It appears only if you are in a published top 10 and staff have verified which ranking is yours. You don’t need to do anything else."],
+    public: ["PUBLIC NOW", "Your character is on the current leaderboard. Changes you save appear there the next time anyone loads it."],
+    unknown: ["STATUS UNAVAILABLE", "We couldn’t check whether your character is public. Try again later."],
+  });
+
+  function hasUnsavedChanges() {
+    if (!savedLook) return true;
+    return ["base", "style", "tone", "badge"].some((key) => savedLook[key] !== choices[key]) ||
+      (features.avatarPersonalization && savedLook.showOnLeaderboard !== $("show-on-leaderboard").checked);
+  }
+
+  function renderPublicationState() {
+    const panel = $("publication-state");
+    const visible = mode === "production" && characterAccess() && publicationState !== null;
+    panel.hidden = !visible;
+    if (!visible) return;
+    const state = Object.hasOwn(PUBLICATION_COPY, publicationState) ? publicationState : "unknown";
+    const [label, text] = PUBLICATION_COPY[state];
+    panel.dataset.state = state;
+    $("publication-state-label").textContent = label;
+    $("publication-state-text").textContent = text;
+    const unsaved = state !== "not_saved" && state !== "unknown" && hasUnsavedChanges();
+    $("publication-state-unsaved").hidden = !unsaved;
+  }
+
   // Back to the default studio look (sign-out on a shared device leaves nothing behind).
   function resetCharacter() {
     choices = { ...DEFAULT_CHOICES };
+    savedLook = null;
+    publicationState = null;
     $("show-on-leaderboard").checked = false;
     $("save-status").textContent = "";
     resetPortrait();
@@ -824,11 +896,15 @@
       const publicChoice = features.avatarPersonalization ? $("show-on-leaderboard").checked : undefined;
       const result = await api.student.saveCharacter(choices, publicChoice);
       showSavedPortrait();
-      const base = mode === "demo" ? "Fictional character saved in this browser." : "Character saved to your account.";
-      $("save-status").textContent = !features.avatarPersonalization ? base
-        : result.showOnLeaderboard
-          ? `${base} Public display is on: it appears on a leaderboard once staff have verified your ranking.`
-          : `${base} Public display is off: leaderboards show the anonymous illustration.`;
+      if (mode === "demo") {
+        $("save-status").textContent = "Fictional character saved in this browser. The fictional preview never publishes it.";
+      } else {
+        // The server's answer after the save is the only source for the state line.
+        savedLook = result.avatar ? { ...result.avatar, showOnLeaderboard: result.showOnLeaderboard } : null;
+        publicationState = result.publication;
+        $("save-status").textContent = "Character saved to your account.";
+        renderPublicationState();
+      }
       if (currentPage === "leaderboard" || publicChoice !== undefined) void loadLeaderboard();
     } catch (error) {
       if (error?.code === "unauthorized") return void sessionEnded("Your session has ended. Sign in again to save your character.");
@@ -852,6 +928,7 @@
     $("create-button").addEventListener("click", () => showPage("avatar"));
     $("see-wins").addEventListener("click", () => showPage("wins"));
     $("save-character").addEventListener("click", () => void saveCharacter());
+    $("show-on-leaderboard").addEventListener("change", renderPublicationState);
     $("open-composer").addEventListener("click", openComposer);
     $("close-composer").addEventListener("click", closeComposer);
     $("composer-backdrop").addEventListener("click", (event) => {
@@ -1051,6 +1128,9 @@
     window.addEventListener("pageshow", (event) => { if (event.persisted) void renderSession(); });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && mode === "production" && Date.now() - lastSessionCheck > 60_000) void renderSession();
+      // An open board tab refetches when it is shown again after a minute away,
+      // so changed or withdrawn characters and standings do not linger.
+      if (document.visibilityState === "visible" && currentPage === "leaderboard" && Date.now() - lastBoardLoad > 60_000) void loadLeaderboard();
     });
   }
 

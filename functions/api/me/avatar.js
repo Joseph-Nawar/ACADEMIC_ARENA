@@ -16,12 +16,26 @@ function avatarFromRow(row) {
 }
 
 async function ownedAvatar(env, session) {
-  const { data, error } = await userAuthClient(env, session.providerAccessToken)
+  const client = userAuthClient(env, session.providerAccessToken);
+  const { data, error } = await client
     .from("student_avatar_configs")
     .select("character_key,family,tone,badge,show_on_leaderboard")
     .maybeSingle();
   if (error) throw new Error("Avatar data is unavailable.");
-  return { avatar: avatarFromRow(data), showOnLeaderboard: data?.show_on_leaderboard === true };
+  return {
+    avatar: avatarFromRow(data),
+    showOnLeaderboard: data?.show_on_leaderboard === true,
+    publication: await publicationState(client),
+  };
+}
+
+// Whether the board actually shows this student's character, decided by the
+// database from the same projection anonymous visitors read. Never guessed
+// here or in the browser. "unknown" if the state cannot be read right now.
+const PUBLICATION_STATES = new Set(["not_saved", "saved_private", "display_off", "awaiting_link", "public"]);
+async function publicationState(client) {
+  const { data, error } = await client.rpc("my_character_publication_state");
+  return !error && PUBLICATION_STATES.has(data) ? data : "unknown";
 }
 
 function authenticatedRole(session) {

@@ -58,6 +58,13 @@
     };
   }
 
+  // Server-computed public status of a student's own saved character. Anything
+  // unexpected is "unknown", which the studio never presents as public.
+  const CHARACTER_PUBLICATION_STATES = new Set(["not_saved", "saved_private", "display_off", "awaiting_link", "public"]);
+  function publicationState(value) {
+    return CHARACTER_PUBLICATION_STATES.has(value) ? value : "unknown";
+  }
+
   function sanitizeBoardRow(value) {
     if (!value || typeof value !== "object") return null;
     const position = Number(value.position);
@@ -480,7 +487,7 @@
         try {
           const payload = await request("GET", "/me/avatar");
           const saved = sanitizeAvatar(payload.avatar);
-          return saved ? { ...saved, showOnLeaderboard: payload.showOnLeaderboard === true } : null;
+          return saved ? { ...saved, showOnLeaderboard: payload.showOnLeaderboard === true, publication: publicationState(payload.publication) } : null;
         } catch (error) {
           if (error.code === "unauthorized") return null;
           throw error;
@@ -497,7 +504,8 @@
           return { saved: true, avatar, showOnLeaderboard: withChoice ? showOnLeaderboard : storageRead("arena-v1-demo-show", false) === true };
         }
         const payload = await request("PUT", "/me/avatar", withChoice ? { avatar, showOnLeaderboard } : { avatar });
-        return { saved: payload?.saved === true, avatar: sanitizeAvatar(payload?.avatar), showOnLeaderboard: payload?.showOnLeaderboard === true };
+        return { saved: payload?.saved === true, avatar: sanitizeAvatar(payload?.avatar), showOnLeaderboard: payload?.showOnLeaderboard === true,
+          publication: publicationState(payload?.publication) };
       },
       async submitAchievement(input) {
         const type = input && input.type;
@@ -582,6 +590,17 @@
           throw new ArenaDataError("Choose a publication and a link file of at most 4 KB.", "invalid_upload");
         }
         return request("POST", "/staff/leaderboards/links/preview", { publicationId, csv });
+      },
+      // The links already approved for one publication (admin-only, AAL2). The
+      // approve call replaces the whole set, so staff start from this list.
+      async rankingLinks(publicationId) {
+        if (mode === "demo") throw new ArenaDataError("Account links are unavailable in the fictional preview.", "unauthorized");
+        if (!UUID.test(String(publicationId))) throw new ArenaDataError("Choose a publication.", "invalid_request");
+        const payload = await request("GET", `/staff/leaderboards/links?publicationId=${encodeURIComponent(publicationId)}`);
+        return Array.isArray(payload?.links) ? payload.links.filter((item) => item && [4, 5, 6].includes(item.level) &&
+          Number.isInteger(item.position) && item.position >= 1 && item.position <= 10 &&
+          typeof item.username === "string" && /^[a-z0-9][a-z0-9._-]{2,31}$/u.test(item.username))
+          .map((item) => ({ level: item.level, position: item.position, publicName: text(item.publicName), username: item.username })) : [];
       },
       async approveRankingLinks(publicationId, csv) {
         if (mode === "demo") throw new ArenaDataError("Account links are unavailable in the fictional preview.", "unauthorized");

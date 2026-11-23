@@ -492,3 +492,22 @@ test("password_change_without_a_renewed_session_clears_the_csrf_token_and_uncert
   await assert.rejects(uncertain.auth.changePassword("fictional-only-password", "a-new-fictional-password"),
     (error) => error.code === "password_change_uncertain");
 });
+
+test("character_publication_state_comes_only_from_the_server_allowlist", async () => {
+  const avatar = { base: "zein", style: "ink", tone: "lilac", badge: "⚡" };
+  const replies = [
+    { avatar: { ...avatar }, showOnLeaderboard: true, publication: "public" },
+    { avatar: { ...avatar }, showOnLeaderboard: true, publication: "awaiting_link" },
+    { avatar: { ...avatar }, showOnLeaderboard: true, publication: "PUBLIC<script>" },
+    { avatar: { ...avatar }, showOnLeaderboard: true },
+    { saved: true, avatar: { ...avatar }, showOnLeaderboard: false, publication: "display_off" },
+    { saved: true, avatar: { ...avatar }, showOnLeaderboard: true, publication: { state: "public" } },
+  ];
+  const api = createArenaDataAccess({ mode: "production", fetchImpl: async () => response(replies.shift()) });
+  assert.equal((await api.student.getMyCharacter()).publication, "public");
+  assert.equal((await api.student.getMyCharacter()).publication, "awaiting_link");
+  assert.equal((await api.student.getMyCharacter()).publication, "unknown", "unexpected values are never treated as public");
+  assert.equal((await api.student.getMyCharacter()).publication, "unknown", "a missing state is unknown, not public");
+  assert.equal((await api.student.saveCharacter(avatar, false)).publication, "display_off");
+  assert.equal((await api.student.saveCharacter(avatar, true)).publication, "unknown");
+});
