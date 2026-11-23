@@ -27,6 +27,61 @@ shortened. Every pairing must come from an identifier that both sources share
 
 ## 1. Build `level,rank,username` (offline)
 
+### 1a. With the offline tool (recommended)
+
+`scripts/build-link-csv.mjs` runs only on your device and makes no network
+calls. It joins rows **only** on the identifier you choose:
+- `--key email`: the institutional email;
+- `--key roster-ref`: the university reference in the roster's `roster_ref`
+  column, e.g. the student number.
+
+It rejects:
+- a student who appears at two positions;
+- a position that appears twice;
+- an identifier that matches more than one roster row;
+- roster rows marked `eligible=no`;
+- rows with no identifier.
+
+It reports each of these by level and rank only, never printing an
+identifier, name, email or username. It refuses files inside the repository
+and never overwrites a file. It writes the result with owner-only
+permissions. It approves nothing.
+
+1. In the workbook, **Save as CSV** to a private folder outside the
+   repository. Keep one header row and the level, rank and identifier columns.
+   Check that student numbers kept their leading zeros.
+2. Also have ready:
+   - the roster you provisioned from (`roster_ref,email,username,eligible`);
+   - the approved `level,rank,public_name` file you published.
+3. Run it with your own column names. Use only the key the ranking source
+   really has:
+
+```bash
+node scripts/build-link-csv.mjs \
+  --source ~/Private/arena/week5-source.csv \
+  --roster ~/Private/arena/roster.csv \
+  --key roster-ref --source-key-column "Student ID" \
+  --source-level-column "Level" --source-rank-column "Rank" \
+  --published ~/Private/arena/week5-published.csv --source-name-column "Student Name" \
+  --out ~/Private/arena/week5-links.csv
+```
+
+   - `--published` with `--source-name-column` is a **cross-check only**. A
+     row whose source name doesn't match the published name is left out, in
+     case the source is a different version. Fix the source, or confirm the
+     row by hand. Use `--allow-name-mismatch` only after checking each one.
+   - Later weeks or additions: add `--current links-vN.csv`, the file from
+     *Download current links* in Staff Desk. Current links are kept. If one
+     disagrees with a new match, the current link wins and the row is
+     reported.
+4. Read the summary. Exit code 0 means no problems. 1 means some rows were
+   left out, and each is listed by level and rank. Resolve them by checking
+   the university records, never by guessing.
+5. Continue at step 2 below. The Staff Desk preview is still where you check
+   every row before approving.
+
+### 1b. By hand
+
 For each of the 30 published rows (Levels 4, 5, 6 × ranks 1–10):
 
 1. In the ranking source, take the row's `level` and `rank`. Read off the
