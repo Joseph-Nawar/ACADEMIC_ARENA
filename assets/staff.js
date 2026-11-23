@@ -345,6 +345,9 @@
     $("links-preview").hidden = true;
     linkCsv = "";
     if (!publicationId) return;
+    // No preview until this publication's current links are known.
+    const submit = $("links-form").querySelector('button[type="submit"]');
+    submit.disabled = true;
     try {
       const links = await api.staff.rankingLinks(publicationId);
       if ($("links-publication").value !== publicationId) return;
@@ -359,6 +362,8 @@
       $("links-current").hidden = false;
     } catch (error) {
       failure(error, "Current links are unavailable. Do not approve until they load.");
+    } finally {
+      if ($("links-publication").value === publicationId) submit.disabled = currentLinksFor !== publicationId;
     }
   }
 

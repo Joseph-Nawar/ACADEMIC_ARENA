@@ -16,6 +16,10 @@ Keep short. Newest first.
   - pgTAP `v17_character_publication_state`;
   - M2 `v17-character-publication`: save, opt-in, link, re-save, replace-all, opt-out, switch, replacement, rollback, suspension, withdrawal;
   - browser `v17-public-character`: desktop and mobile screenshots.
+- **Hosted staging gate (2026-11-23):** 31 of 31 checks passed, plus not-saved in a first run. Used a temporary fictional admin (TOTP enrolled through the app) and three fictional students who changed their temporary passwords. Covered: link approval in Staff Desk, signed-out podium and rank 6 on desktop and mobile, a re-save shown on the next load without a new approval, opt-out and opt-in, replacement, rollback, suspension and withdrawal.
+  - Afterwards all 7 fixtures were suspended, banned, had their factors deleted, and have 0 live sessions. Staging has 0 live publications.
+  - Migration `202611230001` is applied to staging only.
+- **Found (pre-existing, not fixed here):** Supabase Auth (bcrypt) rejects passwords over 72 bytes, but `validNewPassword` allows up to 128. A long new password fails as "password change failed".
 
 ## 2026-11-20 — V1.6 student sign-in incident hotfix (branch `hotfix/student-login-lifecycle`)
 
