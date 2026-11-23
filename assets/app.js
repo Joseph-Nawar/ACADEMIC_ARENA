@@ -350,6 +350,11 @@
     if (mode !== "production" || !characterAccess() || publicationState === null) return;
     const epoch = sessionEpoch;
     const request = ++stateRequest;
+    // No edits in this tab yet: show what is saved now (it may have been changed
+    // on another device). Real edits are kept and flagged as unsaved instead.
+    const untouched = savedLook
+      ? !hasUnsavedChanges()
+      : ["base", "style", "tone", "badge"].every((key) => choices[key] === DEFAULT_CHOICES[key]) && !$("show-on-leaderboard").checked;
     publicationState = "checking";
     renderPublicationState();
     try {
@@ -362,6 +367,13 @@
         const { showOnLeaderboard, publication, ...look } = saved;
         savedLook = { ...look, showOnLeaderboard: showOnLeaderboard === true };
         publicationState = publication;
+        if (untouched) {
+          choices = { ...choices, ...look };
+          $("show-on-leaderboard").checked = showOnLeaderboard === true;
+          showSavedPortrait();
+          renderStudio();
+          return;
+        }
       } else {
         savedLook = null;
         publicationState = "not_saved";

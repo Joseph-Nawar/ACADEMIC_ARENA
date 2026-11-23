@@ -129,6 +129,48 @@ async function studioStates(browser, baseUrl, root, viewport, label) {
   await context.close();
 }
 
+// Saved on another device while this tab was open: an untouched studio shows
+// the saved look on revisit; real edits in this tab are kept and flagged.
+async function studioOtherDevice(browser, baseUrl) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  const server = { saved: null };
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/public/features") return fulfill(route, { studentSignIn: true, avatarPersonalization: true, welcomeDialog: false });
+    if (path === "/api/public/leaderboards") return fulfill(route, { rows: [] });
+    if (path === "/api/public/campus-wins") return fulfill(route, { posts: [] });
+    if (path === "/api/auth/session") return fulfill(route, { authenticated: true, user: { role: "student", mustChangePassword: false }, csrfToken: "fictional-csrf" });
+    if (path === "/api/me/avatar") return fulfill(route, server.saved
+      ? { avatar: server.saved, showOnLeaderboard: true, publication: "public" }
+      : { avatar: null, showOnLeaderboard: false, publication: "not_saved" });
+    if (path === "/api/me/achievements") return fulfill(route, { submissions: [] });
+    if (path === "/api/me/campus-win-reactions") return fulfill(route, { reactions: {} });
+    return fulfill(route, { error: "not_found" }, 404);
+  });
+  await page.goto(baseUrl);
+  await ready(page);
+  await page.locator("#profile-link").click();
+  await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "not_saved");
+  server.saved = { base: "tariq", style: "ink", tone: "coral", badge: "⚡" };
+  const revisit = async () => {
+    await page.locator('.nav-link[data-page="leaderboard"]').click();
+    await page.locator("#profile-link").click();
+    await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "public");
+  };
+  await revisit();
+  assert.equal(await page.locator('.swatch[data-tone="coral"]').getAttribute("aria-pressed"), "true", "untouched tab shows the saved backdrop");
+  assert.equal(await page.locator('.base-btn[data-base="tariq"]').getAttribute("aria-pressed"), "true");
+  assert.equal(await page.locator("#show-on-leaderboard").isChecked(), true);
+  assert.equal(await page.locator("#publication-state-unsaved").isVisible(), false, "nothing is flagged as unsaved");
+  await page.locator('.swatch[data-tone="blue"]').click();
+  server.saved = { base: "zein", style: "cartoon3d", tone: "lilac", badge: "★" };
+  await revisit();
+  assert.equal(await page.locator('.swatch[data-tone="blue"]').getAttribute("aria-pressed"), "true", "edits in this tab are kept");
+  assert.equal(await page.locator("#publication-state-unsaved").isVisible(), true, "and flagged as not public");
+  await context.close();
+}
+
 async function staffLinks(browser, baseUrl, root) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const page = await context.newPage();
@@ -210,5 +252,6 @@ export async function runPublicCharacterBrowserTests(browser, baseUrl, root) {
   assert.deepEqual([changed.firstSrc, changed.firstTone, changed.firstSticker], ["assets/characters/zein-3d.png", "lilac", "★"]);
   await studioStates(browser, baseUrl, root, { width: 1280, height: 900 }, "desktop");
   await studioStates(browser, baseUrl, root, { width: 390, height: 844 }, "mobile");
+  await studioOtherDevice(browser, baseUrl);
   await staffLinks(browser, baseUrl, root);
 }
