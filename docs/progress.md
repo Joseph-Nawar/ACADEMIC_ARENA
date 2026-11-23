@@ -2,6 +2,21 @@
 
 Keep short. Newest first.
 
+## 2026-11-23 — Release A: public character sync (branch `release-a/public-character-sync`)
+
+- **Cause (production, read-only):** 0 verified account links have ever been approved (no `leaderboard.links_approved` audit event). 27 characters are saved and 21 opted in, `avatar_personalization` is on, and 30 of 30 rows have reviewed defaults. The board therefore shows 0 personalized rows. Save, opt-in, projection, API and caching all work.
+- **Fix needed in operations:** approve Week 5 links, per `docs/operations/verified-links-runbook.md`.
+- **Code (migration `202611230001`, not yet on production):**
+  - `my_character_publication_state()` returns the caller's state: not saved, saved privately, public display off, awaiting staff verification, or public. "Public" is decided by the anonymous projection itself.
+  - My Character shows that state and flags unsaved edits.
+  - Personalized board rows keep the saved style, backdrop and sticker. Defaults stay 3D.
+  - Open board tabs refetch when shown again after a minute away.
+  - Staff Desk lists the current links and downloads them as CSV. The preview lists any links an upload would remove, because approval replaces the whole set.
+- **Tests:**
+  - pgTAP `v17_character_publication_state`;
+  - M2 `v17-character-publication`: save, opt-in, link, re-save, replace-all, opt-out, switch, replacement, rollback, suspension, withdrawal;
+  - browser `v17-public-character`: desktop and mobile screenshots.
+
 ## 2026-11-20 — V1.6 student sign-in incident hotfix (branch `hotfix/student-login-lifecycle`)
 
 - **Production evidence (read-only):**
