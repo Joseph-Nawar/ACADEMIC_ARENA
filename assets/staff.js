@@ -370,7 +370,9 @@
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = "current-links.csv";
+    const option = $("links-publication").selectedOptions[0];
+    const version = /^v(\d+)/u.exec(option?.textContent || "")?.[1];
+    link.download = version ? `links-v${version}.csv` : "current-links.csv";
     document.body.append(link);
     link.click();
     link.remove();

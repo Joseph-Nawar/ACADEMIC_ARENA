@@ -111,6 +111,14 @@ test("release A: a linked, opted-in student's saved look syncs to the public boa
   assert.equal((await board(5)).rows[5].personalized, false, "a suspended student's character leaves the board");
   assert.equal((await board(4)).rows[0].personalized, true, "other students are unaffected");
 
+  // ---- a header-only file clears every link of the publication (runbook §6)
+  assert.equal((await approveLinks(week5, [])).status, 200);
+  assert.deepEqual(await listLinks(week5), []);
+  assert.equal((await board(4)).rows[0].personalized, false);
+  assert.equal(await state(alpha), "awaiting_link");
+  assert.equal((await approveLinks(week5, [[4, 1, alpha.identity.username]])).status, 200);
+  assert.equal(await state(alpha), "public");
+
   // ---- withdrawal: nothing public, and nobody is told otherwise
   assert.deepEqual(await json(await call(admin, "/api/staff/leaderboards/withdraw", { method: "POST", body: {} })), { withdrawn: true });
   assert.equal(await state(alpha), "awaiting_link");

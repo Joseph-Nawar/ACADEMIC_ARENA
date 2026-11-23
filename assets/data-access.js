@@ -487,7 +487,8 @@
         try {
           const payload = await request("GET", "/me/avatar");
           const saved = sanitizeAvatar(payload.avatar);
-          return saved ? { ...saved, showOnLeaderboard: payload.showOnLeaderboard === true, publication: publicationState(payload.publication) } : null;
+          if (!saved) return payload.avatar == null ? null : { unreadable: true, publication: "unknown" };
+          return { ...saved, showOnLeaderboard: payload.showOnLeaderboard === true, publication: publicationState(payload.publication) };
         } catch (error) {
           if (error.code === "unauthorized") return null;
           throw error;

@@ -199,18 +199,28 @@
     }
   }
 
-  async function loadLeaderboard() {
+  // quiet: refresh an already shown board in place, without a loading flash.
+  // Any outcome other than a new board still clears it: withdrawn, empty or
+  // unavailable standings are never left on screen.
+  async function loadLeaderboard({ quiet = false } = {}) {
     lastBoardLoad = Date.now();
     const sequence = ++boardSequence;
     const podium = document.querySelector(".podium-zone");
-    podium.hidden = true;
-    document.querySelector(".rank-sheet").hidden = true;
-    $("ranking-rows").replaceChildren();
-    announce("ranking-status", "Loading approved standings…", "loading");
+    quiet = quiet && !podium.hidden;
+    const clearBoard = () => {
+      podium.hidden = true;
+      document.querySelector(".rank-sheet").hidden = true;
+      $("ranking-rows").replaceChildren();
+    };
+    if (!quiet) {
+      clearBoard();
+      announce("ranking-status", "Loading approved standings…", "loading");
+    }
     const result = await api.public.getLeaderboard({ level: boardState.level });
     if (sequence !== boardSequence) return;
     // Only name a release (e.g. "Week 5") when a publication actually carries that label.
     $("leaderboard-subtitle").textContent = result.releaseLabel ? `${result.releaseLabel} · Quiz Leaderboard` : "Quiz Leaderboard";
+    if (result.state !== "ok" || result.rows.length < 3) clearBoard();
     if (result.state === "unavailable") {
       announce("ranking-status", "Standings are temporarily unavailable. Please try again later.", "unavailable");
       return;
@@ -334,7 +344,11 @@
     try {
       const saved = await api.student.getMyCharacter();
       if (epoch !== sessionEpoch) return;
-      if (saved) {
+      if (saved?.unreadable) {
+        // The server holds a character this page cannot draw: say nothing about it.
+        savedLook = null;
+        publicationState = "unknown";
+      } else if (saved) {
         const { showOnLeaderboard, publication, ...look } = saved;
         choices = { ...choices, ...look };
         $("show-on-leaderboard").checked = showOnLeaderboard === true;
@@ -362,7 +376,7 @@
     not_saved: ["NOT SAVED YET", "Nothing is saved or public yet. Save to keep this character on your account."],
     saved_private: ["SAVED PRIVATELY", "Only you can see it. Showing characters on public leaderboards isn’t switched on yet, so leaderboards show the default character."],
     display_off: ["PUBLIC DISPLAY OFF", "Saved to your account. Leaderboards show the default character for your rank. To change that, tick “Show my character on public leaderboards” and save."],
-    awaiting_link: ["AWAITING STAFF VERIFICATION", "Public display is on, but your character is not on a leaderboard yet. It appears only if you are in a published top 10 and staff have verified which ranking is yours. You don’t need to do anything else."],
+    awaiting_link: ["PUBLIC DISPLAY ON · NOT SHOWN YET", "Public display is on, but your character is not on a leaderboard yet. It appears only if you are in a published top 10 and staff have verified which ranking is yours. You don’t need to do anything else."],
     public: ["PUBLIC NOW", "Your character is on the current leaderboard. Changes you save appear there the next time anyone loads it."],
     unknown: ["STATUS UNAVAILABLE", "We couldn’t check whether your character is public. Try again later."],
   });
@@ -380,9 +394,12 @@
     if (!visible) return;
     const state = Object.hasOwn(PUBLICATION_COPY, publicationState) ? publicationState : "unknown";
     const [label, text] = PUBLICATION_COPY[state];
-    panel.dataset.state = state;
-    $("publication-state-label").textContent = label;
-    $("publication-state-text").textContent = text;
+    // Rewrite only on change, so picker clicks don't re-announce the status.
+    if (panel.dataset.state !== state) {
+      panel.dataset.state = state;
+      $("publication-state-label").textContent = label;
+      $("publication-state-text").textContent = text;
+    }
     const unsaved = state !== "not_saved" && state !== "unknown" && hasUnsavedChanges();
     $("publication-state-unsaved").hidden = !unsaved;
   }
@@ -892,21 +909,26 @@
       $("save-status").textContent = "Saving a character is for student accounts.";
       return;
     }
+    const epoch = sessionEpoch;
     try {
       const publicChoice = features.avatarPersonalization ? $("show-on-leaderboard").checked : undefined;
       const result = await api.student.saveCharacter(choices, publicChoice);
+      // A sign-out or another sign-in while the save was in flight: never show
+      // this result (or its public state) to whoever is signed in now.
+      if (epoch !== sessionEpoch) return;
       showSavedPortrait();
       if (mode === "demo") {
         $("save-status").textContent = "Fictional character saved in this browser. The fictional preview never publishes it.";
       } else {
         // The server's answer after the save is the only source for the state line.
         savedLook = result.avatar ? { ...result.avatar, showOnLeaderboard: result.showOnLeaderboard } : null;
-        publicationState = result.publication;
+        publicationState = result.avatar ? result.publication : "unknown";
         $("save-status").textContent = "Character saved to your account.";
         renderPublicationState();
       }
       if (currentPage === "leaderboard" || publicChoice !== undefined) void loadLeaderboard();
     } catch (error) {
+      if (epoch !== sessionEpoch) return;
       if (error?.code === "unauthorized") return void sessionEnded("Your session has ended. Sign in again to save your character.");
       $("save-status").textContent = "Your character could not be saved. Try again later.";
     }
@@ -1130,7 +1152,7 @@
       if (document.visibilityState === "visible" && mode === "production" && Date.now() - lastSessionCheck > 60_000) void renderSession();
       // An open board tab refetches when it is shown again after a minute away,
       // so changed or withdrawn characters and standings do not linger.
-      if (document.visibilityState === "visible" && currentPage === "leaderboard" && Date.now() - lastBoardLoad > 60_000) void loadLeaderboard();
+      if (document.visibilityState === "visible" && currentPage === "leaderboard" && Date.now() - lastBoardLoad > 60_000) void loadLeaderboard({ quiet: true });
     });
   }
 

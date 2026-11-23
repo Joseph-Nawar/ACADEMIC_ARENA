@@ -50,7 +50,8 @@ test("release_a_student_status_panel_and_board_keep_the_chosen_look", () => {
     assert.match(app, new RegExp(`\\b${state}: \\[`), `copy exists for ${state}`);
   }
   assert.doesNotMatch(app, /publicationState = "public"/, "the browser never upgrades the state to public");
-  assert.match(app, /publicationState = result\.publication;/);
+  assert.match(app, /publicationState = result\.avatar \? result\.publication : "unknown";/);
+  assert.match(app, /const epoch = sessionEpoch;\n    try {\n      const publicChoice/, "a save result is dropped after a session change");
   // Personalized rows keep the saved style; reviewed defaults stay 3D.
   assert.match(app, /const boardStyle = \(row\) => \(row\.personalized \? row\.style : "cartoon3d"\);/);
   assert.doesNotMatch(app, /anonymous illustration/, "opt-out copy matches the reviewed default characters");

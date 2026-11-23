@@ -91,7 +91,7 @@ async function studioStates(browser, baseUrl, root, viewport, label) {
   await page.locator("#profile-link").click();
   await page.locator("#publication-state").waitFor({ state: "visible" });
   const label1 = await page.locator("#publication-state-label").textContent();
-  assert.equal(label1, "AWAITING STAFF VERIFICATION", "opted in without a link is never called public");
+  assert.equal(label1, "PUBLIC DISPLAY ON · NOT SHOWN YET", "opted in without a link is never called public");
   assert.equal(await page.locator("#publication-state-unsaved").isVisible(), false);
   // An unsaved edit is called out; the server then says the student is public.
   await page.locator('.swatch[data-tone="lilac"]').click();
