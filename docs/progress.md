@@ -19,6 +19,14 @@ Keep short. Newest first.
 - **Hosted staging gate (2026-11-23):** 31 of 31 checks passed, plus not-saved in a first run. Used a temporary fictional admin (TOTP enrolled through the app) and three fictional students who changed their temporary passwords. Covered: link approval in Staff Desk, signed-out podium and rank 6 on desktop and mobile, a re-save shown on the next load without a new approval, opt-out and opt-in, replacement, rollback, suspension and withdrawal.
   - Afterwards all 7 fixtures were suspended, banned, had their factors deleted, and have 0 live sessions. Staging has 0 live publications.
   - Migration `202611230001` is applied to staging only.
+- **Visual review follow-up (hosted):**
+  - My Character now re-asks the server on every visit. Before, an open tab could show an outdated state, including a stale "PUBLIC NOW".
+  - An untouched studio now shows a look saved on another device.
+  - The hosted re-run passed 35 of 35 checks; its fixtures were cleaned up the same way.
+- **New:**
+  - `scripts/build-link-csv.mjs`, an offline tool that builds the link file by joining on email or `roster_ref` only;
+  - `docs/operations/release-a-deploy.md`, the owner's production steps;
+  - `docs/design/campus-wins-character-consistency.md`. Campus Wins snapshots the look at approval and ignores opt-in, which is for V2 to fix. Production has 0 posts.
 - **Found (pre-existing, not fixed here):** Supabase Auth (bcrypt) rejects passwords over 72 bytes, but `validNewPassword` allows up to 128. A long new password fails as "password change failed".
 
 ## 2026-11-20 — V1.6 student sign-in incident hotfix (branch `hotfix/student-login-lifecycle`)
