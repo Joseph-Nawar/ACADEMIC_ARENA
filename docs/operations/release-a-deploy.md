@@ -18,8 +18,9 @@ match.
 ## 1. Fresh checkout and gates
 
 ```bash
-cd ~/Developer && git clone https://github.com/Joseph-Nawar/ACADEMIC_ARENA.git aa-release-a && cd aa-release-a
+mkdir -p ~/Developer && cd ~/Developer && git clone https://github.com/Joseph-Nawar/ACADEMIC_ARENA.git aa-release-a && cd aa-release-a
 git log --oneline -1          # the PR #23 merge commit
+git diff --quiet origin/release-a/public-character-sync HEAD && echo "same code as reviewed"   # must print; stop if it doesn't
 npm ci
 npm test
 npm run check:security
