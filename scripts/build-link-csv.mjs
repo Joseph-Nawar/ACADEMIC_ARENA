@@ -42,6 +42,7 @@ if (values["no-published-check"] !== true && !(values.published && values["sourc
 // Private files never live inside any git checkout (this one, the main one, a
 // clone or a worktree) or a folder that syncs to the cloud.
 const SYNCED = /\/(?:Mobile Documents|CloudStorage|Dropbox[^/]*|OneDrive[^/]*|Google ?Drive[^/]*|iCloud ?Drive)(?:\/|$)/iu;
+const root = realpathSync(path.resolve(import.meta.dirname, ".."));
 function unsafeLocation(file) {
   const resolved = path.resolve(file);
   let real;
@@ -52,7 +53,7 @@ function unsafeLocation(file) {
   }
   if (SYNCED.test(real) || SYNCED.test(resolved)) return "must not be in a cloud-synced folder";
   for (let dir = path.dirname(real); ; dir = path.dirname(dir)) {
-    if (existsSync(path.join(dir, ".git"))) return "must be outside every git repository";
+    if (dir === root || existsSync(path.join(dir, ".git"))) return "must be outside every git repository";
     if (dir === path.dirname(dir)) return null;
   }
 }
