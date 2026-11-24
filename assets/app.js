@@ -355,6 +355,8 @@
     const untouched = savedLook
       ? !hasUnsavedChanges()
       : ["base", "style", "tone", "badge"].every((key) => choices[key] === DEFAULT_CHOICES[key]) && !$("show-on-leaderboard").checked;
+    const picked = () => JSON.stringify([choices.base, choices.style, choices.tone, choices.badge, $("show-on-leaderboard").checked]);
+    const pickedBefore = picked();
     publicationState = "checking";
     renderPublicationState();
     try {
@@ -367,7 +369,8 @@
         const { showOnLeaderboard, publication, ...look } = saved;
         savedLook = { ...look, showOnLeaderboard: showOnLeaderboard === true };
         publicationState = publication;
-        if (untouched) {
+        // Not if the student started editing while the answer was on its way.
+        if (untouched && picked() === pickedBefore) {
           choices = { ...choices, ...look };
           $("show-on-leaderboard").checked = showOnLeaderboard === true;
           showSavedPortrait();

@@ -17,12 +17,14 @@ Keep short. Newest first.
   - M2 `v17-character-publication`: save, opt-in, link, re-save, replace-all, opt-out, switch, replacement, rollback, suspension, withdrawal;
   - browser `v17-public-character`: desktop and mobile screenshots.
 - **Hosted staging gate (2026-11-23):** 31 of 31 checks passed, plus not-saved in a first run. Used a temporary fictional admin (TOTP enrolled through the app) and three fictional students who changed their temporary passwords. Covered: link approval in Staff Desk, signed-out podium and rank 6 on desktop and mobile, a re-save shown on the next load without a new approval, opt-out and opt-in, replacement, rollback, suspension and withdrawal.
-  - Afterwards all 7 fixtures were suspended, banned, had their factors deleted, and have 0 live sessions. Staging has 0 live publications.
+  - Afterwards all 7 fixtures were suspended, banned, had their factors deleted, and have 0 live app sessions. The admin was created by owner SQL and its factor was reset through the Auth Admin API between reruns, not through the recovery runbook. Staging has 0 live publications.
   - Migration `202611230001` is applied to staging only.
 - **Visual review follow-up (hosted):**
   - My Character now re-asks the server on every visit. Before, an open tab could show an outdated state, including a stale "PUBLIC NOW".
   - An untouched studio now shows a look saved on another device.
   - The hosted re-run passed 35 of 35 checks; its fixtures were cleaned up the same way.
+  - A second review (2026-11-24) fixed: an edit made while the status was "CHECKING…" was lost; the link tool joined student numbers mangled by a spreadsheet, accepted paths in other checkouts, and made the version cross-check optional. Added browser tests for the save/sign-out race, that edit, and the open-tab refetch.
+  - **Fixture state (checked 2026-11-24):** 3 admins and 12 students, all suspended and banned, 0 TOTP factors, 0 live app sessions. 18 Supabase `auth.sessions` rows remain: the Admin API cannot revoke them. Their access tokens have expired and a banned user cannot refresh.
 - **New:**
   - `scripts/build-link-csv.mjs`, an offline tool that builds the link file by joining on email or `roster_ref` only;
   - `docs/operations/release-a-deploy.md`, the owner's production steps;

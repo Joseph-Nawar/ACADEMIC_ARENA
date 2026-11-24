@@ -40,11 +40,16 @@ It rejects:
 - a position that appears twice;
 - an identifier that matches more than one roster row;
 - roster rows marked `eligible=no`;
-- rows with no identifier.
+- rows with no identifier;
+- student numbers a spreadsheet rewrote as a number (`2.02E+11`, `20230112345.0`).
+  In the roster these stop the run. Export that column as text.
 
 It reports each of these by level and rank only, never printing an
-identifier, name, email or username. It refuses files inside the repository
-and never overwrites a file. It writes the result with owner-only
+identifier, name, email or username. It also lists every one of the 30 board
+positions the source doesn't cover. It refuses files inside any git repository
+or cloud-synced folder (iCloud Drive, Dropbox, OneDrive, Google Drive) and
+never overwrites a file. If macOS syncs your Desktop or Documents folder to
+iCloud, don't use those folders either: the tool can't always detect that. It writes the result with owner-only
 permissions. It approves nothing.
 
 1. In the workbook, **Save as CSV** to a private folder outside the
@@ -66,7 +71,11 @@ node scripts/build-link-csv.mjs \
   --out ~/Private/arena/week5-links.csv
 ```
 
-   - `--published` with `--source-name-column` is a **cross-check only**. A
+   - `--published` with `--source-name-column` is required, and is a
+     **cross-check only**: it can remove rows, never match them. Arena usernames
+     are opaque, so the Staff Desk preview can't show you that the source was a
+     different version of the ranking. If the source has no name column, pass
+     `--no-published-check` and compare level and rank by hand. A
      row whose source name doesn't match the published name is left out, in
      case the source is a different version. Fix the source, or confirm the
      row by hand. Use `--allow-name-mismatch` only after checking each one.

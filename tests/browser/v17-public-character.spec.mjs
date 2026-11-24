@@ -171,6 +171,106 @@ async function studioOtherDevice(browser, baseUrl) {
   await context.close();
 }
 
+// A slow answer must never overwrite what happened since: an edit made while the
+// status is being checked, or a sign-out while a save is in flight.
+async function studioRaces(browser, baseUrl) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  const server = { signedIn: true, hold: null };
+  const held = () => new Promise((resolve) => { server.hold = resolve; });
+  let waitGet = null;
+  let waitPut = null;
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/public/features") return fulfill(route, { studentSignIn: true, avatarPersonalization: true, welcomeDialog: false });
+    if (path === "/api/public/leaderboards") return fulfill(route, { rows: [] });
+    if (path === "/api/public/campus-wins") return fulfill(route, { posts: [] });
+    if (path === "/api/auth/session") return fulfill(route, server.signedIn
+      ? { authenticated: true, user: { role: "student", mustChangePassword: false }, csrfToken: "fictional-csrf" } : { authenticated: false });
+    if (path === "/api/auth/logout") { server.signedIn = false; return route.fulfill({ status: 204 }); }
+    if (path === "/api/me/avatar") {
+      const put = request.method() === "PUT";
+      if (put && waitPut) await waitPut;
+      if (!put && waitGet) await waitGet;
+      const avatar = { base: "tariq", style: "ink", tone: "coral", badge: "⚡" };
+      return fulfill(route, { saved: true, avatar, showOnLeaderboard: true, publication: "public" });
+    }
+    if (path === "/api/me/achievements") return fulfill(route, { submissions: [] });
+    if (path === "/api/me/campus-win-reactions") return fulfill(route, { reactions: {} });
+    return fulfill(route, { error: "not_found" }, 404);
+  });
+  await page.goto(baseUrl);
+  await ready(page);
+  await page.locator("#profile-link").click();
+  await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "public");
+  // Edit while the check is in flight.
+  waitGet = held();
+  await page.locator('.nav-link[data-page="leaderboard"]').click();
+  await page.locator("#profile-link").click();
+  await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "checking");
+  await page.locator('.swatch[data-tone="blue"]').click();
+  waitGet = null;
+  server.hold();
+  await page.waitForFunction(() => document.getElementById("publication-state").dataset.state === "public");
+  assert.equal(await page.locator('.swatch[data-tone="blue"]').getAttribute("aria-pressed"), "true", "an edit made during the check is kept");
+  assert.equal(await page.locator("#publication-state-unsaved").isVisible(), true, "and flagged as unsaved");
+  // Sign out while a save is in flight: its answer is dropped.
+  waitPut = held();
+  const saved = page.waitForResponse((response) => response.url().endsWith("/api/me/avatar") && response.request().method() === "PUT");
+  await page.locator("#save-character").click();
+  await page.locator("#account-entry").click();
+  await page.locator("#logout-btn").click();
+  await page.waitForFunction(() => document.getElementById("account-entry").textContent === "SIGN IN");
+  server.hold();
+  await saved;
+  await page.waitForTimeout(150);
+  assert.match(await page.locator("#nav-portrait").getAttribute("src"), /competitors\/thumb-a\.svg$/u, "a late save never paints the previous student's portrait");
+  assert.equal(await page.locator("#publication-state").isHidden(), true);
+  assert.equal(await page.locator("#save-status").textContent(), "");
+  await context.close();
+}
+
+// An already open board tab: nothing while hidden or just back, a refetch in
+// place after a minute away, and withdrawn standings are cleared.
+async function openTabRefetch(browser, baseUrl) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  await page.clock.install();
+  const server = { rows: boardRows({ avatar: "tariq", style: "ink", tone: "coral", badge: "⚡" }), boards: 0 };
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/public/features") return fulfill(route, { studentSignIn: true, avatarPersonalization: true, welcomeDialog: false });
+    if (path === "/api/public/leaderboards") { server.boards += 1; return fulfill(route, { level: 4, rows: server.rows }); }
+    if (path === "/api/public/campus-wins") return fulfill(route, { posts: [] });
+    if (path === "/api/auth/session") return fulfill(route, { authenticated: false });
+    return fulfill(route, { error: "not_found" }, 404);
+  });
+  await page.goto(baseUrl);
+  await ready(page);
+  await page.locator(".podium-zone").waitFor({ state: "visible" });
+  const back = () => page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.clock.fastForward(10_000);
+  await back();
+  assert.equal(server.boards, 1, "a short absence does not refetch");
+  await page.evaluate(() => {
+    window.hiddenSeen = false;
+    const zone = document.querySelector(".podium-zone");
+    new MutationObserver(() => { if (zone.hidden) window.hiddenSeen = true; }).observe(zone, { attributes: true });
+  });
+  server.rows = boardRows({ avatar: "zein", style: "cartoon3d", tone: "lilac", badge: "★" });
+  await page.clock.fastForward(61_000);
+  await back();
+  await page.waitForFunction(() => document.getElementById("art-1").getAttribute("src").endsWith("zein-3d.png"));
+  assert.equal(await page.evaluate(() => window.hiddenSeen), false, "the board refreshes in place, without a loading flash");
+  server.rows = [];
+  await page.clock.fastForward(61_000);
+  await back();
+  await page.locator(".podium-zone").waitFor({ state: "hidden" });
+  assert.equal(await page.locator(".rank-row").count(), 0, "withdrawn standings are never left on screen");
+  await context.close();
+}
+
 async function staffLinks(browser, baseUrl, root) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const page = await context.newPage();
@@ -253,5 +353,7 @@ export async function runPublicCharacterBrowserTests(browser, baseUrl, root) {
   await studioStates(browser, baseUrl, root, { width: 1280, height: 900 }, "desktop");
   await studioStates(browser, baseUrl, root, { width: 390, height: 844 }, "mobile");
   await studioOtherDevice(browser, baseUrl);
+  await studioRaces(browser, baseUrl);
+  await openTabRefetch(browser, baseUrl);
   await staffLinks(browser, baseUrl, root);
 }

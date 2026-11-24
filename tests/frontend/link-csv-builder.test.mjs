@@ -3,7 +3,7 @@
 // values. Fictional data only.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, statSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -113,7 +113,7 @@ test("CLI: private output outside the repo, mode 600, never overwritten, nothing
     writeFileSync(join(dir, "source.csv"), source);
     writeFileSync(join(dir, "roster.csv"), roster);
     const args = ["scripts/build-link-csv.mjs", "--source", join(dir, "source.csv"), "--roster", join(dir, "roster.csv"),
-      "--key", "roster-ref", "--source-level-column", "Level", "--source-rank-column", "Rank", "--source-key-column", "Student ID"];
+      "--key", "roster-ref", "--no-published-check", "--source-level-column", "Level", "--source-rank-column", "Rank", "--source-key-column", "Student ID"];
     const run = spawnSync(process.execPath, [...args, "--out", join(dir, "links.csv")], { encoding: "utf8" });
     assert.equal(run.status, 1, "problems exist, so the exit code is 1");
     assert.equal(readFileSync(join(dir, "links.csv"), "utf8"), "level,rank,username\n4,1,fx-wave-01\n4,2,fx-wave-02\n");
@@ -125,8 +125,56 @@ test("CLI: private output outside the repo, mode 600, never overwritten, nothing
     assert.match(again.stderr, /--out must name a new file/);
     const inside = spawnSync(process.execPath, [...args, "--out", "data/links.csv"], { encoding: "utf8" });
     assert.equal(inside.status, 2);
-    assert.match(inside.stderr, /--out must be outside the repository/);
+    assert.match(inside.stderr, /--out must be outside every git repository/);
+    // Any other checkout or worktree is refused too, as is a synced folder.
+    for (const [folder, marker] of [["other-clone", "dir"], ["other-worktree", "file"]]) {
+      mkdirSync(join(dir, folder, "data"), { recursive: true });
+      if (marker === "dir") mkdirSync(join(dir, folder, ".git"));
+      else writeFileSync(join(dir, folder, ".git"), "gitdir: elsewhere");
+      const other = spawnSync(process.execPath, [...args, "--out", join(dir, folder, "data", "links.csv")], { encoding: "utf8" });
+      assert.match(other.stderr, /--out must be outside every git repository/);
+      assert.equal(existsSync(join(dir, folder, "data", "links.csv")), false);
+    }
+    mkdirSync(join(dir, "Dropbox"));
+    assert.match(spawnSync(process.execPath, [...args, "--out", join(dir, "Dropbox", "links.csv")], { encoding: "utf8" }).stderr, /cloud-synced/);
+    // The version cross-check can only be skipped knowingly.
+    const unchecked = spawnSync(process.execPath, [...args.filter((arg) => arg !== "--no-published-check"), "--out", join(dir, "n.csv")], { encoding: "utf8" });
+    assert.equal(unchecked.status, 2);
+    assert.match(unchecked.stderr, /--published and --source-name-column are required/);
+    assert.equal(existsSync(join(dir, "n.csv")), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("references a spreadsheet rewrote never join, in either file", () => {
+  for (const mangled of ["2.02301E+11", "2,02E+08", "20230112345.0", "2E11"]) {
+    const inRoster = buildLinks({ sourceText: `level,rank,roster_ref\n4,1,${mangled.replace(",", "")}`, key: "roster-ref",
+      rosterText: `roster_ref,email,username,eligible\n"${mangled}",a.fx@uni.example,fx-wave-01,yes` });
+    assert.equal(inRoster.ok, false, `${mangled} stops the run when it is in the roster`);
+    const inSource = buildLinks({ sourceText: `level,rank,roster_ref\n4,1,"${mangled}"`, key: "roster-ref", rosterText: roster });
+    assert.equal(inSource.links.length, 0);
+    assert.match(inSource.problems.join("\n"), /Level 4 rank 1: the reference was rewritten as a number/u);
+    assert.ok(!inSource.problems.join("\n").includes(mangled), "the value itself is never reported");
+  }
+});
+
+test("every board position the source does not cover is reported", () => {
+  const result = buildLinks({ sourceText: source, rosterText: roster, key: "roster-ref", columns });
+  assert.equal(result.problems.filter((item) => /missing from the source/u.test(item)).length, 23, "30 positions, 7 in the source");
+});
+
+test("a published file with a repeated or invalid position stops the run", () => {
+  for (const bad of ["4,1,One\n4,1,Two", "7,1,One", "4,11,One"]) {
+    const result = buildLinks({ sourceText: source, rosterText: roster, key: "roster-ref",
+      columns: { ...columns, name: "Student Name" }, publishedText: `level,rank,public_name\n${bad}` });
+    assert.equal(result.ok, false);
+  }
+});
+
+test("the tool has no network, process or upload capability", () => {
+  for (const file of ["scripts/build-link-csv.mjs", "scripts/lib/link-csv-builder.mjs", "scripts/lib/student-roster.mjs", "functions/lib/leaderboard-csv.js"]) {
+    const code = readFileSync(file, "utf8");
+    assert.doesNotMatch(code, /\bfetch\s*\(|node:(?:https?|net|tls|dns|dgram|child_process)|WebSocket|import\s*\(/u, file);
   }
 });

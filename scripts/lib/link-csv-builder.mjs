@@ -46,6 +46,18 @@ export function normalizeKey(kind, value) {
   return kind === "email" ? text.toLowerCase() : text.replace(/\s+/gu, "").toUpperCase();
 }
 
+// Spreadsheets rewrite long references (2.02301E+11, 20230112345.0), which can
+// make two different students look identical. Such values never join.
+export function keyProblem(kind, key) {
+  if (kind === "email") {
+    return /^[a-z0-9._%+-]{1,64}@([a-z0-9-]+\.)+[a-z]{2,}$/u.test(key) ? null : "is not a valid email address";
+  }
+  if (/^[0-9.,]+E\+?[0-9]+$/u.test(key) || /^[0-9]+[.,][0-9]+$/u.test(key)) {
+    return "was rewritten as a number by a spreadsheet; export that column as text";
+  }
+  return /^[A-Z0-9_-]{3,40}$/u.test(key) ? null : "must be 3–40 letters, digits, _ or -";
+}
+
 // Names only for an optional sanity check: case, accents and spacing ignored.
 export function normalizeName(value) {
   return String(value ?? "").normalize("NFKD").replace(/[̀-ͯ]/gu, "").toLowerCase().replace(/\s+/gu, " ").trim();
@@ -89,6 +101,8 @@ export function buildLinks(input) {
     const username = rawUsername.toLowerCase();
     const key = normalizeKey(kind, kind === "email" ? email : ref);
     if (!key) { fatal.push(`roster line ${line}: empty ${rosterColumn}`); return; }
+    const invalid = keyProblem(kind, key);
+    if (invalid) { fatal.push(`roster line ${line}: ${rosterColumn} ${invalid}`); return; }
     if (!USERNAME_PATTERN.test(username)) { fatal.push(`roster line ${line}: invalid username`); return; }
     if (!["yes", "no"].includes(eligible.toLowerCase())) { fatal.push(`roster line ${line}: eligible must be yes or no`); return; }
     if (usernameLines.has(username)) fatal.push(`roster line ${line}: username also on line ${usernameLines.get(username)}`);
@@ -144,8 +158,14 @@ export function buildLinks(input) {
     if (!parsed.ok || parsed.header.join(",") !== "level,rank,public_name") {
       return { ok: false, fatal: ["published: expected the approved level,rank,public_name file"], links: [], problems, summary: {} };
     }
-    published = new Map(parsed.rows.filter((fields) => fields.length >= 3)
-      .map((fields) => [`${Number(fields[0])}:${Number(fields[1])}`, fields.slice(2).join(",")]));
+    published = new Map();
+    for (const fields of parsed.rows) {
+      const position = `${Number(fields[0])}:${Number(fields[1])}`;
+      if (fields.length < 3 || !/^[456]:(?:[1-9]|10)$/u.test(position) || published.has(position)) {
+        return { ok: false, fatal: ["published: every row needs a unique level (4-6), rank (1-10) and public_name"], links: [], problems, summary: {} };
+      }
+      published.set(position, fields.slice(2).join(","));
+    }
     for (const position of published.keys()) {
       if (!candidates.has(position)) {
         const [level, rank] = position.split(":");
@@ -154,9 +174,17 @@ export function buildLinks(input) {
     }
   }
 
+  // Without the published file, still report every one of the 30 board
+  // positions the source does not cover.
+  if (!published) {
+    for (const level of [4, 5, 6]) for (let rank = 1; rank <= 10; rank += 1) {
+      if (!candidates.has(`${level}:${rank}`)) problems.push(`Level ${level} rank ${rank}: missing from the source; not linked`);
+    }
+  }
+
   // ---- join
   const links = [];
-  const counts = { linked: 0, unmatched: 0, ambiguous: 0, ineligible: 0, missingKey: 0, nameMismatch: 0, duplicateStudent: 0, notPublished: 0 };
+  const counts = { linked: 0, unmatched: 0, ambiguous: 0, ineligible: 0, missingKey: 0, invalidKey: 0, nameMismatch: 0, duplicateStudent: 0, notPublished: 0 };
   const sorted = [...candidates.values()].sort((a, b) => a.level - b.level || a.rank - b.rank);
   for (const row of sorted) {
     const where = `Level ${row.level} rank ${row.rank}`;
@@ -165,6 +193,8 @@ export function buildLinks(input) {
       counts.notPublished += 1; problems.push(`${where}: not on the published board; not linked`); continue;
     }
     if (!row.key) { counts.missingKey += 1; problems.push(`${where}: no ${kind === "email" ? "email" : "reference"} in the source; not linked`); continue; }
+    const invalid = keyProblem(kind, row.key);
+    if (invalid) { counts.invalidKey += 1; problems.push(`${where}: the ${kind === "email" ? "email" : "reference"} ${invalid}; not linked`); continue; }
     if ((keyPositions.get(row.key) || []).length > 1) {
       counts.duplicateStudent += 1;
       problems.push(`${where}: the same student identifier appears at ${keyPositions.get(row.key).length} positions; not linked`);
