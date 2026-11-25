@@ -25,6 +25,10 @@ Keep short. Newest first.
   - The hosted re-run passed 35 of 35 checks; its fixtures were cleaned up the same way.
   - A second review (2026-11-24) fixed: an edit made while the status was "CHECKING…" was lost; the link tool joined student numbers mangled by a spreadsheet, accepted paths in other checkouts, and made the version cross-check optional. Added browser tests for the save/sign-out race, that edit, and the open-tab refetch.
   - **Fixture state (checked 2026-11-24):** 3 admins and 12 students, all suspended and banned, 0 TOTP factors, 0 live app sessions. 18 Supabase `auth.sessions` rows remain: the Admin API cannot revoke them. Their access tokens have expired and a banned user cannot refresh.
+- **Final release gates (2026-11-25):**
+  - `scripts/release-production.mjs verify|migrate|deploy|smoke` refuses to touch production unless the checkout is exactly the reviewed tree, clean, on the current `origin/main`, with every CI check for that commit green. `migrate` must be told the exact migration it expects, and each step asks for a typed confirmation. Tests: `tests/frontend/release-guard.test.mjs`.
+  - Hosted staging gate on the final build: 27 of 27, reusing the existing suspended fixtures (no new accounts). It added a separate signed-out browser, an already-open tab picking up a re-save, and an open studio tab after a replacement.
+  - Follow-ups filed: issue #24 (72-byte passwords) and issue #25 (Campus Wins consent).
 - **New:**
   - `scripts/build-link-csv.mjs`, an offline tool that builds the link file by joining on email or `roster_ref` only;
   - `docs/operations/release-a-deploy.md`, the owner's production steps;
