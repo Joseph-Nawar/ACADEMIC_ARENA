@@ -2,6 +2,39 @@
 
 Keep short. Newest first.
 
+## 2026-11-23 — Release A: public character sync (branch `release-a/public-character-sync`)
+
+- **Cause (production, read-only):** 0 verified account links have ever been approved (no `leaderboard.links_approved` audit event). 27 characters are saved and 21 opted in, `avatar_personalization` is on, and 30 of 30 rows have reviewed defaults. The board therefore shows 0 personalized rows. Save, opt-in, projection, API and caching all work.
+- **Fix needed in operations:** approve Week 5 links, per `docs/operations/verified-links-runbook.md`.
+- **Code (migration `202611230001`, not yet on production):**
+  - `my_character_publication_state()` returns the caller's state: not saved, saved privately, public display off, awaiting staff verification, or public. "Public" is decided by the anonymous projection itself.
+  - My Character shows that state and flags unsaved edits.
+  - Personalized board rows keep the saved style, backdrop and sticker. Defaults stay 3D.
+  - Open board tabs refetch when shown again after a minute away.
+  - Staff Desk lists the current links and downloads them as CSV. The preview lists any links an upload would remove, because approval replaces the whole set.
+- **Tests:**
+  - pgTAP `v17_character_publication_state`;
+  - M2 `v17-character-publication`: save, opt-in, link, re-save, replace-all, opt-out, switch, replacement, rollback, suspension, withdrawal;
+  - browser `v17-public-character`: desktop and mobile screenshots.
+- **Hosted staging gate (2026-11-23):** 31 of 31 checks passed, plus not-saved in a first run. Used a temporary fictional admin (TOTP enrolled through the app) and three fictional students who changed their temporary passwords. Covered: link approval in Staff Desk, signed-out podium and rank 6 on desktop and mobile, a re-save shown on the next load without a new approval, opt-out and opt-in, replacement, rollback, suspension and withdrawal.
+  - Afterwards all 7 fixtures were suspended, banned, had their factors deleted, and have 0 live app sessions. The admin was created by owner SQL and its factor was reset through the Auth Admin API between reruns, not through the recovery runbook. Staging has 0 live publications.
+  - Migration `202611230001` is applied to staging only.
+- **Visual review follow-up (hosted):**
+  - My Character now re-asks the server on every visit. Before, an open tab could show an outdated state, including a stale "PUBLIC NOW".
+  - An untouched studio now shows a look saved on another device.
+  - The hosted re-run passed 35 of 35 checks; its fixtures were cleaned up the same way.
+  - A second review (2026-11-24) fixed: an edit made while the status was "CHECKING…" was lost; the link tool joined student numbers mangled by a spreadsheet, accepted paths in other checkouts, and made the version cross-check optional. Added browser tests for the save/sign-out race, that edit, and the open-tab refetch.
+  - **Fixture state (checked 2026-11-24):** 3 admins and 12 students, all suspended and banned, 0 TOTP factors, 0 live app sessions. 18 Supabase `auth.sessions` rows remain: the Admin API cannot revoke them. Their access tokens have expired and a banned user cannot refresh.
+- **Final release gates (2026-11-25):**
+  - `scripts/release-production.mjs verify|migrate|deploy|smoke` refuses to touch production unless the checkout is exactly the reviewed tree, clean, on the current `origin/main`, with every CI check for that commit green. `migrate` must be told the exact migration it expects, and each step asks for a typed confirmation. Tests: `tests/frontend/release-guard.test.mjs`.
+  - Hosted staging gate on the final build: 27 of 27, reusing the existing suspended fixtures (no new accounts). It added a separate signed-out browser, an already-open tab picking up a re-save, and an open studio tab after a replacement.
+  - Follow-ups filed: issue #24 (72-byte passwords) and issue #25 (Campus Wins consent).
+- **New:**
+  - `scripts/build-link-csv.mjs`, an offline tool that builds the link file by joining on email or `roster_ref` only;
+  - `docs/operations/release-a-deploy.md`, the owner's production steps;
+  - `docs/design/campus-wins-character-consistency.md`. Campus Wins snapshots the look at approval and ignores opt-in, which is for V2 to fix. Production has 0 posts.
+- **Found (pre-existing, not fixed here):** Supabase Auth (bcrypt) rejects passwords over 72 bytes, but `validNewPassword` allows up to 128. A long new password fails as "password change failed".
+
 ## 2026-11-20 — V1.6 student sign-in incident hotfix (branch `hotfix/student-login-lifecycle`)
 
 - **Production evidence (read-only):**

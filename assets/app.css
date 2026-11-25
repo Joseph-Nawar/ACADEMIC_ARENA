@@ -231,3 +231,22 @@ html:not([data-character-access="on"]) [data-requires-student]{display:none!impo
 .about-page .about-privacy{margin-top:26px;font-size:14px}.about-page .about-note{font-size:13px;color:#54615b;border-left:4px solid var(--gold);padding-left:12px}
 @media(max-width:640px){.score-rules,.about-tips{grid-template-columns:1fr}.score-card{padding:16px;box-shadow:5px 5px 0 var(--ink)}.score-card h2{font-size:30px}.about-page h1{font-size:54px}}
 .artwork-result{font-weight:800;margin-top:10px;min-height:18px}.artwork-result[data-state="unavailable"]{color:#a3321f}.artwork-result[data-state="ready"]{color:#1d5c4f}
+/* Release A: a student's own board character keeps their style, backdrop and sticker. */
+.competitor[data-tone="mint"],.rank-row .pic[data-tone="mint"]{--tone:#76bbb1}.competitor[data-tone="coral"],.rank-row .pic[data-tone="coral"]{--tone:#ef6f56}.competitor[data-tone="gold"],.rank-row .pic[data-tone="gold"]{--tone:#f4c856}.competitor[data-tone="paper"],.rank-row .pic[data-tone="paper"]{--tone:#dfd6c6}.competitor[data-tone="blue"],.rank-row .pic[data-tone="blue"]{--tone:#a3bfd7}.competitor[data-tone="lilac"],.rank-row .pic[data-tone="lilac"]{--tone:#c9b7d9}
+.competitor[data-art="personal"]:before{content:"";position:absolute;left:50%;bottom:calc(var(--pedestal-height) + var(--art-height) * .3);width:min(100%,calc(var(--art-height) * .74));aspect-ratio:1;transform:translateX(-50%);border-radius:50%;background:var(--tone,#76bbb1);border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);pointer-events:none}
+.competitor[data-art="personal"] .champion-art{z-index:1}
+.competitor[data-art="personal"][data-style="ink"] .champion-art{filter:drop-shadow(2px 2px 0 #fff9ee)}
+.board-sticker{position:absolute;z-index:3;pointer-events:none;color:var(--ink);font-weight:900;line-height:1;text-shadow:2px 2px 0 var(--paper)}
+.competitor > .board-sticker{right:0;bottom:calc(var(--pedestal-height) + var(--art-height) * .78);font-size:clamp(28px,3.4vw,44px);transform:rotate(10deg)}.competitor:not(.first) > .board-sticker{right:-2%;font-size:clamp(22px,2.7vw,34px)}
+.rank-row .pic[data-art="personal"]{background:var(--tone,#f4d599);overflow:visible;padding:3px}
+.rank-row .pic[data-art="personal"] img{border-radius:7px}
+.rank-row .pic > .board-sticker{right:-7px;top:-9px;font-size:16px;transform:rotate(10deg)}
+@media(max-width:430px){.competitor[data-art="personal"]:before{border-width:2px;box-shadow:2px 2px 0 var(--ink)}.competitor > .board-sticker{font-size:26px}.competitor:not(.first) > .board-sticker{font-size:20px}}
+/* Release A: truthful public status of the student's saved character. */
+.publication-state{border:2px solid var(--ink);background:var(--paper);padding:12px 14px;margin-top:12px;box-shadow:3px 3px 0 var(--ink);max-width:560px}
+.publication-state strong{display:inline-block;font-size:11px;letter-spacing:1.2px;padding:3px 7px;border:2px solid var(--ink);background:#e8e1d3}
+.publication-state p{margin:8px 0 0;font-size:13px;line-height:1.5;color:#3f4a45}
+.publication-state[data-state="public"] strong{background:var(--teal)}
+.publication-state[data-state="awaiting_link"] strong{background:var(--gold)}
+.publication-state[data-state="unknown"] strong{background:#fbd9d1}
+.publication-state .publication-unsaved{font-weight:850;color:#a3321f}

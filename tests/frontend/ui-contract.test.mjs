@@ -41,3 +41,19 @@ test("static_markup_has_no_inline_script_or_style_blocks", () => {
   assert.doesNotMatch(html, /\sstyle=/i);
   assert.doesNotMatch(html, /<script\b(?![^>]*\bsrc=)[^>]*>/i);
 });
+
+test("release_a_student_status_panel_and_board_keep_the_chosen_look", () => {
+  const app = readFileSync(join(root, "assets/app.js"), "utf8");
+  // The studio states come from the server; "public" is never set in the browser.
+  assert.match(html, /id="publication-state"[^>]*role="status"[^>]*aria-live="polite"[^>]*hidden/);
+  for (const state of ["not_saved", "saved_private", "display_off", "awaiting_link", "public", "unknown", "checking"]) {
+    assert.match(app, new RegExp(`\\b${state}: \\[`), `copy exists for ${state}`);
+  }
+  assert.doesNotMatch(app, /publicationState = "public"/, "the browser never upgrades the state to public");
+  assert.match(app, /publicationState = result\.avatar \? result\.publication : "unknown";/);
+  assert.match(app, /const epoch = sessionEpoch;\n    try {\n      const publicChoice/, "a save result is dropped after a session change");
+  // Personalized rows keep the saved style; reviewed defaults stay 3D.
+  assert.match(app, /const boardStyle = \(row\) => \(row\.personalized \? row\.style : "cartoon3d"\);/);
+  assert.doesNotMatch(app, /anonymous illustration/, "opt-out copy matches the reviewed default characters");
+  assert.doesNotMatch(html, /Leaderboards always show your character in the 3D Cartoon style/);
+});

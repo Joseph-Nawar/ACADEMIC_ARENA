@@ -9,6 +9,7 @@ import { runDemoBrowserTests, runProductionBrowserTests } from "../tests/browser
 import { runM2AuthBrowserTests } from "../tests/browser/m2-auth.spec.mjs";
 import { runAccountUxBrowserTests } from "../tests/browser/v15-account-ux.spec.mjs";
 import { runBoardCharacterBrowserTests } from "../tests/browser/board-characters.spec.mjs";
+import { runPublicCharacterBrowserTests } from "../tests/browser/v17-public-character.spec.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const wrangler = join(root, "node_modules", "wrangler", "bin", "wrangler.js");
@@ -81,6 +82,7 @@ try {
   await runM2AuthBrowserTests(browser, server.baseUrl);
   await runAccountUxBrowserTests(browser, server.baseUrl);
   await runBoardCharacterBrowserTests(browser, server.baseUrl);
+  await runPublicCharacterBrowserTests(browser, server.baseUrl, root);
   console.log("PASS: Wrangler Pages demo, production-unavailable, filters, avatar, Campus Wins, authentication states, headers, and desktop/mobile checks.");
 } finally {
   await stopPages(server);

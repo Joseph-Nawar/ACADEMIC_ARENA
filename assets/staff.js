@@ -330,6 +330,59 @@
 
   let linkCsv = "";
   let linkPublication = "";
+  // Links already approved for the selected publication. Approval replaces the
+  // whole set, so the preview lists any of these the uploaded file would drop.
+  let currentLinks = [];
+  let currentLinksFor = "";
+  let linkRemovals = 0;
+  const linkKey = (item) => `${item.level}:${item.position}:${item.username}`;
+
+  async function loadCurrentLinks() {
+    const publicationId = $("links-publication").value;
+    currentLinks = [];
+    currentLinksFor = "";
+    $("links-current").hidden = true;
+    $("links-preview").hidden = true;
+    linkCsv = "";
+    if (!publicationId) return;
+    // No preview until this publication's current links are known.
+    const submit = $("links-form").querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      const links = await api.staff.rankingLinks(publicationId);
+      if ($("links-publication").value !== publicationId) return;
+      currentLinks = links;
+      currentLinksFor = publicationId;
+      $("links-current-heading").textContent = `CURRENTLY APPROVED (${links.length})`;
+      const list = $("links-current-list");
+      list.replaceChildren();
+      if (!links.length) list.append(textNode("li", "No approved links yet for this publication."));
+      for (const item of links) list.append(textNode("li", `Level ${item.level} · rank ${item.position} · ${item.publicName} → ${item.username}`));
+      $("download-links").hidden = links.length === 0;
+      $("links-current").hidden = false;
+    } catch (error) {
+      failure(error, "Current links are unavailable. Do not approve until they load.");
+    } finally {
+      if ($("links-publication").value === publicationId) submit.disabled = currentLinksFor !== publicationId;
+    }
+  }
+
+  // A level,rank,username file of the current links, made in this browser
+  // (nothing is sent anywhere). Keep it with the private roster, not online.
+  function downloadCurrentLinks() {
+    if (!currentLinks.length) return;
+    const csv = ["level,rank,username", ...currentLinks.map((item) => `${item.level},${item.position},${item.username}`)].join("\n") + "\n";
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    const option = $("links-publication").selectedOptions[0];
+    const version = /^v(\d+)/u.exec(option?.textContent || "")?.[1];
+    link.download = version ? `links-v${version}.csv` : "current-links.csv";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   async function loadLinkPublications() {
     const select = $("links-publication");
@@ -343,6 +396,7 @@
         option.textContent = `v${item.version} · ${item.releaseLabel || ""} · ${stateLabels[item.state]}`;
         select.append(option);
       }
+      await loadCurrentLinks();
     } catch (error) {
       failure(error, "Publications are unavailable.");
     }
@@ -363,6 +417,10 @@
     try {
       const csv = await file.text();
       const publicationId = $("links-publication").value;
+      if (currentLinksFor !== publicationId) {
+        status("The current links of this publication have not loaded. Reselect the publication and try again.", "unavailable");
+        return;
+      }
       const result = await api.staff.previewRankingLinks(publicationId, csv);
       const list = $("links-list");
       list.replaceChildren();
@@ -370,10 +428,19 @@
       for (const item of result.links) {
         list.append(textNode("li", `Level ${item.level} · rank ${item.position} · ${item.publicName} → ${item.username} (${item.accountStatus}) · ${linkStates[item.previous] || item.previous}`));
       }
+      const kept = new Set(result.links.map(linkKey));
+      const removed = currentLinks.filter((item) => !kept.has(linkKey(item)));
+      const removedList = $("links-removed");
+      removedList.replaceChildren();
+      for (const item of removed) removedList.append(textNode("li", `Level ${item.level} · rank ${item.position} · ${item.publicName} → ${item.username}`));
+      $("links-removed-block").hidden = removed.length === 0;
+      linkRemovals = removed.length;
       linkCsv = csv;
       linkPublication = publicationId;
       $("links-preview").hidden = false;
-      status("Check every identity privately, then approve.", "ready");
+      status(removed.length
+        ? `Check every identity privately. ${removed.length} current link(s) are not in this file and will be removed.`
+        : "Check every identity privately, then approve.", removed.length ? "unavailable" : "ready");
     } catch (error) {
       for (const detail of error?.details || []) {
         $("links-errors").append(textNode("li", detail.line ? `Line ${detail.line}: ${detail.message}` : detail.message));
@@ -383,13 +450,18 @@
   }
 
   async function approveLinks() {
-    if (!linkCsv || !window.confirm("Approve these private account links for this publication?")) return;
+    const question = linkRemovals
+      ? `This replaces all links of this publication and REMOVES ${linkRemovals} current link(s). Approve anyway?`
+      : "Approve these private account links for this publication? This replaces its current link set.";
+    if (!linkCsv || !window.confirm(question)) return;
     try {
       const result = await api.staff.approveRankingLinks(linkPublication, linkCsv);
       status(`${result.linked} account link(s) approved.`, "ready");
       $("links-preview").hidden = true;
-      $("links-form").reset();
+      $("links-file").value = "";
       linkCsv = "";
+      linkRemovals = 0;
+      await loadCurrentLinks();
     } catch (error) {
       failure(error, "Links were not changed.");
     }
@@ -493,6 +565,8 @@
     $("suggest-artwork").addEventListener("click", suggestArtwork);
     $("approve-artwork").addEventListener("click", approveArtwork);
     $("approve-links").addEventListener("click", approveLinks);
+    $("links-publication").addEventListener("change", () => void loadCurrentLinks());
+    $("download-links").addEventListener("click", downloadCurrentLinks);
     document.querySelectorAll("[data-queue]").forEach((element) => element.addEventListener("click", () => setQueue(element.dataset.queue)));
     $("staff-nav").addEventListener("click", () => {
       if (canPublish) void loadHistory();

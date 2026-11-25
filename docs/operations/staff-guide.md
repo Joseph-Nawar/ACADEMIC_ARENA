@@ -87,6 +87,12 @@ restores that version's links. Uploading a header-only file clears the links.
 Never link by name alone. A student's own character appears on the board only
 after they switch public display on.
 
+**Approving replaces the publication's whole link set.** The panel lists the
+currently approved links. To add students, select *Download current links
+(CSV)*, add rows to that file and upload it. The preview lists any current link
+your file would remove under *Will be removed*. Step-by-step instructions:
+[verified-links-runbook.md](verified-links-runbook.md).
+
 ## Accounts
 
 The in-app account routes stay **disabled on the hosted site**. Student
