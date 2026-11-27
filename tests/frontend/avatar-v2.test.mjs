@@ -218,3 +218,25 @@ test("provenance: original, code-drawn, no third-party or runtime assets", () =>
   // The namespace declaration is an identifier, not a fetch; nothing else may reference a URL.
   assert.doesNotMatch(svg.replace(' xmlns="http://www.w3.org/2000/svg"', ""), /https?:|<image|xlink|url\((?!#)/);
 });
+
+test("every value of every item slot draws something distinct", () => {
+  const base = { ...C.normalizeForRender(C.DEFAULT_CONFIG), hair: "crop" };
+  for (const [field, spec] of Object.entries(C.fields)) {
+    if (spec.kind !== "item") continue;
+    const drawings = new Set(spec.values.map((value) =>
+      R.render({ ...base, [field]: value }, { context: "full", sticker: true }).replace(/aa\d+-/g, "")));
+    assert.equal(drawings.size, spec.values.length, `${field}: two values draw the same thing (a missing drawing?)`);
+  }
+});
+
+test("the free wardrobe is substantial and earned items are a distinct minority", () => {
+  const free = Object.entries(C.items).filter(([key, item]) => item.collection === "essentials" && !key.endsWith(".none"));
+  const earnable = Object.entries(C.items).filter(([, item]) => ["elite", "podium", "champion"].includes(item.collection));
+  for (const slot of ["top", "bottom", "shoes"]) assert.ok(free.filter(([, item]) => item.slot === slot).length >= 7, `${slot}: at least 7 free options`);
+  assert.ok(free.filter(([, item]) => item.covers?.includes("bottom")).length >= 3, "at least three free full-length modest garments");
+  for (const name of ["elite", "podium", "champion"]) {
+    const items = earnable.filter(([, item]) => item.collection === name);
+    assert.ok(items.some(([, item]) => item.slot === "headwear" || item.slot === "backdrop"), `${name}: something visible on a small portrait`);
+    assert.ok(items.every(([, item]) => item.colorable !== true), `${name}: fixed signature colours, not recolourable free items`);
+  }
+});

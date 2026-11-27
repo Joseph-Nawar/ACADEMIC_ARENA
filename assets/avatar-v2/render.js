@@ -838,6 +838,22 @@
           path(`M${pt(CX, 38)} L${pt(CX + 118, 66)} L${pt(CX, 92)} L${pt(CX - 118, 66)} Z`, ctx.linear("mb", [[0, "#3B4A57"], [1, "#1A242C"]]), "#0F151A", 3) +
           circle(CX, 65, 5, "#E7B43C", "#8A5F12", 2) + line(`M${pt(CX, 65)} L${pt(CX + 92, 72)} L${pt(CX + 94, 118)}`, "#E7B43C", 3) + path(`M${pt(CX + 88, 116)} h12 l2 22 h-16 Z`, "#E7B43C", "#8A5F12", 2);
       }
+      case "eliteband": {
+        // Elite (Top 10): a navy band at the hairline with a gold stripe and a
+        // "10" shield, readable even on small rank thumbnails.
+        const y = 100;
+        return path(`M${pt(CX - 94, y + 6)} Q${pt(CX, y - 34)} ${pt(CX + 94, y + 6)} L${pt(CX + 92, y + 24)} Q${pt(CX, y - 14)} ${pt(CX - 92, y + 24)} Z`, ctx.linear("eb", [[0, "#2B4372"], [1, "#16264A"]]), "#0E1A33", 3) +
+          line(`M${pt(CX - 92, y + 13)} Q${pt(CX, y - 25)} ${pt(CX + 92, y + 13)}`, "#E7B43C", 3) +
+          path(`M${pt(CX, y - 40)} l18 7 v15 c0 11 -9 16 -18 19 c-9 -3 -18 -8 -18 -19 v-15 Z`, "#22355E", "#E7B43C", 3) +
+          `<text x="${CX}" y="${y - 14}" text-anchor="middle" font-family="Impact, Arial Black, sans-serif" font-size="15" fill="#F4C856">10</text>`;
+      }
+      case "podiumcap": {
+        // Podium (Top 3): a silver cap with a gold star and a gold brim edge.
+        const silver = ctx.linear("pc", [[0, "#F4F6F9"], [0.55, "#C9CED6"], [1, "#9AA2AE"]]);
+        return path(`M${pt(CX - 90, 108)} C${pt(CX - 94, 32)} ${pt(CX + 94, 32)} ${pt(CX + 90, 108)} Q${pt(CX, 96)} ${pt(CX - 90, 108)} Z`, silver, "#5B6472", 3) +
+          path(`M${pt(CX - 92, 106)} Q${pt(CX, 92)} ${pt(CX + 92, 106)} Q${pt(CX + 70, 130)} ${pt(CX, 128)} Q${pt(CX - 70, 130)} ${pt(CX - 92, 106)} Z`, "#AEB5C0", "#5B6472", 3) +
+          line(`M${pt(CX - 86, 112)} Q${pt(CX, 100)} ${pt(CX + 86, 112)}`, "#E7B43C", 3) + star5(CX, 70, 14, "#E7B43C", "#8A5F12");
+      }
       case "laurel": {
         // A wreath worn around the head at the hairline, whatever the hair volume.
         const y = 96;
@@ -888,7 +904,7 @@
   }
 
   // Item colours: fixed for special editions, the student's choice otherwise.
-  const topColors = (ctx) => ({ varsity: ["#22355E", "#F1E6CC"], podiumjacket: ["#E9ECF1", "#C9CED6"], circuithoodie: ["#123B40", "#123B40"] }[ctx.config.top] || [ctx.c.top, ctx.c.top]);
+  const topColors = (ctx) => ({ varsity: ["#22355E", "#F1E6CC"], podiumjacket: ["#E9ECF1", "#C9CED6"], circuithoodie: ["#123B40", "#123B40"], vest: [ctx.c.top, "#F3F0E9"] }[ctx.config.top] || [ctx.c.top, ctx.c.top]);
 
   function arms(ctx, sleeves) {
     const { c } = ctx;
@@ -907,6 +923,7 @@
     }
     if (ctx.config.top === "podiumjacket") for (const s of [-1, 1]) out += line(`M${pt(CX + s * (b.sh - 2), 300)} L${pt(CX + s * (b.sh + 12), 398)}`, "#E7B43C", 4) + line(`M${pt(CX + s * (b.sh + 6), 300)} L${pt(CX + s * (b.sh + 20), 396)}`, "#C98A4B", 3);
     if (ctx.config.top === "varsity") for (const s of [-1, 1]) { const [hx, hy] = handPos(ctx, s); out += line(`M${pt(hx - b.arm + 1, hy - 26)} h${n(b.arm * 2 - 2)}`, "#22355E", 4) + line(`M${pt(hx - b.arm + 1, hy - 32)} h${n(b.arm * 2 - 2)}`, "#E7B43C", 2.4); }
+    if (ctx.config.top === "track") for (const s of [-1, 1]) out += line(`M${pt(CX + s * (b.sh + 2), 300)} L${pt(CX + s * (b.sh + 16), 400)}`, light(sleeveCol, 0.7), 4);
     if (ctx.config.top === "circuithoodie") for (const s of [-1, 1]) out += line(`M${pt(CX + s * (b.sh + 2), 320)} l${n(s * 4)} 30 l${n(s * 8)} 6`, "#2EE6D6", 2.6);
     return out;
   }
@@ -944,6 +961,32 @@
         line(`M${pt(CX, 272)} V330`, seam, 2.4) + [286, 302, 318].map((y) => circle(CX + 4, y, 2.4, hi)).join("") + both(line(`M${pt(CX - b.hip - 12, 486)} l4 -40`, edge, 2.6)); break;
       case "dress": body = torsoPath(ctx, ctx.seated ? 500 : 566, ctx.seated ? 26 : 40); extra = line(`M${pt(CX - b.waist, WAIST_Y)} Q${pt(CX, WAIST_Y + 8)} ${pt(CX + b.waist, WAIST_Y)}`, seam, 5) +
         line(`M${pt(CX - 20, 264)} Q${pt(CX, 278)} ${pt(CX + 20, 264)}`, seam, 2.6) + both(line(`M${pt(CX - 30, 404)} Q${pt(CX - 40, 450)} ${pt(CX - 56, ctx.seated ? 494 : 560)}`, seam, 2.4, ' opacity="0.7"')); break;
+      case "abaya": {
+        const hem = ctx.seated ? 500 : 572;
+        body = torsoPath(ctx, hem, ctx.seated ? 24 : 44, "open");
+        const under = dark(bodyCol, 0.28);
+        extra = path(`M${pt(CX - 24, 268)} L${pt(CX + 24, 268)} L${pt(CX + 32, hem - 2)} Q${pt(CX, hem + 4)} ${pt(CX - 32, hem - 2)} Z`, ctx.shade("abaya-in", under, 0.1), dark(under, 0.5), 2.4) +
+          both(line(`M${pt(CX - 25, 268)} L${pt(CX - 34, hem - 2)}`, light(bodyCol, 0.45), 4)) +
+          both(line(`M${pt(CX - 46, 420)} Q${pt(CX - 56, (hem + 420) / 2)} ${pt(CX - 66, hem - 4)}`, dark(bodyCol, 0.2), 2.4, ' opacity="0.6"'));
+        break;
+      }
+      case "thobe": {
+        const hem = ctx.seated ? 500 : 568;
+        body = torsoPath(ctx, hem, ctx.seated ? 18 : 26);
+        extra = path(`M${pt(CX - 20, 264)} Q${pt(CX, 274)} ${pt(CX + 20, 264)} L${pt(CX + 20, 254)} Q${pt(CX, 264)} ${pt(CX - 20, 254)} Z`, ctx.shade("thobe-c", dark(bodyCol, 0.05)), edge, 2.4) +
+          line(`M${pt(CX, 272)} V344`, seam, 2.4) + [286, 304, 322].map((y) => circle(CX + 4, y, 2.4, dark(bodyCol, 0.3))).join("") +
+          path(`M${pt(CX + 26, 306)} h20 v18 q-10 4 -20 0 Z`, "none", seam, 2) +
+          both(line(`M${pt(CX - 34, 420)} Q${pt(CX - 40, (hem + 420) / 2)} ${pt(CX - 46, hem - 4)}`, seam, 2.2, ' opacity="0.55"'));
+        break;
+      }
+      case "vest": body = torsoPath(ctx, 412, 0, "v"); extra = both(path(`M${pt(CX - 24, 264)} L${pt(CX - 4, 292)} L${pt(CX - 30, 296)} L${pt(CX - 38, 270)} Z`, ctx.shade("vest-collar", "#F3F0E9", 0.08), "#9A958B", 2.2)) +
+        path(`M${pt(CX - 22, 268)} L${pt(CX, 330)} L${pt(CX + 22, 268)} Z`, "#F3F0E9", "#9A958B", 2) +
+        [-34, -14, 6, 26].map((dx) => line(`M${pt(CX + dx, 352)} l5 7 l5 -7`, seam, 2, ' opacity="0.65"')).join("") +
+        line(`M${pt(CX - b.hip, 402)} Q${pt(CX, 408)} ${pt(CX + b.hip, 402)}`, seam, 4); break;
+      case "track": body = torsoPath(ctx, 416); extra = line(`M${pt(CX, 270)} V414`, dark(bodyCol, 0.4), 3) + line(`M${pt(CX - 4, 270)} V414`, light(bodyCol, 0.5), 1.4, ' stroke-dasharray="2 3"') +
+        path(`M${pt(CX - 24, 262)} L${pt(CX + 24, 262)} L${pt(CX + 28, 280)} L${pt(CX - 28, 280)} Z`, ctx.shade("track-c", dark(bodyCol, 0.1)), edge, 2.4) +
+        both(line(`M${pt(CX - b.sh + 4, 300)} L${pt(CX - b.waist + 2, 402)}`, light(bodyCol, 0.7), 4)) +
+        path(`M${pt(CX - b.hip, 402)} Q${pt(CX, 410)} ${pt(CX + b.hip, 402)} L${pt(CX + b.hip, 416)} Q${pt(CX, 422)} ${pt(CX - b.hip, 416)} Z`, dark(bodyCol, 0.2), edge, 2); break;
       case "varsity": body = torsoPath(ctx, 416, 0, "open"); extra = inner("#F3F0E9") + both(line(`M${pt(CX - 24, 270)} L${pt(CX - 22, 410)}`, "#E7B43C", 5)) + [308, 334, 360, 386].map((y) => circle(CX - 30, y, 3, "#F1E6CC")).join("") +
         path(`M${pt(CX - b.hip - 2, 402)} Q${pt(CX, 410)} ${pt(CX + b.hip + 2, 402)} L${pt(CX + b.hip + 2, 418)} Q${pt(CX, 424)} ${pt(CX - b.hip - 2, 418)} Z`, "#22355E", "#0E1A33", 2.4) + line(`M${pt(CX - b.hip, 410)} Q${pt(CX, 416)} ${pt(CX + b.hip, 410)}`, "#E7B43C", 2.4) +
         path(`M${pt(CX + 34, 300)} h30 v34 h-30 Z`, "#F1E6CC", "#E7B43C", 3) + `<text x="${CX + 49}" y="326" text-anchor="middle" font-family="Impact, Arial Black, sans-serif" font-size="24" fill="#22355E">A</text>`; break;
@@ -971,6 +1014,11 @@
     // Skin shins (visible under skirts) and shoes are drawn by the caller.
     if (ctx.seated) {
       const lapTop = 390;
+      if (kind === "shorts" && !coveredByDress) {
+        const knees = [-1, 1].map((s) => tube(`M${pt(lx(s), 446)} L${pt(lx(s) + s * 2, ankle)}`, b.leg * 2 - 6, ctx.skinFlat, c.skinLine)).join("");
+        const lapShort = path(`M${pt(CX - b.hip - 4, lapTop)} L${pt(CX + b.hip + 4, lapTop)} C${pt(CX + b.hip + 14, 416)} ${pt(CX + b.hip + 12, 444)} ${pt(CX + b.hip - 6, 448)} L${pt(CX - b.hip + 6, 448)} C${pt(CX - b.hip - 12, 444)} ${pt(CX - b.hip - 14, 416)} ${pt(CX - b.hip - 4, lapTop)} Z`, fill, edge, 3);
+        return { under: knees, over: lapShort };
+      }
       const kneeY = 452;
       const shins = (fillShin, edgeShin, width = b.leg * 2) => [-1, 1].map((s) => tube(`M${pt(lx(s), kneeY - 6)} L${pt(lx(s) + s * 2, ankle)}`, width, fillShin, edgeShin)).join("");
       if (coveredByDress) return { under: shins(ctx.skinFlat, c.skinLine, b.leg * 2 - 6), over: "" };
@@ -989,7 +1037,15 @@
         both(line(`M${pt(CX - 20, 404)} Q${pt(CX - 26, (hem + 404) / 2)} ${pt(CX - 34, hem - 4)}`, seam, 2.4, ' opacity="0.7"'));
       return { under: "", over: out };
     }
-    const widen = { wide: 12, jeans: 0, chinos: 0, joggers: -2, cargo: 2 }[kind] ?? 0;
+    if (kind === "shorts") {
+      // Knee-length: shins below the hem are skin.
+      out += [-1, 1].map((s) => tube(`M${pt(lx(s), 486)} L${pt(lx(s), ankle)}`, b.leg * 2 - 8, ctx.skinFlat, c.skinLine)).join("");
+      const hemY = 500;
+      out += path(`M${pt(CX - b.waist - 2, WAIST_Y)} L${pt(CX + b.waist + 2, WAIST_Y)} C${pt(CX + b.hip + 6, 430)} ${pt(CX + b.hip + 6, 470)} ${pt(lx(1) + b.leg + 6, hemY)} L${pt(lx(1) - b.leg - 2, hemY)} L${pt(CX + 3, 466)} L${pt(CX - 3, 466)} L${pt(lx(-1) + b.leg + 2, hemY)} L${pt(lx(-1) - b.leg - 6, hemY)} C${pt(CX - b.hip - 6, 470)} ${pt(CX - b.hip - 6, 430)} ${pt(CX - b.waist - 2, WAIST_Y)} Z`, fill, edge, 3) +
+        both(line(`M${pt(lx(-1) - b.leg - 4, hemY - 8)} h${n(b.leg * 2 + 8)}`, seam, 2.4));
+      return { under: "", over: out };
+    }
+    const widen = { wide: 12, jeans: 0, chinos: 0, joggers: -2, cargo: 2, pleated: 8, leggings: -5 }[kind] ?? 0;
     const crotch = 472;
     const d = `M${pt(CX - b.waist - 2, WAIST_Y)} L${pt(CX + b.waist + 2, WAIST_Y)} C${pt(CX + b.hip + 6, 430)} ${pt(CX + b.hip + 4, 460)} ${pt(lx(1) + b.leg + widen, ankle)} ` +
       `L${pt(lx(1) - b.leg - widen * 0.4, ankle)} L${pt(CX + 3, crotch)} L${pt(CX - 3, crotch)} L${pt(lx(-1) + b.leg + widen * 0.4, ankle)} L${pt(lx(-1) - b.leg - widen, ankle)} ` +
@@ -998,6 +1054,8 @@
     if (kind === "jeans") out += both(line(`M${pt(CX - b.waist + 2, WAIST_Y + 6)} Q${pt(CX - b.waist + 20, 416)} ${pt(CX - 14, WAIST_Y + 6)}`, light(col, 0.35), 2, ' stroke-dasharray="3 3"'));
     if (kind === "chinos") out += both(line(`M${pt(lx(-1), 460)} V${n(ankle - 6)}`, seam, 2, ' opacity="0.5"'));
     if (kind === "joggers") out += both(path(`M${pt(lx(-1) - b.leg - 1, ankle - 14)} h${n(b.leg * 2 + 2)} v14 h${n(-b.leg * 2 - 2)} Z`, seam, edge, 2)) + line(`M${pt(CX - 8, WAIST_Y + 4)} l-4 22 M${pt(CX + 8, WAIST_Y + 4)} l4 22`, light(col, 0.5), 2.4);
+    if (kind === "pleated") out += both(line(`M${pt(lx(-1) - 4, WAIST_Y + 6)} L${pt(lx(-1) - 2, ankle - 4)} M${pt(lx(-1) + 8, WAIST_Y + 6)} l2 40`, seam, 2.2, ' opacity="0.7"'));
+    if (kind === "leggings") out += both(line(`M${pt(lx(-1) - b.leg + 4, 470)} V${n(ankle - 4)}`, light(col, 0.3), 2, ' opacity="0.6"'));
     if (kind === "cargo") out += both(path(`M${pt(lx(-1) - b.leg - 4, 480)} h22 v28 h-22 Z`, ctx.shade("cargo", dark(col, 0.06)), edge, 2.4));
     return { under: "", over: out };
   }
@@ -1015,12 +1073,20 @@
     for (const s of [-1, 1]) {
       const x = CX + s * (b.hip * 0.5 + (ctx.seated ? 2 : 0)) + s * 4;
       const y = soleY(ctx);
-      const tall = kind === "boots" ? 34 : kind === "hightops" ? 26 : kind === "flats" || kind === "loafers" ? 12 : 18;
+      if (kind === "sandals") {
+        // Open sandals: the foot shows, with two straps and a sole.
+        out += path(`M${pt(x - 22, y - 4)} C${pt(x - 22, y - 14)} ${pt(x - 10, y - 20)} ${pt(x, y - 20)} C${pt(x + 14, y - 20)} ${pt(x + 24, y - 12)} ${pt(x + 24, y - 4)} Z`, ctx.skinFlat, ctx.c.skinLine, 2.6) +
+          path(`M${pt(x - 25, y - 6)} H${n(x + 27)} V${n(y)} H${n(x - 24)} Z`, dark(col, 0.2), edge, 2) +
+          line(`M${pt(x - 18, y - 10)} Q${pt(x, y - 18)} ${pt(x + 20, y - 10)} M${pt(x - 6, y - 18)} L${pt(x + 4, y - 6)}`, col, 4);
+        continue;
+      }
+      const tall = kind === "boots" ? 34 : kind === "hightops" ? 26 : kind === "flats" || kind === "loafers" ? 12 : kind === "slipons" ? 14 : 18;
       out += path(`M${pt(x - 24, y)} C${pt(x - 26, y - tall)} ${pt(x - 14, y - tall - 6)} ${pt(x, y - tall - 6)} C${pt(x + 16, y - tall - 6)} ${pt(x + 28, y - tall + 4)} ${pt(x + 26, y)} Z`, fill, edge, 3);
       if (["sneakers", "hightops", "elite", "gold"].includes(kind)) out += path(`M${pt(x - 25, y - 6)} H${n(x + 27)} V${n(y)} H${n(x - 24)} Z`, accent, edge, 2) + line(`M${pt(x - 8, y - tall)} l14 0 M${pt(x - 8, y - tall + 6)} l14 0`, accent, 2.4);
       if (kind === "elite") out += line(`M${pt(x - 20, y - 12)} Q${pt(x, y - 20)} ${pt(x + 20, y - 12)}`, "#E7B43C", 3);
       if (kind === "gold") out += star5(x + s * 6, y - 18, 6, "#FFF3CF", "#8A5F12");
       if (kind === "loafers") out += line(`M${pt(x - 10, y - 12)} h20`, accent, 3);
+      if (kind === "slipons") out += path(`M${pt(x - 25, y - 5)} H${n(x + 27)} V${n(y)} H${n(x - 24)} Z`, "#F3F0E9", edge, 2) + line(`M${pt(x - 4, y - 18)} l6 8`, dark(col, 0.35), 2.4);
       if (kind === "boots") out += line(`M${pt(x - 20, y - 26)} h42`, accent, 3);
     }
     return out;
@@ -1044,6 +1110,15 @@
           path(`M${pt(CX + 10, 296)} L${pt(CX + 42, 292)} L${pt(CX + 40, 380)} L${pt(CX + 10, 384)} Z`, fill, edge, 3) + stripes +
           line(`M${pt(CX + 12, 378)} v8 M${pt(CX + 20, 378)} v8 M${pt(CX + 28, 377)} v8 M${pt(CX + 36, 377)} v8`, edge, 2);
       }
+      case "tie":
+        return path(`M${pt(CX - 8, 270)} h16 l-3 12 h-10 Z`, ctx.shade("tie-k", dark(col, 0.08)), dark(col, 0.55), 2.2) +
+          path(`M${pt(CX - 5, 282)} h10 l9 76 l-14 16 l-14 -16 Z`, ctx.shade("tie", col, 0.16), dark(col, 0.55), 2.4) +
+          line(`M${pt(CX - 6, 300)} l12 -8 M${pt(CX - 8, 324)} l16 -10 M${pt(CX - 10, 348)} l20 -12`, light(col, 0.35), 2, ' opacity="0.7"');
+      case "lanyard":
+        return line(`M${pt(CX - 32, 268)} L${pt(CX - 6, 360)} M${pt(CX + 32, 268)} L${pt(CX + 6, 360)}`, dark(col, 0.45), 7) +
+          line(`M${pt(CX - 32, 268)} L${pt(CX - 6, 360)} M${pt(CX + 32, 268)} L${pt(CX + 6, 360)}`, col, 4) +
+          `<rect x="${CX - 18}" y="360" width="36" height="46" rx="5" fill="#F3F0E9" stroke="#5B6472" stroke-width="2.4"/>` +
+          `<rect x="${CX - 18}" y="360" width="36" height="12" rx="5" fill="${col}"/>` + circle(CX, 388, 7, "#C9CED6") + line(`M${pt(CX - 10, 400)} h20`, "#9AA2AE", 2.4);
       case "medal":
         return line(`M${pt(CX - 30, 268)} L${pt(CX, 336)} L${pt(CX + 30, 268)}`, "#22355E", 12) + line(`M${pt(CX - 30, 268)} L${pt(CX, 336)} L${pt(CX + 30, 268)}`, "#C6433B", 6) +
           circle(CX, 350, 20, ctx.radial("medal", [[0, "#FFF0B5"], [0.6, "#E7B43C"], [1, "#B9822A"]], 0.4, 0.35), "#8A5F12", 3) + star5(CX, 350, 10, "#FFF3CF", "#8A5F12");
@@ -1082,6 +1157,12 @@
       const [hx] = handPos(ctx, -1);
       return line(`M${pt(CX + 30, 270)} L${pt(hx + 14, 400)}`, dark(col, 0.55), 9) + line(`M${pt(CX + 30, 270)} L${pt(hx + 14, 400)}`, col, 5) +
         path(`M${pt(hx - 22, 392)} h48 l4 54 h-56 Z`, ctx.shade("tote", col), dark(col, 0.55), 3) + path(`M${pt(hx - 8, 410)} h20 v16 h-20 Z`, light(col, 0.4), null, 0, ' opacity="0.7"');
+    }
+    if (kind === "messenger") {
+      const col = ctx.c.back;
+      return line(`M${pt(CX - 34, 270)} L${pt(CX + b.hip + 6, 404)}`, dark(col, 0.55), 11) + line(`M${pt(CX - 34, 270)} L${pt(CX + b.hip + 6, 404)}`, col, 7) +
+        path(`M${pt(CX + b.hip - 18, 388)} h52 v42 q-26 6 -52 0 Z`, ctx.shade("msg", col), dark(col, 0.55), 3) +
+        path(`M${pt(CX + b.hip - 18, 388)} h52 v18 q-26 6 -52 0 Z`, ctx.shade("msg2", dark(col, 0.1)), dark(col, 0.55), 2.4) + circle(CX + b.hip + 8, 404, 3, "#C9CED6");
     }
     if (kind === "cape") return both(circle(CX - 34, 272, 8, "#E7B43C", "#8A5F12", 2.4)) + line(`M${pt(CX - 34, 272)} Q${pt(CX, 282)} ${pt(CX + 34, 272)}`, "#E7B43C", 3);
     return "";
