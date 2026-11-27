@@ -559,15 +559,15 @@
     const focusable = [...container.querySelectorAll("button, input, select, a[href]")]
       .filter((element) => !element.disabled && element.getClientRects().length > 0);
     if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
+    // Move focus ourselves: Safari's default Tab order skips buttons and links,
+    // so waiting for the browser to reach the first/last control let focus
+    // escape the dialog there.
+    event.preventDefault();
+    const index = focusable.indexOf(document.activeElement);
+    const next = event.shiftKey
+      ? (index <= 0 ? focusable.length - 1 : index - 1)
+      : (index === -1 || index === focusable.length - 1 ? 0 : index + 1);
+    focusable[next].focus();
   }
 
   function openLogin() {

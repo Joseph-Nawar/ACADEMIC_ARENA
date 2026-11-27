@@ -178,6 +178,25 @@
      </div>
      <ul id="links-errors" class="staff-errors"></ul>
     </section>
+    <section class="staff-panel" id="staff-rewards" hidden aria-labelledby="rewards-heading">
+     <h2 class="sheet-title" id="rewards-heading">VERIFIED <em>REWARDS</em></h2>
+     <p class="staff-note">Administrator-only. Rewards come only from a published ranking's verified account links, never from names: Top 10 earns the Elite collection, Top 3 adds Podium, first place adds Champion. A student's character can stay private and they still earn. Use one earning period for a week, including its corrections and rollbacks (for example <code>2026-27:week-05</code>), so nothing is granted twice. The preview shows counts only and grants nothing. Processing is refused until the database owner switches cosmetic rewards on.</p>
+     <form id="rewards-form" class="staff-form">
+      <div class="staff-field"><label for="rewards-publication">Publication</label><select id="rewards-publication" required></select></div>
+      <div class="staff-field"><label for="rewards-period">Earning period</label><input id="rewards-period" required pattern="[a-z0-9][a-z0-9._:\-]{2,63}" maxlength="64" autocomplete="off" spellcheck="false" /></div>
+      <div class="staff-field"><label for="rewards-label">Label students see</label><input id="rewards-label" required maxlength="48" autocomplete="off" /></div>
+      <button class="button-solid" type="submit">PREVIEW REWARDS</button>
+     </form>
+     <div id="rewards-preview" class="staff-preview" hidden>
+      <h3>PREVIEW · NOTHING GRANTED YET</h3>
+      <ul id="rewards-summary"></ul>
+      <ul id="rewards-warnings" class="staff-errors"></ul>
+      <div class="staff-actions"><button class="button-solid" type="button" id="rewards-grant">GRANT REWARDS</button><button class="outline-btn" type="button" id="rewards-reconcile">RECONCILE (CORRECTION)</button></div>
+      <p class="staff-note">Grant adds what is missing and never removes anything. Reconcile is for a corrected publication of the same period: it also revokes this period's rewards the corrected results no longer support (recorded with a reason), and swaps any revoked item a student is wearing for a free one.</p>
+     </div>
+     <h3>EARNING PERIODS</h3>
+     <ul id="rewards-periods"></ul>
+    </section>
     <section class="staff-panel" id="staff-accounts" hidden aria-labelledby="names-heading">
      <h2 class="sheet-title" id="names-heading">APPROVED <em>PUBLIC NAMES</em></h2>
      <p class="staff-note">Students cannot choose or edit their public name. Set the approved display name used on Campus Wins.</p>

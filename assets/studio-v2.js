@@ -701,14 +701,24 @@
       Date.now() - Date.parse(grant.grantedAt) < 14 * 24 * 3600 * 1000);
     const fresh = [...new Set(recent.map((grant) => grant.collection))];
     newItems = [...new Set([...newItems.filter((key) => owned().has(key)), ...fresh.flatMap((name) => C.itemsInCollection(name))])];
-    if (fresh.length) {
-      write(KEYS.seen, [...seen, ...recent.map((grant) => `${grant.collection}:${grant.period}`)].slice(-100));
-      queueMicrotask(() => celebrate(fresh, fresh.flatMap((name) => C.itemsInCollection(name))));
-    }
+    if (fresh.length) pendingCelebration = { fresh, keys: recent.map((grant) => `${grant.collection}:${grant.period}`) };
     if (first) applyLook(activeLook === "classic" ? "classic" : "v2");
     else applyLook(editor);
     headerPortrait();
     renderAll();
+    maybeCelebrate();
+  }
+
+  // A real grant is celebrated once, when the student is actually looking at
+  // My Character (rewards are custom-look items, so the custom editor opens).
+  let pendingCelebration = null;
+  function maybeCelebrate() {
+    if (!pendingCelebration || store !== "server" || $("page-avatar")?.hidden !== false) return;
+    const { fresh, keys } = pendingCelebration;
+    pendingCelebration = null;
+    write(KEYS.seen, [...seenGrants(), ...keys].slice(-100));
+    applyLook("v2");
+    celebrate(fresh, fresh.flatMap((name) => C.itemsInCollection(name)));
   }
 
   async function loadServer({ keepDraft = false, first = false, quiet = false } = {}) {
@@ -747,6 +757,7 @@
     $("v2-show-public").checked = false;
     $("v2-show-wins").checked = false;
     if (wasServer) forget(KEYS.seen);
+    pendingCelebration = null;
     $("v2-celebrate").hidden = true;
     root.hidden = true;
     $("look-switch").hidden = true;
@@ -889,6 +900,7 @@
     document.querySelectorAll('[data-page="avatar"]').forEach((link) => link.addEventListener("click", () => {
       if (store === "server" && viewedOnce) void loadServer({ keepDraft: true, quiet: true });
       viewedOnce = true;
+      maybeCelebrate();
     }));
   }
 

@@ -172,6 +172,11 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.deepEqual(errors, []);
   await page.close();
 
+  // Playwright's WebKit driver cannot fulfill a 3xx response, so this check
+  // runs on Chromium (the default gate, unchanged) and is reported on WebKit.
+  const engine = browser.browserType?.().name?.() ?? "chromium";
+  if (engine === "webkit") console.log("NOTE (webkit): login-redirect fail-closed check runs in the Chromium suite only (Playwright WebKit cannot fulfill 307).");
+  else {
   const redirectPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   let loginPostBody = null;
   const redirectTargetBodies = [];
@@ -201,6 +206,7 @@ export async function runProductionBrowserTests(browser, baseUrl, root) {
   assert.equal(loginPostBody, JSON.stringify({ username: "fictional-student", password: "fictional-only-password" }));
   assert.deepEqual(redirectTargetBodies, [], "login credentials must not reach the redirect target");
   await redirectPage.close();
+  }
 
   const emptyBoardPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   let catalogRequests = 0;

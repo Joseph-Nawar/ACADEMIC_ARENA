@@ -1,4 +1,4 @@
-/* Staff desk: ranking publication and Campus Wins moderation. Authorization is
+/* Staff desk: ranking publication, verified rewards and Campus Wins moderation. Authorization is
    enforced by the server; this file only decides which panels to show. */
 (() => {
   "use strict";
@@ -550,6 +550,115 @@
     }
   }
 
+  // ---------- verified rewards (AAL2 admin) ----------
+  const COLLECTION_LABELS = { elite: "Elite (Top 10)", podium: "Podium (Top 3)", champion: "Champion (1st)" };
+  let rewardsPreviewFor = "";
+  const slug = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 40);
+
+  async function loadRewardPublications() {
+    const select = $("rewards-publication");
+    select.replaceChildren();
+    try {
+      const publications = (await api.staff.publicationHistory()).filter((item) => item.format === "level_only" && item.state !== "draft");
+      for (const item of publications) {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = `v${item.version} · ${item.releaseLabel || ""} · ${stateLabels[item.state]}`;
+        option.dataset.period = `${slug(item.academicYear)}:${slug(item.releaseLabel) || "v" + item.version}`;
+        option.dataset.label = item.releaseLabel || `Version ${item.version}`;
+        select.append(option);
+      }
+      suggestPeriod();
+      await loadRewardPeriods();
+    } catch (error) {
+      failure(error, "Publications are unavailable.");
+    }
+  }
+
+  // A suggestion only: staff confirm the period, which must stay the same for corrections.
+  function suggestPeriod() {
+    const option = $("rewards-publication").selectedOptions[0];
+    if (!option) return;
+    $("rewards-period").value = option.dataset.period;
+    $("rewards-label").value = option.dataset.label;
+    $("rewards-preview").hidden = true;
+    rewardsPreviewFor = "";
+  }
+
+  async function loadRewardPeriods() {
+    const list = $("rewards-periods");
+    list.replaceChildren();
+    try {
+      const periods = await api.staff.rewardPeriods();
+      if (!periods.length) list.append(listItem([textNode("span", "No rewards processed yet.")]));
+      for (const period of periods) {
+        const active = Object.entries(period.active || {}).map(([name, count]) => `${COLLECTION_LABELS[name] || name}: ${count}`).join(" · ") || "no active grants";
+        list.append(listItem([
+          textNode("strong", period.key),
+          textNode("span", `${period.label} · versions ${period.versions.map((version) => "v" + version).join(", ") || "none"} · ${active} · revoked ${period.revoked}`),
+        ]));
+      }
+    } catch (error) {
+      if (error?.code !== "forbidden") failure(error, "Reward history is unavailable.");
+    }
+  }
+
+  async function previewRewards(event) {
+    event.preventDefault();
+    $("rewards-preview").hidden = true;
+    rewardsPreviewFor = "";
+    const publicationId = $("rewards-publication").value;
+    const periodKey = $("rewards-period").value.trim();
+    try {
+      const preview = await api.staff.previewRewards(publicationId, periodKey);
+      const summary = $("rewards-summary");
+      summary.replaceChildren();
+      summary.append(textNode("li", `Publication v${preview.publication.version} · ${preview.publication.label || ""}${preview.publication.current ? " (live)" : ""} → period ${periodKey}${preview.period.exists ? ` (already used by ${preview.period.versions.map((v) => "v" + v).join(", ") || "no publication"})` : " (new)"}`));
+      summary.append(textNode("li", `${preview.rows} ranked rows · ${preview.linked} verified links · ${preview.eligibleStudents} eligible students`));
+      for (const [name, counts] of Object.entries(preview.collections)) {
+        summary.append(textNode("li", `${COLLECTION_LABELS[name] || name}: ${counts.newGrants} new · ${counts.alreadyGranted} already granted · ${counts.previouslyRevoked} previously revoked · ${counts.wouldRevoke} would be revoked by reconcile`));
+      }
+      summary.append(textNode("li", `Excluded: ${preview.exclusions.unlinked} rows without a verified link · ${preview.exclusions.inactiveAccounts} linked accounts not active`));
+      const warnings = $("rewards-warnings");
+      warnings.replaceChildren();
+      if (preview.conflicts.snapshotBoundElsewhere) warnings.append(textNode("li", `This publication was already processed for period ${preview.conflicts.snapshotBoundToPeriod}. Use that period; a different one is refused.`));
+      if (preview.conflicts.periodSourceMismatch) warnings.append(textNode("li", "That period belongs to another kind of reward. Choose another period key."));
+      if (!preview.rewardsSwitchOn) warnings.append(textNode("li", "Cosmetic rewards are switched off. This preview is all that can happen until the database owner switches them on after approval."));
+      const blocked = !preview.rewardsSwitchOn || preview.conflicts.snapshotBoundElsewhere || preview.conflicts.periodSourceMismatch;
+      $("rewards-grant").disabled = blocked;
+      $("rewards-reconcile").disabled = blocked;
+      rewardsPreviewFor = `${publicationId}|${periodKey}`;
+      $("rewards-preview").hidden = false;
+      status("Reward preview ready. Nothing has been granted.", "ready");
+    } catch (error) {
+      failure(error, "The reward preview is unavailable. Check the period key (letters, digits, . _ : -).");
+    }
+  }
+
+  async function processRewards(mode) {
+    const publicationId = $("rewards-publication").value;
+    const periodKey = $("rewards-period").value.trim();
+    if (rewardsPreviewFor !== `${publicationId}|${periodKey}`) {
+      status("Preview this publication and period first.", "unavailable");
+      return;
+    }
+    const prompt = mode === "reconcile"
+      ? `Reconcile period ${periodKey} with this publication? Rewards it no longer supports are revoked (with a recorded reason) and worn revoked items are swapped for free ones.`
+      : `Grant the previewed rewards for period ${periodKey}? This cannot grant anything twice.`;
+    if (!window.confirm(prompt)) return;
+    try {
+      const result = await api.staff.processRewards({ publicationId, periodKey, periodLabel: $("rewards-label").value.trim(), mode });
+      status(`Done: ${result.granted} granted, ${result.regranted} restored, ${result.revoked} revoked, ${result.equippedFallbacks} worn item(s) swapped.`, "ready");
+      $("rewards-preview").hidden = true;
+      rewardsPreviewFor = "";
+      await loadRewardPeriods();
+    } catch (error) {
+      const messages = { rewards_not_enabled: "Cosmetic rewards are switched off. Nothing was granted.", period_conflict: "This publication belongs to another earning period. Nothing was granted." };
+      if (messages[error?.code]) status(messages[error.code], "unavailable");
+      else failure(error, "Processing failed. Nothing was granted.");
+    }
+  }
+
   function bind() {
     if (bound) return;
     bound = true;
@@ -567,6 +676,11 @@
     $("approve-links").addEventListener("click", approveLinks);
     $("links-publication").addEventListener("change", () => void loadCurrentLinks());
     $("download-links").addEventListener("click", downloadCurrentLinks);
+    $("rewards-form").addEventListener("submit", previewRewards);
+    $("rewards-publication").addEventListener("change", suggestPeriod);
+    $("rewards-period").addEventListener("input", () => { $("rewards-preview").hidden = true; rewardsPreviewFor = ""; });
+    $("rewards-grant").addEventListener("click", () => void processRewards("grant"));
+    $("rewards-reconcile").addEventListener("click", () => void processRewards("reconcile"));
     document.querySelectorAll("[data-queue]").forEach((element) => element.addEventListener("click", () => setQueue(element.dataset.queue)));
     $("staff-nav").addEventListener("click", () => {
       if (canPublish) void loadHistory();
@@ -587,9 +701,10 @@
     $("staff-moderation").hidden = !canModerate;
     $("staff-accounts").hidden = !(verifiedStaff && user.role === "admin");
     $("staff-links").hidden = !(verifiedStaff && user.role === "admin");
+    $("staff-rewards").hidden = !(verifiedStaff && user.role === "admin");
     $("staff-artwork").hidden = !canPublish;
     if (canPublish) void loadArtworkPublications();
-    if (verifiedStaff && user.role === "admin") void loadLinkPublications();
+    if (verifiedStaff && user.role === "admin") { void loadLinkPublications(); void loadRewardPublications(); }
     if (!verifiedStaff) {
       if (!$("page-staff").hidden) showPage("leaderboard");
       return;

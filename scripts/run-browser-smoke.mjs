@@ -4,13 +4,24 @@ import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
 import { runDemoBrowserTests, runProductionBrowserTests } from "../tests/browser/m1-foundation.spec.mjs";
 import { runM2AuthBrowserTests } from "../tests/browser/m2-auth.spec.mjs";
 import { runAccountUxBrowserTests } from "../tests/browser/v15-account-ux.spec.mjs";
 import { runBoardCharacterBrowserTests } from "../tests/browser/board-characters.spec.mjs";
 import { runPublicCharacterBrowserTests } from "../tests/browser/v17-public-character.spec.mjs";
 import { runCharacterStudioV2DemoTests, runCharacterStudioV2ProductionTests } from "../tests/browser/v2-character-studio.spec.mjs";
+import { runCharacterServerTests, runStaffDeskRaceTests } from "../tests/browser/b2-character-server.spec.mjs";
+
+// AA_BROWSER=webkit runs the same suite on the Safari engine (Playwright WebKit).
+const engines = { chromium, webkit };
+const engineName = process.env.AA_BROWSER || "chromium";
+if (!engines[engineName]) throw new Error("AA_BROWSER must be chromium or webkit.");
+// The real CSP carries upgrade-insecure-requests. Chromium exempts loopback
+// hosts; WebKit does not, so WebKit runs serve Wrangler over local HTTPS (its
+// self-signed certificate, trusted only for these loopback test contexts).
+const useHttps = engineName === "webkit";
+if (useHttps) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"; // loopback readiness checks only
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const wrangler = join(root, "node_modules", "wrangler", "bin", "wrangler.js");
@@ -36,11 +47,12 @@ async function startPages() {
     "--inspector-port", "0",
     "--log-level", "error",
     "--show-interactive-dev-session", "false",
+    ...(useHttps ? ["--local-protocol", "https"] : []),
   ], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   let logs = "";
   child.stdout.on("data", (chunk) => { logs = (logs + chunk.toString()).slice(-10000); });
   child.stderr.on("data", (chunk) => { logs = (logs + chunk.toString()).slice(-10000); });
-  const baseUrl = "http://127.0.0.1:" + port;
+  const baseUrl = (useHttps ? "https" : "http") + "://127.0.0.1:" + port;
   const startedAt = Date.now();
   while (Date.now() - startedAt < 20000) {
     if (child.exitCode !== null) throw new Error("Wrangler Pages exited early:\n" + logs);
@@ -69,7 +81,15 @@ function build(mode) {
 }
 
 await mkdir(join(root, "test-results"), { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const launched = await engines[engineName].launch({ headless: true });
+// Every context accepts the loopback self-signed certificate on WebKit runs.
+const browser = useHttps ? {
+  newContext: (options = {}) => launched.newContext({ ...options, ignoreHTTPSErrors: true }),
+  newPage: (options = {}) => launched.newPage({ ...options, ignoreHTTPSErrors: true }),
+  close: () => launched.close(),
+  browserType: () => launched.browserType(),
+  version: () => launched.version(),
+} : launched;
 let server;
 try {
   server = await startPages();
@@ -86,7 +106,9 @@ try {
   await runBoardCharacterBrowserTests(browser, server.baseUrl);
   await runPublicCharacterBrowserTests(browser, server.baseUrl, root);
   await runCharacterStudioV2ProductionTests(browser, server.baseUrl);
-  console.log("PASS: Wrangler Pages demo, production-unavailable, filters, avatar, Campus Wins, authentication states, headers, and desktop/mobile checks.");
+  await runCharacterServerTests(browser, server.baseUrl, root);
+  await runStaffDeskRaceTests(browser, server.baseUrl);
+  console.log(`PASS (${engineName}): Wrangler Pages demo, production-unavailable, filters, avatar, Campus Wins, authentication states, headers, and desktop/mobile checks.`);
 } finally {
   await stopPages(server);
   await browser.close();

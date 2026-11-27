@@ -6,6 +6,17 @@ import { join } from "node:path";
 
 const ready = (page) => page.waitForFunction(() => document.documentElement.dataset.appReady === "true", null, { timeout: 5000 });
 
+// Playwright's screenshot injects its own stylesheet (to hide the caret); the
+// strict CSP blocks it and WebKit logs that. Only while a screenshot is taken
+// is exactly that message dropped, so app CSP violations still fail the test.
+const PLAYWRIGHT_STYLE = /^Refused to apply a stylesheet because its hash, its nonce, or 'unsafe-inline' does not appear in the style-src directive/;
+async function shot(page, errors, options) {
+  const before = errors.length;
+  await page.screenshot(options);
+  await page.waitForTimeout(50);
+  for (let index = errors.length - 1; index >= before; index -= 1) if (PLAYWRIGHT_STYLE.test(errors[index])) errors.splice(index, 1);
+}
+
 async function openStudio(browser, baseUrl, options) {
   const context = await browser.newContext(options);
   const page = await context.newPage();
@@ -58,7 +69,7 @@ export async function runCharacterStudioV2DemoTests(browser, baseUrl, root) {
     await page.waitForSelector("#v2-celebrate:not([hidden])");
     assert.equal(await page.evaluate(() => document.activeElement.id), "v2-celebrate-open", "focus moves into the dialog");
     assert.match(await page.locator("#v2-announce").textContent(), /Reward unlocked/);
-    await page.screenshot({ path: join(root, "test-results", "v2-desktop-celebrate.png") });
+    await shot(page, errors, { path: join(root, "test-results", "v2-desktop-celebrate.png") });
     await page.keyboard.press("Escape");
     assert.equal(await page.locator("#v2-celebrate").isHidden(), true);
     await page.selectOption("#v2-simulate", "3");
@@ -74,7 +85,7 @@ export async function runCharacterStudioV2DemoTests(browser, baseUrl, root) {
     assert.equal(await page.locator("#v2-saved").isVisible(), true);
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("arena-v2-demo-character")));
     assert.equal(stored.back, "cape");
-    await page.screenshot({ path: join(root, "test-results", "v2-desktop-wardrobe.png") });
+    await shot(page, errors, { path: join(root, "test-results", "v2-desktop-wardrobe.png") });
     await page.click("#v2-tab-pass");
     assert.ok(await page.locator(".v2-tier").count() >= 6);
     assert.match(await page.locator("#v2-pass-banner").textContent(), /isn't switched on/);
@@ -105,7 +116,7 @@ export async function runCharacterStudioV2DemoTests(browser, baseUrl, root) {
     await page.waitForSelector("#v2-celebrate:not([hidden])");
     assert.equal(await page.locator("#v2-confetti i").count(), 0, "no confetti with reduced motion");
     await page.click("#v2-celebrate-open");
-    await page.screenshot({ path: join(root, "test-results", "v2-mobile-wardrobe.png") });
+    await shot(page, errors, { path: join(root, "test-results", "v2-mobile-wardrobe.png") });
     assert.deepEqual(errors, []);
     await context.close();
   }

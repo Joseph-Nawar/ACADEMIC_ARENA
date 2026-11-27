@@ -16,6 +16,7 @@
     "supabase:stop": "node scripts/local-supabase.mjs stop",
     "test:m2:local": "node scripts/run-m2-local-tests.mjs",
     "test:browser": "npm run build:demo && node scripts/run-browser-smoke.mjs",
+    "test:browser:webkit": "npm run build:demo && AA_BROWSER=webkit node scripts/run-browser-smoke.mjs",
     "check:security": "npm run build:production && python3 scripts/check_secrets.py --root . && python3 scripts/check_secrets.py --root dist --public",
     "test:security": "python3 -m unittest discover -s tests -p test_check_secrets.py"
   },
