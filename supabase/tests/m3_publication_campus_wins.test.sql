@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(69);
+select plan(71);
 
 create function pg_temp.as_user(p_uid text, p_aal text) returns void language sql as $$
   select set_config('request.jwt.claim.sub', p_uid, true);
@@ -181,7 +181,7 @@ select throws_ok($$select public.submit_campus_win('helped')$$, 'AAW01', null, '
 select is((select status from public.my_campus_wins()), 'pending', 'student sees own submission status');
 reset role;
 set local role anon;
-select is((select count(*)::integer from public.campus_wins_public), 0, 'pending submissions are not public');
+select is((select count(*)::integer from public.public_campus_wins_v2(array['top3','workshop','project','helped'])), 0, 'pending submissions are not public');
 reset role;
 select pg_temp.as_user('10000000-0000-4000-8000-000000000084', 'aal1');
 set local role authenticated;
@@ -208,9 +208,15 @@ select throws_ok($$select public.moderate_campus_win((select id from post_one), 
   'a pending post cannot be hidden before approval');
 select is(public.moderate_campus_win((select id from post_one), 'approved'), 'approved', 'moderator approves');
 reset role;
-set local role anon;
+-- The approval still records the canonical name (and, for rollback only, the
+-- legacy look snapshot); the public read path shows the name and, without the
+-- separate Campus Wins consent (Release B2, issue #25), no character.
 select is((select row(public_author_name, avatar_key, avatar_family)::text from public.campus_wins_public),
-  row('Laila H.', 'amara', 'cartoon3d')::text, 'approved post uses the canonical name and saved avatar');
+  row('Laila H.', 'amara', 'cartoon3d')::text, 'approved post records the canonical name');
+set local role anon;
+select is((select row(public_author_name, avatar_key, character_v2)::text from public.public_campus_wins_v2(array['top3','workshop','project','helped'])),
+  row('Laila H.', null::text, null::jsonb)::text, 'the public projection shows the canonical name and no unconsented character');
+select throws_ok('select count(*) from public.campus_wins_public', '42501', null, 'the legacy table and its snapshot are not directly readable');
 reset role;
 select pg_temp.as_user('10000000-0000-4000-8000-000000000083', 'aal1');
 set local role authenticated;

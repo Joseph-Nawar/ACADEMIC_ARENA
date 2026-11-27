@@ -553,7 +553,9 @@
   // ---------- verified rewards (AAL2 admin) ----------
   const COLLECTION_LABELS = { elite: "Elite (Top 10)", podium: "Podium (Top 3)", champion: "Champion (1st)" };
   let rewardsPreviewFor = "";
-  const slug = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 40);
+  let rewardsPreview = null;
+  // Mirrors app_private.canonical_period_key (the database decides; this only pre-fills).
+  const slug = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/(^|[^0-9])0+([0-9])/gu, "$1$2").replace(/^-+|-+$/gu, "");
 
   async function loadRewardPublications() {
     const select = $("rewards-publication");
@@ -564,7 +566,7 @@
         const option = document.createElement("option");
         option.value = item.id;
         option.textContent = `v${item.version} · ${item.releaseLabel || ""} · ${stateLabels[item.state]}`;
-        option.dataset.period = `${slug(item.academicYear)}:${slug(item.releaseLabel) || "v" + item.version}`;
+        option.dataset.period = item.releaseLabel ? `${slug(item.academicYear)}:${slug(item.releaseLabel)}`.slice(0, 64) : "";
         option.dataset.label = item.releaseLabel || `Version ${item.version}`;
         select.append(option);
       }
@@ -608,7 +610,7 @@
     $("rewards-preview").hidden = true;
     rewardsPreviewFor = "";
     const publicationId = $("rewards-publication").value;
-    const periodKey = $("rewards-period").value.trim();
+    const periodKey = $("rewards-period").value.trim().toLowerCase();
     try {
       const preview = await api.staff.previewRewards(publicationId, periodKey);
       const summary = $("rewards-summary");
@@ -619,14 +621,29 @@
         summary.append(textNode("li", `${COLLECTION_LABELS[name] || name}: ${counts.newGrants} new · ${counts.alreadyGranted} already granted · ${counts.previouslyRevoked} previously revoked · ${counts.wouldRevoke} would be revoked by reconcile`));
       }
       summary.append(textNode("li", `Excluded: ${preview.exclusions.unlinked} rows without a verified link · ${preview.exclusions.inactiveAccounts} linked accounts not active`));
+      if (preview.revocation.students) {
+        summary.append(textNode("li", `Reconcile would revoke from ${preview.revocation.students} student(s); ${preview.revocation.equippedFallbacks} of them are wearing an item that would be swapped for a free one.`));
+      }
+      summary.append(textNode("li", `Changes to confirm: GRANT ${preview.expectedChanges.grant} · RECONCILE ${preview.expectedChanges.reconcile}`));
       const warnings = $("rewards-warnings");
       warnings.replaceChildren();
-      if (preview.conflicts.snapshotBoundElsewhere) warnings.append(textNode("li", `This publication was already processed for period ${preview.conflicts.snapshotBoundToPeriod}. Use that period; a different one is refused.`));
-      if (preview.conflicts.periodSourceMismatch) warnings.append(textNode("li", "That period belongs to another kind of reward. Choose another period key."));
+      const BLOCKERS = {
+        not_live: "This is not the live publication. Only the live publication can be processed (preview of history is for reference).",
+        no_release_label: "This publication has no release label, so it has no earning period.",
+        bound_to_other_period: `This publication was already processed for period ${preview.conflicts.snapshotBoundToPeriod}. Use that period.`,
+        new_period_key_not_canonical: `A new earning period must use this publication's key: ${preview.canonicalKey}. To correct an earlier week, choose that week's existing period.`,
+        period_belongs_to_other_source: "That period belongs to another kind of reward.",
+        likely_replacement: `These verified links match period ${preview.conflicts.likelyReplacementOf}. This looks like a replacement of that week: process it under ${preview.conflicts.likelyReplacementOf}.`,
+        no_verified_links: "This publication has no verified account links yet. Approve its links first.",
+      };
+      for (const code of preview.blockers) warnings.append(textNode("li", BLOCKERS[code] || `Blocked: ${code}`));
+      if (preview.conflicts.incompleteLinks) warnings.append(textNode("li", `This version has fewer verified links (${preview.linked}) than an earlier version of this period (${preview.previousLinked}). Reconcile is refused until its links are complete.`));
+      if (preview.exclusions.linkedSuspended) warnings.append(textNode("li", `${preview.exclusions.linkedSuspended} linked student(s) are suspended. They still earn and keep verified rewards; suspension only hides them publicly.`));
       if (!preview.rewardsSwitchOn) warnings.append(textNode("li", "Cosmetic rewards are switched off. This preview is all that can happen until the database owner switches them on after approval."));
-      const blocked = !preview.rewardsSwitchOn || preview.conflicts.snapshotBoundElsewhere || preview.conflicts.periodSourceMismatch;
-      $("rewards-grant").disabled = blocked;
-      $("rewards-reconcile").disabled = blocked;
+      const blocked = !preview.rewardsSwitchOn || preview.blockers.length > 0;
+      $("rewards-grant").disabled = blocked || preview.expectedChanges.grant === 0;
+      $("rewards-reconcile").disabled = blocked || preview.conflicts.incompleteLinks || preview.expectedChanges.reconcile === 0;
+      rewardsPreview = preview;
       rewardsPreviewFor = `${publicationId}|${periodKey}`;
       $("rewards-preview").hidden = false;
       status("Reward preview ready. Nothing has been granted.", "ready");
@@ -637,23 +654,34 @@
 
   async function processRewards(mode) {
     const publicationId = $("rewards-publication").value;
-    const periodKey = $("rewards-period").value.trim();
+    const periodKey = $("rewards-period").value.trim().toLowerCase();
     if (rewardsPreviewFor !== `${publicationId}|${periodKey}`) {
       status("Preview this publication and period first.", "unavailable");
       return;
     }
-    const prompt = mode === "reconcile"
-      ? `Reconcile period ${periodKey} with this publication? Rewards it no longer supports are revoked (with a recorded reason) and worn revoked items are swapped for free ones.`
-      : `Grant the previewed rewards for period ${periodKey}? This cannot grant anything twice.`;
-    if (!window.confirm(prompt)) return;
+    const expectedChanges = rewardsPreview?.expectedChanges?.[mode] ?? -1;
+    const revocations = Object.values(rewardsPreview?.collections || {}).reduce((sum, item) => sum + item.wouldRevoke, 0);
+    if (mode === "reconcile" && revocations > 0) {
+      // Destructive: the person types the exact number of revocations.
+      const typed = window.prompt(`Reconcile period ${periodKey}: revoke ${revocations} reward(s) from ${rewardsPreview.revocation.students} student(s) (reason: result corrected), ` +
+        `swap ${rewardsPreview.revocation.equippedFallbacks} worn item(s) for free ones, and grant ${expectedChanges - revocations}. Type ${revocations} to confirm.`);
+      if (typed === null || typed.trim() !== String(revocations)) { status("Reconcile cancelled. Nothing was changed.", "info"); return; }
+    } else if (!window.confirm(`${mode === "reconcile" ? "Reconcile" : "Grant"} period ${periodKey}: ${expectedChanges} change(s), exactly as previewed. Nothing is ever granted twice.`)) return;
     try {
-      const result = await api.staff.processRewards({ publicationId, periodKey, periodLabel: $("rewards-label").value.trim(), mode });
+      const result = await api.staff.processRewards({ publicationId, periodKey, periodLabel: $("rewards-label").value.trim(), mode, expectedChanges });
       status(`Done: ${result.granted} granted, ${result.regranted} restored, ${result.revoked} revoked, ${result.equippedFallbacks} worn item(s) swapped.`, "ready");
       $("rewards-preview").hidden = true;
       rewardsPreviewFor = "";
       await loadRewardPeriods();
     } catch (error) {
-      const messages = { rewards_not_enabled: "Cosmetic rewards are switched off. Nothing was granted.", period_conflict: "This publication belongs to another earning period. Nothing was granted." };
+      const messages = {
+        rewards_not_enabled: "Cosmetic rewards are switched off. Nothing was granted.",
+        period_conflict: "This publication belongs to another earning period. Nothing was granted.",
+        publication_not_live: "Only the live publication can be processed. Nothing was granted.",
+        links_incomplete: "This version's verified links are incomplete. Nothing was changed.",
+        preview_out_of_date: "Something changed since the preview. Preview again; nothing was changed.",
+        period_key_not_canonical: "A new earning period must use the publication's own key. Nothing was granted.",
+      };
       if (messages[error?.code]) status(messages[error.code], "unavailable");
       else failure(error, "Processing failed. Nothing was granted.");
     }

@@ -728,7 +728,8 @@
         const payload = await request("GET", "/staff/rewards");
         return Array.isArray(payload?.periods) ? payload.periods.filter((item) => item && typeof item.key === "string") : [];
       },
-      async previewRewards(publicationId, periodKey) {
+      async previewRewards(publicationId, rawPeriodKey) {
+        const periodKey = String(rawPeriodKey ?? "").trim().toLowerCase();
         if (mode === "demo") throw new ArenaDataError("Rewards are unavailable in the fictional preview.", "unauthorized");
         if (!UUID.test(String(publicationId)) || !/^[a-z0-9][a-z0-9._:-]{2,63}$/u.test(String(periodKey))) {
           throw new ArenaDataError("Choose a publication and an earning period like 2026-27:week-05.", "invalid_request");
@@ -737,9 +738,11 @@
       },
       async processRewards(input) {
         if (mode === "demo") throw new ArenaDataError("Rewards are unavailable in the fictional preview.", "unauthorized");
-        const body = { publicationId: input?.publicationId, periodKey: input?.periodKey, periodLabel: input?.periodLabel, mode: input?.mode };
+        const body = { publicationId: input?.publicationId, periodKey: String(input?.periodKey ?? "").trim().toLowerCase(), periodLabel: input?.periodLabel, mode: input?.mode,
+          expectedChanges: input?.expectedChanges };
         if (!UUID.test(String(body.publicationId)) || !/^[a-z0-9][a-z0-9._:-]{2,63}$/u.test(String(body.periodKey)) ||
-            !/^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,47}$/u.test(String(body.periodLabel)) || !["grant", "reconcile"].includes(body.mode)) {
+            !/^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,47}$/u.test(String(body.periodLabel)) || !["grant", "reconcile"].includes(body.mode) ||
+            !Number.isSafeInteger(body.expectedChanges)) {
           throw new ArenaDataError("Check the publication, period and label.", "invalid_request");
         }
         return (await request("POST", "/staff/rewards/process", body)).result;

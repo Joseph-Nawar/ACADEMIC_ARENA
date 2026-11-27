@@ -13,7 +13,7 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ error: "invalid_request" }, 400);
   }
   const { data, error } = await userAuthClient(env, auth.session.providerAccessToken)
-    .rpc("preview_rank_rewards", { p_snapshot_id: body.publicationId, p_period_key: body.periodKey });
+    .rpc("preview_rank_rewards", { p_snapshot_id: body.publicationId, p_period_key: body.periodKey.trim().toLowerCase() });
   if (error) return rpcFailure(error);
   return jsonResponse({ preview: previewFromRow(data) });
 }

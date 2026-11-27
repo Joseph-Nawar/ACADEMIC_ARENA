@@ -3,7 +3,7 @@
 -- projection and the consent-aware Campus Wins feed. Fictional records only.
 begin;
 set local search_path = public, extensions;
-select plan(87);
+select plan(114);
 
 create function pg_temp.as_user(p_uid text, p_aal text default 'aal1') returns void language sql as $$
   select set_config('request.jwt.claim.sub', p_uid, true);
@@ -28,17 +28,21 @@ insert into app_private.identity_mappings (account_id, username_normalized, prov
 select ('20000000-0000-4000-8000-0000000000e' || n)::uuid, 'v18-student' || n, 'v18.s' || n || '@academic-arena.test'
 from generate_series(1, 6) as n;
 
--- Three level-only publications: Week 5 (v9401), its correction (v9402) and Week 6 (v9403).
+-- Level-only publications: Week 5 (v9401); its correction (v9402); Week 6
+-- (v9403); a draft (v9404); a re-publication of Week 5 under another label
+-- with identical links (v9405); and a Week 5 version with incomplete links (v9406).
 insert into public.published_leaderboard_snapshots (id, version_number, academic_year, release_label, board_format, published_at, first_published_at, is_current, board_count, row_count)
 values ('30000000-0000-4000-8000-0000000000e1', 9401, '2026-27', 'Week 5', 'level_only', now(), now(), false, 3, 30),
        ('30000000-0000-4000-8000-0000000000e2', 9402, '2026-27', 'Week 5', 'level_only', now(), now(), false, 3, 30),
        ('30000000-0000-4000-8000-0000000000e3', 9403, '2026-27', 'Week 6', 'level_only', now(), now(), false, 3, 30),
-       ('30000000-0000-4000-8000-0000000000e4', 9404, '2026-27', 'Draft', 'level_only', now(), null, false, 3, 30);
+       ('30000000-0000-4000-8000-0000000000e4', 9404, '2026-27', 'Draft', 'level_only', now(), null, false, 3, 30),
+       ('30000000-0000-4000-8000-0000000000e5', 9405, '2026-27', 'Week 5 republished', 'level_only', now(), now(), false, 3, 30),
+       ('30000000-0000-4000-8000-0000000000e6', 9406, '2026-27', 'Week 5', 'level_only', now(), now(), false, 3, 30);
 update public.published_leaderboard_snapshots set is_current = false where is_current;
 update public.published_leaderboard_snapshots set is_current = true where id = '30000000-0000-4000-8000-0000000000e1';
 insert into public.published_level_rows (snapshot_id, level, position, public_name)
 select ('30000000-0000-4000-8000-0000000000e' || s)::uuid, lvl, pos, 'Fictional V18 ' || s || ' ' || chr(64 + lvl) || chr(64 + pos)
-from generate_series(1, 4) as s, generate_series(4, 6) as lvl, generate_series(1, 10) as pos;
+from generate_series(1, 6) as s, generate_series(4, 6) as lvl, generate_series(1, 10) as pos;
 -- Week 5: e1 L4 #1, e2 L4 #2, e3 L5 #7, e4 (suspended later) L6 #1; e5 never linked.
 -- Correction: e2 was really first and e1 second. Week 6: e1 at L4 #9.
 insert into app_private.published_level_row_links (snapshot_id, level, position, account_id) values
@@ -49,7 +53,14 @@ insert into app_private.published_level_row_links (snapshot_id, level, position,
   ('30000000-0000-4000-8000-0000000000e2', 4, 1, '20000000-0000-4000-8000-0000000000e2'),
   ('30000000-0000-4000-8000-0000000000e2', 4, 2, '20000000-0000-4000-8000-0000000000e1'),
   ('30000000-0000-4000-8000-0000000000e2', 5, 7, '20000000-0000-4000-8000-0000000000e3'),
-  ('30000000-0000-4000-8000-0000000000e3', 4, 9, '20000000-0000-4000-8000-0000000000e1');
+  ('30000000-0000-4000-8000-0000000000e2', 6, 1, '20000000-0000-4000-8000-0000000000e4'),
+  ('30000000-0000-4000-8000-0000000000e3', 4, 9, '20000000-0000-4000-8000-0000000000e1'),
+  ('30000000-0000-4000-8000-0000000000e5', 4, 1, '20000000-0000-4000-8000-0000000000e1'),
+  ('30000000-0000-4000-8000-0000000000e5', 4, 2, '20000000-0000-4000-8000-0000000000e2'),
+  ('30000000-0000-4000-8000-0000000000e5', 5, 7, '20000000-0000-4000-8000-0000000000e3'),
+  ('30000000-0000-4000-8000-0000000000e5', 6, 1, '20000000-0000-4000-8000-0000000000e4'),
+  ('30000000-0000-4000-8000-0000000000e6', 4, 1, '20000000-0000-4000-8000-0000000000e2'),
+  ('30000000-0000-4000-8000-0000000000e6', 4, 2, '20000000-0000-4000-8000-0000000000e1');
 update app_private.student_feature_controls set student_sign_in = true, avatar_personalization = true,
   character_studio_v2 = false, cosmetic_rewards = false;
 
@@ -64,8 +75,8 @@ grant select on cfg to authenticated;
 -- 1. Privileges and private tables.
 select ok(not has_function_privilege('anon', 'public.save_own_character_v2(bigint, jsonb, text, boolean, boolean)', 'execute')
   and not has_function_privilege('anon', 'public.my_character_v2()', 'execute')
-  and not has_function_privilege('anon', 'public.process_rank_rewards(uuid, text, text, text)', 'execute')
-  and not has_function_privilege('service_role', 'public.process_rank_rewards(uuid, text, text, text)', 'execute'),
+  and not has_function_privilege('anon', 'public.process_rank_rewards(uuid, text, text, text, integer)', 'execute')
+  and not has_function_privilege('service_role', 'public.process_rank_rewards(uuid, text, text, text, integer)', 'execute'),
   'student and staff V2 RPCs are not callable by anonymous visitors or service_role');
 select ok(has_function_privilege('anon', 'public.public_level_leaderboard_v4(smallint)', 'execute')
   and has_function_privilege('anon', 'public.public_campus_wins_v2(text[])', 'execute'),
@@ -171,48 +182,71 @@ reset role;
 update app_private.student_feature_controls set character_studio_v2 = true;
 
 -- 9. Reward preview: aggregates only, no names; works with the switch off.
+select is(app_private.canonical_period_key('2026-27', ' Week 05 '), '2026-27:week-5', 'period keys ignore case, spacing and leading zeros');
+select is(app_private.canonical_period_key('2026-27', 'WEEK-5'), '2026-27:week-5', 'and punctuation');
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e1');
 set local role authenticated;
-select throws_ok($$select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05')$$,
-  '42501', null, 'students cannot preview rewards');
+select throws_ok($$select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5')$$, '42501', null, 'students cannot preview rewards');
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal1');
-select throws_ok($$select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05')$$,
-  '42501', null, 'staff need AAL2');
+select throws_ok($$select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5')$$, '42501', null, 'staff need AAL2');
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
-create temporary table preview_one as
-select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05') as p;
+set local role authenticated;
+create temporary table preview_one as select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5') as p;
 select is((select (p #>> '{collections,elite,newGrants}')::int from preview_one), 4, 'preview: 4 linked students earn Elite');
 select is((select (p #>> '{collections,podium,newGrants}')::int from preview_one), 3, 'preview: 3 earn Podium');
 select is((select (p #>> '{collections,champion,newGrants}')::int from preview_one), 2, 'preview: 2 level winners earn Champion');
+select is((select (p #>> '{expectedChanges,grant}')::int from preview_one), 9, 'preview: 9 grants in total');
 select is((select (p #>> '{exclusions,unlinked}')::int from preview_one), 26, 'preview: unverified rows are excluded and counted');
+select is((select p ->> 'canonicalKey' from preview_one), '2026-27:week-5', 'preview: the canonical period key');
+select is((select p -> 'blockers' from preview_one), '[]'::jsonb, 'preview: nothing blocks the live publication');
 select ok((select p::text !~ 'V18 [0-9]|v18-student|academic-arena\.test' from preview_one), 'preview contains no names, usernames or emails');
-select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05', 'Week 5', 'grant')$$,
-  'AAR01', null, 'nothing is granted while the rewards switch is off');
-select throws_ok($$select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e4', 'draft-period')$$,
-  '22023', null, 'a never-published draft cannot earn rewards');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5', 'Week 5', 'grant', 9)$$, 'AAR01', null, 'nothing is granted while the rewards switch is off');
+select throws_ok($$select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e4', 'draft-period')$$, '22023', null, 'a never-published draft cannot earn rewards');
 reset role;
 update app_private.accounts set status = 'suspended' where id = '20000000-0000-4000-8000-0000000000e4';
 update app_private.student_feature_controls set cosmetic_rewards = true;
 
--- 10. Processing: idempotent across retries, republishing and rollback.
+-- 10. Processing: typo-proof periods, live publication only, exact confirmation, idempotent.
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
 set local role authenticated;
-select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05', 'Week 5', 'grant') ->> 'granted')::int,
-  6, 'Week 5 grants e1 Elite+Podium+Champion, e2 Elite+Podium, e3 Elite; the suspended e4 gets nothing');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:weak-5', 'Week 5', 'grant', 9)$$, 'AAR08', null, 'a typo cannot open a new earning period');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05', 'Week 5', 'grant', 9)$$, 'AAR08', null, 'nor can a formatting variant');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5', 'Week 5', 'grant', 8)$$, 'AAR06', null, 'a confirmation that does not match the preview changes nothing');
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', ' 2026-27:WEEK-5 ', 'Week 5', 'grant', 9) ->> 'granted')::int,
+  9, 'Week 5 grants e1 3, e2 2, e3 1 and the suspended e4 3 (status does not cancel verified results)');
 reset role;
-select is((select count(*)::int from app_private.cosmetic_entitlements), 6, 'six entitlements (e1: 3, e2: 2, e3: 1); the suspended winner gets none');
+select is((select count(*)::int from app_private.cosmetic_entitlements), 9, 'nine entitlements, one period');
+select is((select count(*)::int from app_private.reward_periods), 1, 'the normalized key opened exactly one period');
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
 set local role authenticated;
-select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05', 'Week 5', 'grant') ->> 'granted')::int,
-  0, 'a retry grants nothing');
-select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05-again', 'Week 5', 'grant')$$,
-  'AAR02', null, 'the same publication cannot be re-keyed into another period');
-select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-05', 'Week 5', 'grant') ->> 'granted')::int,
-  1, 'the corrected Week 5 publication (grant mode) adds only e2''s Champion');
-select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-05', 'Week 5', 'grant') ->> 'granted')::int,
-  0, 'rolling back to the first version grants nothing new');
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5', 'Week 5', 'grant', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5') #>> '{expectedChanges,grant}')::int) ->> 'granted')::int, 0, 'a retry grants nothing');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5-again', 'Week 5', 'grant', 0)$$, 'AAR02', null, 'the same publication cannot be re-keyed into another period');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5', 'Week 5', 'grant', 1)$$, 'AAR04', null, 'a historical (non-live) publication cannot be processed');
 reset role;
-select is((select count(*)::int from app_private.cosmetic_entitlements), 7, 'no duplicates after retries, correction and rollback');
+update public.published_leaderboard_snapshots set is_current = false where is_current;
+update public.published_leaderboard_snapshots set is_current = true where id = '30000000-0000-4000-8000-0000000000e5';
+select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
+set local role authenticated;
+select is((select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e5', '2026-27:week-5-republished') #>> '{conflicts,likelyReplacementOf}'), '2026-27:week-5',
+  'a re-publication under another label is recognised as a replacement');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e5', '2026-27:week-5-republished', 'Week 5 republished', 'grant', 0)$$, 'AAR02', null,
+  'a replacement publication cannot open a second period for the same competition');
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e5', '2026-27:week-5', 'Week 5', 'grant', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e5', '2026-27:week-5') #>> '{expectedChanges,grant}')::int) ->> 'granted')::int, 0, 'processed under its real period it grants nothing new');
+reset role;
+update public.published_leaderboard_snapshots set is_current = false where is_current;
+update public.published_leaderboard_snapshots set is_current = true where id = '30000000-0000-4000-8000-0000000000e2';
+select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
+set local role authenticated;
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5', 'Week 5', 'grant', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5') #>> '{expectedChanges,grant}')::int) ->> 'granted')::int, 1, 'the corrected Week 5 publication (grant mode) adds only e2''s Champion');
+reset role;
+update public.published_leaderboard_snapshots set is_current = false where is_current;
+update public.published_leaderboard_snapshots set is_current = true where id = '30000000-0000-4000-8000-0000000000e1';
+select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
+set local role authenticated;
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5', 'Week 5', 'grant', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e1', '2026-27:week-5') #>> '{expectedChanges,grant}')::int) ->> 'granted')::int, 0, 'rolling back to the first version grants nothing new');
+reset role;
+select is((select count(*)::int from app_private.cosmetic_entitlements), 10, 'no duplicates after retries, replacement, correction and rollback');
+select is((select count(*)::int from app_private.reward_periods), 1, 'still exactly one Week 5 period');
 select is((select count(*)::int from app_private.cosmetic_entitlements where account_id = '20000000-0000-4000-8000-0000000000e3'), 1,
   'e3 earned Elite although their character is not public (consent is independent)');
 
@@ -228,23 +262,38 @@ select is((select character_v2 ->> 'back' from public.public_level_leaderboard_v
 reset role;
 
 -- 12. Dropping in rank later keeps earned items (Week 6 is a separate period).
+update public.published_leaderboard_snapshots set is_current = false where is_current;
+update public.published_leaderboard_snapshots set is_current = true where id = '30000000-0000-4000-8000-0000000000e3';
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
 set local role authenticated;
-select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e3', '2026-27:week-06', 'Week 6', 'grant') ->> 'granted')::int,
-  1, 'Week 6: e1 (now #9) earns Elite for that period');
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e3', '2026-27:week-6', 'Week 6', 'grant', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e3', '2026-27:week-6') #>> '{expectedChanges,grant}')::int) ->> 'granted')::int, 1, 'Week 6: e1 (now #9) earns Elite for that period');
 reset role;
 select is((select count(*)::int from app_private.cosmetic_entitlements where account_id = '20000000-0000-4000-8000-0000000000e1' and revoked_at is null),
   4, 'e1 keeps everything from Week 5 after dropping to #9');
 
--- 13. Reconciliation after a correction: audited revocation and equipped fallback.
+-- 13. Reconciliation after a correction: guarded, confirmed, audited, with equipped fallback.
+update public.published_leaderboard_snapshots set is_current = false where is_current;
+update public.published_leaderboard_snapshots set is_current = true where id = '30000000-0000-4000-8000-0000000000e6';
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
 set local role authenticated;
-create temporary table preview_two as
-select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-05') as p;
-select is((select (p #>> '{collections,champion,wouldRevoke}')::int from preview_two), 1, 'preview shows the one Champion the correction would revoke');
-select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-05', 'Week 5', 'reconcile') ->> 'revoked')::int,
-  1, 'reconcile revokes e1''s Week 5 Champion');
+select ok((select (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e6', '2026-27:week-5') #>> '{conflicts,incompleteLinks}')::boolean),
+  'preview flags a version with fewer verified links than earlier versions of the period');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e6', '2026-27:week-5', 'Week 5', 'reconcile', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e6', '2026-27:week-5') #>> '{expectedChanges,reconcile}')::int)$$, 'AAR05', null, 'incomplete links cannot trigger a mass revocation');
 reset role;
+update public.published_leaderboard_snapshots set is_current = false where is_current;
+update public.published_leaderboard_snapshots set is_current = true where id = '30000000-0000-4000-8000-0000000000e2';
+select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
+set local role authenticated;
+create temporary table preview_two as select public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5') as p;
+select is((select (p #>> '{collections,champion,wouldRevoke}')::int from preview_two), 1, 'preview shows the one Champion the correction would revoke');
+select is((select (p #>> '{revocation,students}')::int from preview_two), 1, 'one student affected');
+select is((select (p #>> '{revocation,equippedFallbacks}')::int from preview_two), 1, 'who is wearing an item that will fall back');
+select is((select (p #>> '{expectedChanges,reconcile}')::int from preview_two), 1, 'one change to confirm');
+select throws_ok($$select public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5', 'Week 5', 'reconcile', 0)$$, 'AAR06', null, 'reconcile needs the exact previewed count');
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5', 'Week 5', 'reconcile', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5') #>> '{expectedChanges,reconcile}')::int) ->> 'revoked')::int, 1, 'reconcile revokes e1''s Week 5 Champion');
+reset role;
+select is((select count(*)::int from app_private.cosmetic_entitlements where account_id = '20000000-0000-4000-8000-0000000000e4' and revoked_at is null),
+  3, 'the suspended e4 keeps everything their verified results earned');
 select is((select revoke_reason from app_private.cosmetic_entitlements where account_id = '20000000-0000-4000-8000-0000000000e1'
   and collection_key = 'champion'), 'result_corrected', 'the revocation records its reason');
 select is((select v2_config ->> 'back' from public.student_avatar_configs where account_id = '20000000-0000-4000-8000-0000000000e1'),
@@ -254,7 +303,7 @@ select is((select count(*)::int from public.student_avatar_configs where account
 select is((select count(*)::int from app_private.reward_events where target_account_id = '20000000-0000-4000-8000-0000000000e1'
   and event_kind in ('revoked', 'equipped_fallback')), 2, 'both are in the append-only history');
 set local role anon;
-select is((select character_v2 ->> 'back' from public.public_level_leaderboard_v4(4::smallint) where position = 1), 'none',
+select is((select character_v2 ->> 'back' from public.public_level_leaderboard_v4(4::smallint) where position = 2), 'none',
   'the public board no longer shows the revoked item');
 reset role;
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e1');
@@ -266,17 +315,14 @@ select throws_ok($$select public.save_own_character_v2(5, (select cape from cfg)
 reset role;
 select throws_ok($$update app_private.reward_events set reason_code = 'x'$$, '42501', null, 'reward history cannot be edited');
 select throws_ok($$delete from app_private.reward_events$$, '42501', null, 'reward history cannot be deleted');
--- Reconcile again: idempotent.
 select pg_temp.as_user('10000000-0000-4000-8000-0000000000e9', 'aal2');
 set local role authenticated;
-select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-05', 'Week 5', 'reconcile') ->> 'revoked')::int,
-  0, 'a reconcile retry revokes nothing more');
--- Manual audited revocation.
-select ok(public.revoke_cosmetic_entitlement('v18-student3', 'elite', '2026-27:week-05', 'link_corrected'), 'staff revoke one grant with a reason');
-select throws_ok($$select public.revoke_cosmetic_entitlement('v18-student3', 'elite', '2026-27:week-05', 'because')$$,
+select is((public.process_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5', 'Week 5', 'reconcile', (public.preview_rank_rewards('30000000-0000-4000-8000-0000000000e2', '2026-27:week-5') #>> '{expectedChanges,reconcile}')::int) ->> 'revoked')::int, 0, 'a reconcile retry revokes nothing more');
+select ok(public.revoke_cosmetic_entitlement('v18-student3', 'elite', '2026-27:week-5', 'link_corrected'), 'staff revoke one grant with a reason');
+select throws_ok($$select public.revoke_cosmetic_entitlement('v18-student3', 'elite', '2026-27:week-5', 'because')$$,
   '22023', null, 'free-text reasons are refused');
 reset role;
-select is((select count(*)::int from app_private.audit_events where action_key in ('rewards.processed', 'rewards.revoked')), 8,
+select is((select count(*)::int from app_private.audit_events where action_key in ('rewards.processed', 'rewards.revoked')), 9,
   'every processing run and revocation is audited');
 
 -- 14. Campus Wins (issue #25): separate consent, latest look, lifecycle.
@@ -301,9 +347,12 @@ select is((select character_v2 ->> 'hair' from public.public_campus_wins_v2(arra
 reset role;
 update app_private.accounts set status = 'suspended' where id = '20000000-0000-4000-8000-0000000000e1';
 set local role anon;
+select is((select count(*)::int from public.public_campus_wins_v2(array['workshop'])), 0, 'a suspended author''s win leaves the feed');
 select is((select count(*)::int from public.public_campus_wins_v2(array['workshop'])), 0, 'a suspended author''s wins disappear');
-select is((select count(*)::int from public.public_level_leaderboard_v4(4::smallint) where position = 2 and character_v2 is not null), 1,
+select is((select count(*)::int from public.public_level_leaderboard_v4(4::smallint) where position = 1 and character_v2 is not null), 1,
   'others are unaffected');
+select is((select count(*)::int from public.public_level_leaderboard_v4(4::smallint) where position = 2 and (character_v2 is not null or avatar_key is not null)), 0,
+  'the suspended student leaves the board too');
 reset role;
 update app_private.accounts set status = 'active' where id = '20000000-0000-4000-8000-0000000000e1';
 update app_private.campus_wins_submissions set status = 'hidden' where id = '40000000-0000-4000-8000-0000000000e1';
@@ -316,8 +365,16 @@ set local role authenticated;
 select is(public.save_own_character_v2(6, null, 'v2', true, false), 7::bigint, 'e1 withdraws Campus Wins consent only');
 set local role anon;
 select ok((select character_v2 is null from public.public_campus_wins_v2(array['workshop'])), 'withdrawal takes effect on the next read');
-select is((select character_v2 ->> 'hair' from public.public_level_leaderboard_v4(4::smallint) where position = 1), 'locs',
+select is((select character_v2 ->> 'hair' from public.public_level_leaderboard_v4(4::smallint) where position = 2), 'locs',
   'the leaderboard consent is unaffected');
+-- Direct database access cannot bypass consent, suspension or moderation.
+select throws_ok('select count(*) from public.campus_wins_public', '42501', null, 'anonymous REST cannot read the legacy table');
+select throws_ok('select avatar_key from public.campus_wins_public', '42501', null, 'nor its snapshotted look');
+reset role;
+select pg_temp.as_user('10000000-0000-4000-8000-0000000000e3');
+set local role authenticated;
+select throws_ok('select count(*) from public.campus_wins_public', '42501', null, 'signed-in students cannot read it either');
+select throws_ok('select count(*) from app_private.campus_wins_submissions', '42501', null, 'nor the private submissions');
 reset role;
 
 select * from finish();

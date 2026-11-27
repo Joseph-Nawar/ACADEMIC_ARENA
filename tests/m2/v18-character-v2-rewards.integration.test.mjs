@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import test from "node:test";
-import { api, json } from "./bff-fixtures.mjs";
+import { api, json, local } from "./bff-fixtures.mjs";
 import { call, staffSession, studentSession } from "./m3-helpers.mjs";
 
 const sandbox = {};
@@ -39,8 +39,11 @@ test("release B2: V2 characters, server-owned rewards and public sync", async (c
     method: "POST", body: { publicationId, csv: csvOf(rows) } });
   const preview = async (publicationId, periodKey) => (await json(await call(admin, "/api/staff/rewards/preview", {
     method: "POST", body: { publicationId, periodKey } }))).preview;
-  const processRewards = (publicationId, periodKey, mode = "grant") => call(admin, "/api/staff/rewards/process", {
-    method: "POST", body: { publicationId, periodKey, periodLabel: "Week 5", mode } });
+  // Processing confirms the exact count the preview showed (as Staff Desk does).
+  const processRewards = async (publicationId, periodKey, mode = "grant", expected) => {
+    const expectedChanges = expected ?? (await preview(publicationId, periodKey)).expectedChanges[mode];
+    return call(admin, "/api/staff/rewards/process", { method: "POST", body: { publicationId, periodKey, periodLabel: "Week 5", mode, expectedChanges } });
+  };
   feature("avatar_personalization", "on");
   feature("character_studio_v2", "off");
   feature("cosmetic_rewards", "off");
@@ -87,20 +90,36 @@ test("release B2: V2 characters, server-owned rewards and public sync", async (c
   assert.deepEqual([locked.status, (await json(locked)).error], [403, "item_not_owned"], "an unearned cosmetic cannot be equipped");
   const stale = await saveV2(alpha, { ...base, expectedRevision: base.expectedRevision - 1, v2: first });
   assert.deepEqual([stale.status, (await json(stale)).error], [409, "character_changed"], "a stale save never overwrites");
+  // Direct Supabase access with the student's own provider token (bypassing
+  // the BFF) still cannot equip an unearned item: RPC and table are refused.
+  const direct = (session, route, init = {}) => fetch(new URL(route, local.supabaseUrl), { ...init, headers: {
+    apikey: local.anonKey, Authorization: `Bearer ${session ? session.identity.providerSession.access_token : local.anonKey}`,
+    "Content-Type": "application/json", Accept: "application/json" } });
+  const rpcBypass = await direct(alpha, "/rest/v1/rpc/save_own_character_v2", { method: "POST", body: JSON.stringify({
+    p_expected_revision: base.expectedRevision, p_v2_config: { ...first, back: "cape" }, p_active_look: "v2",
+    p_show_on_leaderboard: true, p_show_on_campus_wins: false }) });
+  assert.equal((await rpcBypass.json()).code, "AAC01", "a direct RPC call cannot equip an unearned item");
+  const tableBypass = await direct(alpha, `/rest/v1/student_avatar_configs?account_id=eq.${alpha.identity.accountId}`, {
+    method: "PATCH", body: JSON.stringify({ v2_config: { ...first, back: "cape" } }) });
+  assert.ok([401, 403].includes(tableBypass.status), "nor can a direct table write");
+  assert.deepEqual((await me(alpha)).v2, first, "the stored look is unchanged");
   assert.equal((await call(null, "/api/me/character")).status, 401);
   assert.equal((await call(admin, "/api/me/character")).status, 403, "staff have no character");
 
   // ---- reward preview: aggregates only; processing needs the owner switch
-  assert.equal((await call(alpha, "/api/staff/rewards/preview", { method: "POST", body: { publicationId: week5, periodKey: "2026-27:week-05" } })).status, 403);
-  const before = await preview(week5, "2026-27:week-05");
+  assert.equal((await call(alpha, "/api/staff/rewards/preview", { method: "POST", body: { publicationId: week5, periodKey: "2026-27:week-5" } })).status, 403);
+  const before = await preview(week5, "2026-27:week-5");
   assert.deepEqual([before.collections.elite.newGrants, before.collections.podium.newGrants, before.collections.champion.newGrants], [3, 2, 1]);
   assert.equal(before.exclusions.unlinked, 27);
   assert.doesNotMatch(JSON.stringify(before), /v18-|@|username/iu);
-  assert.deepEqual([(await processRewards(week5, "2026-27:week-05")).status], [409], "nothing is granted with rewards switched off");
+  assert.deepEqual([(await processRewards(week5, "2026-27:week-5")).status], [409], "nothing is granted with rewards switched off");
   feature("cosmetic_rewards", "on");
-  assert.equal((await json(await processRewards(week5, "2026-27:week-05"))).result.granted, 6);
-  assert.equal((await json(await processRewards(week5, "2026-27:week-05"))).result.granted, 0, "a retry grants nothing");
-  assert.equal((await processRewards(week5, "2026-27:week-05-retry")).status, 409, "re-keying the same publication is refused");
+  assert.equal((await json(await processRewards(week5, "2026-27:week-5"))).result.granted, 6);
+  assert.equal((await json(await processRewards(week5, "2026-27:week-5"))).result.granted, 0, "a retry grants nothing");
+  assert.equal((await processRewards(week5, "2026-27:week-5-retry", "grant", 0)).status, 409, "re-keying the same publication is refused");
+  assert.equal((await processRewards(week5, "2026-27:week-05", "grant", 0)).status, 409, "a formatting variant cannot open a second period");
+  const stalePreview = await processRewards(week5, "2026-27:week-5", "grant", 3);
+  assert.deepEqual([stalePreview.status, (await json(stalePreview)).error], [409, "preview_out_of_date"], "a mismatched confirmation changes nothing");
   assert.deepEqual((await me(charlie)).owned, ["elite", "essentials"], "a private-character student still earns");
 
   // ---- equip an earned item; another visitor sees it on the next load
@@ -123,9 +142,9 @@ test("release B2: V2 characters, server-owned rewards and public sync", async (c
   const corrected = await upload(example, "Week 5");
   assert.equal((await publish(corrected)).status, 200);
   assert.equal((await approveLinks(corrected, [[4, 1, bravo.identity.username], [4, 2, alpha.identity.username], [5, 7, charlie.identity.username]])).status, 200);
-  const fix = await preview(corrected, "2026-27:week-05");
+  const fix = await preview(corrected, "2026-27:week-5");
   assert.deepEqual([fix.collections.champion.newGrants, fix.collections.champion.wouldRevoke], [1, 1]);
-  const reconciled = (await json(await processRewards(corrected, "2026-27:week-05", "reconcile"))).result;
+  const reconciled = (await json(await processRewards(corrected, "2026-27:week-5", "reconcile"))).result;
   assert.deepEqual([reconciled.granted, reconciled.revoked, reconciled.equippedFallbacks], [1, 1, 1]);
   const after = (await board(4)).rows[1];
   assert.deepEqual([after.v2.back, after.v2.headwear, after.v2.shoes, after.v2.backdrop, after.v2.sticker, after.v2.hair],
@@ -135,11 +154,13 @@ test("release B2: V2 characters, server-owned rewards and public sync", async (c
   state = await me(alpha);
   assert.equal((await saveV2(alpha, { ...base, expectedRevision: state.revision, v2: champion })).status, 403, "nor can a fresh one");
   assert.ok(state.owned.includes("podium"), "Podium is still owned (still in the Top 3)");
-  // Rolling back to the first version grants nothing new.
+  // Rolling back to the first version grants nothing new; the corrected
+  // version is now historical and cannot be processed.
   assert.equal((await publish(week5)).status, 200);
-  assert.equal((await json(await processRewards(week5, "2026-27:week-05"))).result.granted, 0);
-  assert.equal((await json(await processRewards(corrected, "2026-27:week-05"))).result.granted, 0);
-  const history = (await json(await call(admin, "/api/staff/rewards"))).periods.find((period) => period.key === "2026-27:week-05");
+  assert.equal((await json(await processRewards(week5, "2026-27:week-5"))).result.granted, 0);
+  const historical = await processRewards(corrected, "2026-27:week-5", "grant", 0);
+  assert.deepEqual([historical.status, (await json(historical)).error], [409, "publication_not_live"]);
+  const history = (await json(await call(admin, "/api/staff/rewards"))).periods.find((period) => period.key === "2026-27:week-5");
   assert.deepEqual([history.active.champion, history.revoked], [1, 1]);
 
   // ---- Campus Wins: a separate consent and always the latest look (issue #25)
@@ -159,6 +180,11 @@ test("release B2: V2 characters, server-owned rewards and public sync", async (c
   assert.equal((await board(4)).rows[0].v2.hair, "bun", "while the leaderboard consent is unaffected");
   assert.equal((await call(admin, `/api/staff/campus-wins/${id}/moderation`, { method: "POST", body: { decision: "hidden" } })).status, 200);
   assert.equal((await feed()).some((item) => item.id === id), false, "hidden wins disappear");
+  // Direct REST reads of the legacy table (and its approval-time snapshot) are refused.
+  for (const who of [null, alpha, charlie]) {
+    const legacy = await direct(who, "/rest/v1/campus_wins_public?select=post_id,avatar_key,avatar_family");
+    assert.ok([401, 403].includes(legacy.status), `direct Campus Wins table read refused (${who ? "student" : "anonymous"})`);
+  }
   assert.equal((await call(admin, `/api/staff/campus-wins/${id}/moderation`, { method: "POST", body: { decision: "approved" } })).status, 200);
 
   // ---- suspension removes the look everywhere; the reviewed default remains

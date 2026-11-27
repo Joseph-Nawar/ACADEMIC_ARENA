@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(40);
+select plan(41);
 
 select has_schema('app_private', 'private identity schema exists');
 select has_table('app_private', 'accounts', 'private accounts exist');
@@ -207,7 +207,9 @@ reset role;
 
 set local role anon;
 select is((select count(*)::integer from public.published_leaderboard_rows), 1, 'anonymous user reads the current public leaderboard');
-select is((select count(*)::integer from public.campus_wins_public), 1, 'anonymous user reads only approved public Campus Wins projection');
+-- Release B2 (issue #25): the table is no longer readable directly; the consent-aware projection is.
+select is((select count(*)::integer from public.public_campus_wins_v2(array['top3','workshop','project','helped'])), 1, 'anonymous user reads only approved public Campus Wins projection');
+select throws_ok('select count(*) from public.campus_wins_public', '42501', null, 'anonymous users cannot read the legacy Campus Wins table directly');
 reset role;
 
 select * from finish();

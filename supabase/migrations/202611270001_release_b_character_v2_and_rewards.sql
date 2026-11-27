@@ -1145,9 +1145,20 @@ revoke all on function public.public_campus_wins_v2(text[]) from public;
 grant execute on function public.public_campus_wins_v2(text[]) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- Verified rank rewards. Eligibility comes only from staff-verified links of a
--- published level-only snapshot to active student accounts; never from a
--- name, a draft or an unverified row, and never from avatar consent.
+-- Campus Wins privacy boundary (issue #25), enforced in the database: the
+-- legacy table (and its look snapshotted at approval) is no longer readable
+-- by browser roles through PostgREST. The only public read path is
+-- public_campus_wins_v2, which applies consent, suspension and moderation.
+-- An application rolled back to Release A fails closed (its Campus Wins
+-- feed reports "unavailable") instead of showing an unconsented look.
+revoke select on table public.campus_wins_public from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Verified rank rewards. Eligibility comes only from staff-verified links of
+-- the live level-only publication, never from a name, a draft, an unverified
+-- row or avatar consent. Account status is NOT a condition: a temporarily
+-- suspended student keeps (and still earns) what their verified results
+-- earned; suspension only hides them from public pages.
 create function app_private.rank_reward_eligibility(p_snapshot_id uuid)
 returns table (account_id uuid, level smallint, "position" smallint, collection_key text)
 language sql
@@ -1157,7 +1168,6 @@ set search_path = ''
 as $$
   select link.account_id, link.level, link.position, rule.collection_key
   from app_private.published_level_row_links as link
-  join app_private.accounts as account on account.id = link.account_id and account.status = 'active'
   join app_private.rank_reward_rules as rule on link.position <= rule.max_position
   join app_private.cosmetic_collections as collection on collection.collection_key = rule.collection_key and collection.earnable
   where link.snapshot_id = p_snapshot_id
@@ -1179,7 +1189,7 @@ declare
   target public.published_leaderboard_snapshots%rowtype;
 begin
   select snapshot.* into target from public.published_leaderboard_snapshots as snapshot where snapshot.id = p_snapshot_id;
-  if not found or target.board_format <> 'level_only' or target.first_published_at is null then
+  if not found or target.board_format <> 'level_only' or target.first_published_at is null or target.row_count <> 30 then
     raise exception using errcode = '22023', message = 'published level-only leaderboard not found';
   end if;
   return target;
@@ -1196,37 +1206,100 @@ as $$
   select p_period_key is not null and p_period_key ~ '^[a-z0-9][a-z0-9._:-]{2,63}$'
 $$;
 
--- Aggregate preview of processing a publication for an earning period. No
--- names, usernames or accounts; counts only. Grants nothing.
-create function public.preview_rank_rewards(p_snapshot_id uuid, p_period_key text)
+-- The one key a NEW earning period may have for a publication, derived from
+-- its academic year and release label, so formatting differences and typos
+-- ("Week 05", "week 5 ", "WEEK-5") cannot open a second period:
+-- 2026-27 + "Week 05" -> 2026-27:week-5. Null when the publication has no label.
+create function app_private.canonical_period_key(p_academic_year text, p_release_label text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select case when p_release_label is null or pg_catalog.btrim(p_release_label) = '' then null else
+    pg_catalog.left(
+      pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(p_academic_year), '[^a-z0-9]+', '-', 'g'), '-') || ':' ||
+      pg_catalog.btrim(pg_catalog.regexp_replace(
+        pg_catalog.regexp_replace(pg_catalog.lower(p_release_label), '[^a-z0-9]+', '-', 'g'),
+        '(^|[^0-9])0+([0-9])', '\1\2', 'g'), '-'),
+      64)
+  end
+$$;
+
+-- Everything a staff member must see before processing, and the exact
+-- number of changes the processor will make. Shared by preview and process,
+-- so the confirmation a person gives is for precisely what will happen.
+create function app_private.rank_reward_plan(p_snapshot_id uuid, p_period_key text)
 returns jsonb
 language plpgsql
+stable
 security definer
 set search_path = ''
 as $$
 declare
   target public.published_leaderboard_snapshots%rowtype;
+  wanted text := pg_catalog.lower(pg_catalog.btrim(p_period_key));
+  canonical text;
   period app_private.reward_periods%rowtype;
   bound_key text;
-  result jsonb;
+  replacement_of text;
+  linked integer;
+  previous_linked integer;
+  blockers text[] := '{}';
+  plan jsonb;
 begin
-  if not app_private.has_permission('rewards.process') then
-    raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
-  end if;
-  if not app_private.valid_period_key(p_period_key) then
+  target := app_private.reward_snapshot(p_snapshot_id);
+  canonical := app_private.canonical_period_key(target.academic_year, target.release_label);
+  if not app_private.valid_period_key(wanted) then
     raise exception using errcode = '22023', message = 'invalid earning period';
   end if;
-  target := app_private.reward_snapshot(p_snapshot_id);
-  select reward_period.* into period from app_private.reward_periods as reward_period where reward_period.period_key = p_period_key;
+  select reward_period.* into period from app_private.reward_periods as reward_period where reward_period.period_key = wanted;
   select bound_period.period_key into bound_key
   from app_private.reward_period_snapshots as binding
   join app_private.reward_periods as bound_period on bound_period.id = binding.period_id
   where binding.snapshot_id = p_snapshot_id;
+  select pg_catalog.count(*) into linked from app_private.published_level_row_links as link where link.snapshot_id = p_snapshot_id;
+  select coalesce(pg_catalog.max(counts.total), 0) into previous_linked from (
+    select pg_catalog.count(*) as total
+    from app_private.reward_period_snapshots as binding
+    join app_private.published_level_row_links as link on link.snapshot_id = binding.snapshot_id
+    where binding.period_id = period.id and binding.snapshot_id <> p_snapshot_id
+    group by binding.snapshot_id
+  ) as counts;
+  -- A publication whose verified links are (almost) all identical to one
+  -- already processed for another period of the same academic year is a
+  -- replacement of that competition, not a new one.
+  select other.period_key into replacement_of
+  from app_private.reward_period_snapshots as binding
+  join app_private.reward_periods as other on other.id = binding.period_id
+  join public.published_leaderboard_snapshots as other_snapshot on other_snapshot.id = binding.snapshot_id
+  where binding.snapshot_id <> p_snapshot_id and other.period_key <> wanted
+    and other_snapshot.academic_year = target.academic_year
+    and linked > 0
+    and (select pg_catalog.count(*) from app_private.published_level_row_links as mine
+         join app_private.published_level_row_links as theirs
+           on theirs.snapshot_id = binding.snapshot_id and theirs.account_id = mine.account_id
+          and theirs.level = mine.level and theirs.position = mine.position
+         where mine.snapshot_id = p_snapshot_id) * 10
+      >= 9 * greatest(linked, (select pg_catalog.count(*) from app_private.published_level_row_links as theirs where theirs.snapshot_id = binding.snapshot_id))
+  limit 1;
+
+  if not (target.is_current and target.revoked_at is null) then blockers := blockers || 'not_live'::text; end if;
+  if canonical is null then blockers := blockers || 'no_release_label'::text; end if;
+  if bound_key is not null and bound_key <> wanted then blockers := blockers || 'bound_to_other_period'::text; end if;
+  if period.id is null and wanted is distinct from canonical then blockers := blockers || 'new_period_key_not_canonical'::text; end if;
+  if period.id is not null and period.source_kind <> 'academic_rank' then blockers := blockers || 'period_belongs_to_other_source'::text; end if;
+  if period.id is null and replacement_of is not null then blockers := blockers || 'likely_replacement'::text; end if;
+  if linked = 0 then blockers := blockers || 'no_verified_links'::text; end if;
 
   with eligible as (
     select * from app_private.rank_reward_eligibility(p_snapshot_id)
   ), existing as (
     select entitlement.* from app_private.cosmetic_entitlements as entitlement where entitlement.period_id = period.id
+  ), revocable as (
+    select existing.account_id, existing.collection_key from existing
+    where existing.revoked_at is null
+      and not exists (select 1 from eligible where eligible.account_id = existing.account_id and eligible.collection_key = existing.collection_key)
   ), per_collection as (
     select collection.collection_key,
       (select pg_catalog.count(*) from eligible where eligible.collection_key = collection.collection_key
@@ -1235,40 +1308,73 @@ begin
          where eligible.collection_key = collection.collection_key and existing.revoked_at is null) as already_granted,
       (select pg_catalog.count(*) from eligible join existing using (account_id, collection_key)
          where eligible.collection_key = collection.collection_key and existing.revoked_at is not null) as previously_revoked,
-      (select pg_catalog.count(*) from existing where existing.collection_key = collection.collection_key and existing.revoked_at is null
-         and not exists (select 1 from eligible where eligible.account_id = existing.account_id and eligible.collection_key = existing.collection_key)) as would_revoke
+      (select pg_catalog.count(*) from revocable where revocable.collection_key = collection.collection_key) as would_revoke
     from app_private.cosmetic_collections as collection
     where collection.earnable
   )
   select pg_catalog.jsonb_build_object(
-    'snapshot', pg_catalog.jsonb_build_object('version', target.version_number, 'label', target.release_label, 'current', target.is_current and target.revoked_at is null),
-    'period', pg_catalog.jsonb_build_object('key', p_period_key, 'exists', period.id is not null, 'label', period.label,
+    'snapshot', pg_catalog.jsonb_build_object('version', target.version_number, 'label', target.release_label,
+      'current', target.is_current and target.revoked_at is null),
+    'canonicalKey', canonical,
+    'period', pg_catalog.jsonb_build_object('key', wanted, 'exists', period.id is not null, 'label', period.label,
       'sourceKind', period.source_kind,
       'versions', coalesce((select pg_catalog.jsonb_agg(snapshot.version_number order by snapshot.version_number)
         from app_private.reward_period_snapshots as binding
         join public.published_leaderboard_snapshots as snapshot on snapshot.id = binding.snapshot_id
         where binding.period_id = period.id), '[]'::jsonb)),
-    'rows', (select pg_catalog.count(*) from public.published_level_rows as level_row where level_row.snapshot_id = p_snapshot_id),
-    'linked', (select pg_catalog.count(*) from app_private.published_level_row_links as link where link.snapshot_id = p_snapshot_id),
+    'rows', target.row_count,
+    'linked', linked,
+    'previousLinked', previous_linked,
     'eligibleStudents', (select pg_catalog.count(distinct eligible.account_id) from eligible),
     'exclusions', pg_catalog.jsonb_build_object(
-      'unlinked', (select pg_catalog.count(*) from public.published_level_rows as level_row where level_row.snapshot_id = p_snapshot_id
-        and not exists (select 1 from app_private.published_level_row_links as link where link.snapshot_id = level_row.snapshot_id
-          and link.level = level_row.level and link.position = level_row.position)),
-      'inactiveAccounts', (select pg_catalog.count(*) from app_private.published_level_row_links as link
+      'unlinked', target.row_count - linked,
+      'linkedSuspended', (select pg_catalog.count(*) from app_private.published_level_row_links as link
         join app_private.accounts as account on account.id = link.account_id
         where link.snapshot_id = p_snapshot_id and account.status <> 'active')),
     'collections', (select pg_catalog.jsonb_object_agg(per_collection.collection_key, pg_catalog.jsonb_build_object(
         'newGrants', per_collection.new_grants, 'alreadyGranted', per_collection.already_granted,
         'previouslyRevoked', per_collection.previously_revoked, 'wouldRevoke', per_collection.would_revoke))
       from per_collection),
+    'revocation', pg_catalog.jsonb_build_object(
+      'students', (select pg_catalog.count(distinct revocable.account_id) from revocable),
+      -- Students who would lose a collection entirely while wearing one of its items.
+      'equippedFallbacks', (select pg_catalog.count(distinct revocable.account_id) from revocable
+        join public.student_avatar_configs as avatar on avatar.account_id = revocable.account_id and avatar.v2_config is not null
+        where not exists (
+            select 1 from app_private.cosmetic_entitlements as other
+            where other.account_id = revocable.account_id and other.collection_key = revocable.collection_key
+              and other.revoked_at is null and other.period_id is distinct from period.id)
+          and exists (
+            select 1 from pg_catalog.jsonb_each_text(avatar.v2_config) as worn(field, value)
+            join app_private.character_v2_values as allowed on allowed.field = worn.field and allowed.value = worn.value
+            where allowed.collection_key = revocable.collection_key))),
+    'expectedChanges', pg_catalog.jsonb_build_object(
+      'grant', (select coalesce(pg_catalog.sum(per_collection.new_grants), 0) from per_collection),
+      'reconcile', (select coalesce(pg_catalog.sum(per_collection.new_grants + per_collection.previously_revoked + per_collection.would_revoke), 0) from per_collection)),
     'conflicts', pg_catalog.jsonb_build_object(
       'snapshotBoundToPeriod', bound_key,
-      'snapshotBoundElsewhere', bound_key is not null and bound_key <> p_period_key,
-      'periodSourceMismatch', period.id is not null and period.source_kind <> 'academic_rank'),
+      'likelyReplacementOf', replacement_of,
+      'incompleteLinks', linked < previous_linked),
+    'blockers', pg_catalog.to_jsonb(blockers),
     'rewardsSwitchOn', app_private.student_feature('cosmetic_rewards')
-  ) into result;
-  return result;
+  ) into plan;
+  return plan;
+end
+$$;
+revoke all on function app_private.rank_reward_plan(uuid, text) from public, anon, authenticated, service_role;
+
+-- Aggregate preview (counts only: no names, usernames or accounts). Grants nothing.
+create function public.preview_rank_rewards(p_snapshot_id uuid, p_period_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not app_private.has_permission('rewards.process') then
+    raise exception using errcode = '42501', message = 'authorized AAL2 administrator required';
+  end if;
+  return app_private.rank_reward_plan(p_snapshot_id, p_period_key);
 end
 $$;
 revoke all on function public.preview_rank_rewards(uuid, text) from public, anon, service_role;
@@ -1302,14 +1408,18 @@ end
 $$;
 revoke all on function app_private.apply_equipped_fallback(uuid, uuid, uuid) from public, anon, authenticated, service_role;
 
--- Process verified results for one earning period. Idempotent: retries,
--- republishing and rollback grant nothing twice.
---   p_mode 'grant'     grant what is missing; never revokes; never re-grants a revoked one.
---   p_mode 'reconcile' also revokes this period's grants the given (corrected)
---                      publication no longer supports, re-grants revoked ones it
---                      supports again, and falls back equipped items.
--- Refused unless the owner has switched cosmetic_rewards on.
-create function public.process_rank_rewards(p_snapshot_id uuid, p_period_key text, p_period_label text, p_mode text)
+-- Process the live publication's verified results for one earning period.
+-- Idempotent: retries, republishing and rollback grant nothing twice.
+--   p_mode 'grant'     grant what is missing; never revokes or re-grants.
+--   p_mode 'reconcile' also revokes this period's grants the (corrected) live
+--                      publication no longer supports, re-grants revoked ones
+--                      it supports again, and falls back equipped items.
+-- p_expected_changes must equal the preview's expectedChanges for the mode:
+-- a stale preview, or a person confirming something other than what would
+-- happen, changes nothing (AAR06). Refused unless cosmetic_rewards is on.
+create function public.process_rank_rewards(
+  p_snapshot_id uuid, p_period_key text, p_period_label text, p_mode text, p_expected_changes integer
+)
 returns jsonb
 language plpgsql
 security definer
@@ -1318,8 +1428,10 @@ as $$
 declare
   actor_account_id uuid;
   target public.published_leaderboard_snapshots%rowtype;
+  wanted text := pg_catalog.lower(pg_catalog.btrim(p_period_key));
+  plan jsonb;
+  blocking text[];
   period app_private.reward_periods%rowtype;
-  bound_period uuid;
   candidate record;
   granted integer := 0;
   regranted integer := 0;
@@ -1334,40 +1446,52 @@ begin
   if not app_private.student_feature('cosmetic_rewards') then
     raise exception using errcode = 'AAR01', message = 'cosmetic rewards are not switched on';
   end if;
-  if not app_private.valid_period_key(p_period_key) or p_mode is null or p_mode not in ('grant', 'reconcile')
-    or p_period_label is null or p_period_label !~ '^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,47}$' then
+  if not app_private.valid_period_key(wanted) or p_mode is null or p_mode not in ('grant', 'reconcile')
+    or p_period_label is null or p_period_label !~ '^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,47}$' or p_expected_changes is null then
     raise exception using errcode = '22023', message = 'invalid reward request';
   end if;
   actor_account_id := app_private.current_account_id();
-  -- Links cannot change underneath, and two processors cannot interleave.
+  -- Links and publications cannot change underneath, and two processors cannot interleave.
   perform app_private.lock_leaderboard_publication();
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('arena.rewards', 0));
   target := app_private.reward_snapshot(p_snapshot_id);
+  plan := app_private.rank_reward_plan(p_snapshot_id, wanted);
+  blocking := array(select pg_catalog.jsonb_array_elements_text(plan -> 'blockers'));
+  if p_mode = 'reconcile' and (plan #>> '{conflicts,incompleteLinks}')::boolean then
+    blocking := blocking || 'incomplete_links'::text;
+  end if;
+  if 'not_live' = any(blocking) then
+    raise exception using errcode = 'AAR04', message = 'only the live publication can be processed';
+  elsif 'bound_to_other_period' = any(blocking) or 'likely_replacement' = any(blocking) then
+    raise exception using errcode = 'AAR02', message = 'publication belongs to another earning period';
+  elsif 'new_period_key_not_canonical' = any(blocking) or 'no_release_label' = any(blocking) then
+    raise exception using errcode = 'AAR08', message = 'a new earning period must use the publication''s canonical key';
+  elsif 'period_belongs_to_other_source' = any(blocking) then
+    raise exception using errcode = 'AAR03', message = 'earning period belongs to another reward source';
+  elsif 'incomplete_links' = any(blocking) or 'no_verified_links' = any(blocking) then
+    raise exception using errcode = 'AAR05', message = 'verified links are incomplete for this period';
+  end if;
+  if (plan #>> array['expectedChanges', p_mode])::integer <> p_expected_changes then
+    raise exception using errcode = 'AAR06', message = 'the preview is out of date; preview again';
+  end if;
 
   insert into app_private.reward_periods (period_key, source_kind, label, created_by)
-  values (p_period_key, 'academic_rank', p_period_label, actor_account_id)
+  values (wanted, 'academic_rank', p_period_label, actor_account_id)
   on conflict (period_key) do nothing;
-  select reward_period.* into period from app_private.reward_periods as reward_period where reward_period.period_key = p_period_key;
-  if period.source_kind <> 'academic_rank' then
-    raise exception using errcode = 'AAR03', message = 'earning period belongs to another reward source';
-  end if;
+  select reward_period.* into period from app_private.reward_periods as reward_period where reward_period.period_key = wanted;
   insert into app_private.reward_period_snapshots (snapshot_id, period_id, bound_by)
   values (p_snapshot_id, period.id, actor_account_id)
   on conflict (snapshot_id) do nothing;
-  select binding.period_id into bound_period from app_private.reward_period_snapshots as binding where binding.snapshot_id = p_snapshot_id;
-  if bound_period <> period.id then
-    raise exception using errcode = 'AAR02', message = 'publication already processed for another earning period';
-  end if;
 
   -- Per-account locks in a fixed order; the student save takes the same lock.
   for account in
-    select distinct account_id from (
+    select distinct accounts.account_id from (
       select eligible.account_id from app_private.rank_reward_eligibility(p_snapshot_id) as eligible
       union
       select entitlement.account_id from app_private.cosmetic_entitlements as entitlement
       where p_mode = 'reconcile' and entitlement.period_id = period.id
     ) as accounts
-    order by account_id
+    order by 1
   loop
     perform app_private.lock_character(account);
   end loop;
@@ -1433,15 +1557,15 @@ begin
 
   insert into app_private.reward_events (actor_account_id, period_id, event_kind, reason_code)
   values (actor_account_id, period.id, 'processed',
-    'v' || target.version_number::text || '-' || p_mode || '-g' || granted::text || '-r' || revoked::text);
+    'v' || target.version_number::text || '-' || p_mode || '-g' || (granted + regranted)::text || '-r' || revoked::text);
   insert into app_private.audit_events (actor_account_id, action_key, reason_code)
-  values (actor_account_id, 'rewards.processed', 'v' || target.version_number::text || '-' || p_mode || '-g' || granted::text || '-r' || revoked::text);
-  return pg_catalog.jsonb_build_object('period', p_period_key, 'version', target.version_number, 'mode', p_mode,
+  values (actor_account_id, 'rewards.processed', 'v' || target.version_number::text || '-' || p_mode || '-g' || (granted + regranted)::text || '-r' || revoked::text);
+  return pg_catalog.jsonb_build_object('period', wanted, 'version', target.version_number, 'mode', p_mode,
     'granted', granted, 'regranted', regranted, 'revoked', revoked, 'equippedFallbacks', fallbacks);
 end
 $$;
-revoke all on function public.process_rank_rewards(uuid, text, text, text) from public, anon, service_role;
-grant execute on function public.process_rank_rewards(uuid, text, text, text) to authenticated;
+revoke all on function public.process_rank_rewards(uuid, text, text, text, integer) from public, anon, service_role;
+grant execute on function public.process_rank_rewards(uuid, text, text, text, integer) to authenticated;
 
 -- Audited manual revocation of one student's grant for one period (e.g. a
 -- link that was verified in error). Works with the rewards switch off, so a
@@ -1528,4 +1652,5 @@ revoke all on function app_private.guard_character_v2() from public, anon, authe
 revoke all on function app_private.lock_character(uuid) from public, anon, authenticated, service_role;
 revoke all on function app_private.current_student_account() from public, anon, authenticated, service_role;
 revoke all on function app_private.valid_period_key(text) from public, anon, authenticated, service_role;
+revoke all on function app_private.canonical_period_key(text, text) from public, anon, authenticated, service_role;
 revoke all on function app_private.reward_events_append_only() from public, anon, authenticated, service_role;

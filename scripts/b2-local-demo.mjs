@@ -159,12 +159,13 @@ try {
   ok("podium #1 is drawn by the shared renderer from A's saved config");
 
   step("Staff: verified rewards preview, then grant (twice: idempotent)");
-  const previewed = (await call(admin, "/api/staff/rewards/preview", { method: "POST", body: { publicationId: week5, periodKey: "2026-27:week-05" } })).payload.preview;
+  const previewed = (await call(admin, "/api/staff/rewards/preview", { method: "POST", body: { publicationId: week5, periodKey: "2026-27:week-5" } })).payload.preview;
   console.log(`  preview: elite +${previewed.collections.elite.newGrants}, podium +${previewed.collections.podium.newGrants}, champion +${previewed.collections.champion.newGrants}; unlinked rows ${previewed.exclusions.unlinked}; switch ${previewed.rewardsSwitchOn ? "on" : "off"}`);
-  assert.equal((await call(admin, "/api/staff/rewards/process", { method: "POST", body: { publicationId: week5, periodKey: "2026-27:week-05", periodLabel: "Week 5", mode: "grant" } })).status, 409, "refused while the switch is off");
+  const processBody = (expectedChanges) => ({ publicationId: week5, periodKey: "2026-27:week-5", periodLabel: "Week 5", mode: "grant", expectedChanges });
+  assert.equal((await call(admin, "/api/staff/rewards/process", { method: "POST", body: processBody(previewed.expectedChanges.grant) })).status, 409, "refused while the switch is off");
   feature("cosmetic_rewards", "on");
-  const granted = (await call(admin, "/api/staff/rewards/process", { method: "POST", body: { publicationId: week5, periodKey: "2026-27:week-05", periodLabel: "Week 5", mode: "grant" } })).payload.result;
-  const again = (await call(admin, "/api/staff/rewards/process", { method: "POST", body: { publicationId: week5, periodKey: "2026-27:week-05", periodLabel: "Week 5", mode: "grant" } })).payload.result;
+  const granted = (await call(admin, "/api/staff/rewards/process", { method: "POST", body: processBody(previewed.expectedChanges.grant) })).payload.result;
+  const again = (await call(admin, "/api/staff/rewards/process", { method: "POST", body: processBody(0) })).payload.result;
   assert.deepEqual([granted.granted, again.granted], [4, 0]);
   ok("granted 4 (A: Elite+Podium+Champion, B: Elite); the retry granted 0");
 

@@ -1,7 +1,7 @@
 begin;
 set local search_path = public, extensions;
 
-select plan(21);
+select plan(22);
 
 select has_table('public', 'published_leaderboard_snapshots', 'versioned public leaderboard snapshots exist');
 select has_table('public', 'published_leaderboard_rows', 'public leaderboard rows exist');
@@ -19,8 +19,11 @@ select ok(
   has_column_privilege('anon', 'public.published_leaderboard_snapshots', 'version_number', 'select')
   and has_column_privilege('anon', 'public.published_leaderboard_snapshots', 'published_at', 'select')
   and has_table_privilege('anon', 'public.published_leaderboard_rows', 'select')
-  and has_table_privilege('anon', 'public.campus_wins_public', 'select'),
-  'anonymous users can read the three allowlisted public projections'
+  -- Release B2 (issue #25): Campus Wins is public only through the consent-aware function.
+  and has_function_privilege('anon', 'public.public_campus_wins_v2(text[])', 'execute')
+  and not has_table_privilege('anon', 'public.campus_wins_public', 'select')
+  and not has_table_privilege('authenticated', 'public.campus_wins_public', 'select'),
+  'anonymous users can read the three allowlisted public projections (Campus Wins only through its consent-aware function)'
 );
 select ok(
   not has_table_privilege('anon', 'public.published_leaderboard_snapshots', 'insert')
@@ -116,7 +119,8 @@ set local role anon;
 select is((select count(*)::integer from public.published_leaderboard_rows), 1, 'anonymous readers cannot see retired board snapshots');
 select is((select public_name from public.published_leaderboard_rows limit 1), 'Fictional Current', 'anonymous projection includes only current, approved public names');
 select is((select count(*)::integer from public.published_leaderboard_snapshots), 1, 'anonymous readers see only the current snapshot version');
-select is((select count(*)::integer from public.campus_wins_public where template_key = 'workshop'), 1, 'anonymous readers see the approved template projection');
+select is((select count(*)::integer from public.public_campus_wins_v2(array['workshop'])), 1, 'anonymous readers see the approved template projection');
+select throws_ok('select count(*) from public.campus_wins_public', '42501', null, 'the legacy table is not directly readable');
 select throws_ok(
   $$insert into public.published_leaderboard_snapshots (version_number, academic_year, published_at, is_current) values (101, 'fictional-invalid', now(), true)$$,
   '42501', null,

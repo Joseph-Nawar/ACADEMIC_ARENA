@@ -202,9 +202,10 @@ export async function runStaffDeskRaceTests(browser, baseUrl) {
         previewBody = JSON.parse(route.request().postData());
         return json(route, 200, { preview: {
           publication: { version: 12, label: "Week 5", current: true }, period: { key: previewBody.periodKey, exists: false, versions: [] },
-          rows: 30, linked: 24, eligibleStudents: 24, exclusions: { unlinked: 6, inactiveAccounts: 0 },
+          canonicalKey: "2026-27:week-5", rows: 30, linked: 24, previousLinked: 0, eligibleStudents: 24, exclusions: { unlinked: 6, linkedSuspended: 1 },
+          revocation: { students: 0, equippedFallbacks: 0 }, expectedChanges: { grant: 35, reconcile: 35 }, blockers: [],
           collections: { elite: { newGrants: 24, alreadyGranted: 0, previouslyRevoked: 0, wouldRevoke: 0 }, podium: { newGrants: 8, alreadyGranted: 0, previouslyRevoked: 0, wouldRevoke: 0 }, champion: { newGrants: 3, alreadyGranted: 0, previouslyRevoked: 0, wouldRevoke: 0 } },
-          conflicts: { snapshotBoundToPeriod: null, snapshotBoundElsewhere: false, periodSourceMismatch: false }, rewardsSwitchOn: false,
+          conflicts: { snapshotBoundToPeriod: null, likelyReplacementOf: null, incompleteLinks: false }, rewardsSwitchOn: false,
         } });
       }
       return json(route, 200, { rows: [], links: [], posts: [], publications: [], leaderboards: [] });
@@ -221,6 +222,8 @@ export async function runStaffDeskRaceTests(browser, baseUrl) {
     assert.deepEqual(previewBody, { publicationId: "33333333-3333-4333-8333-333333333333", periodKey: "2026-27:week-5" });
     assert.match(await page.locator("#rewards-summary").textContent(), /Elite \(Top 10\): 24 new/);
     assert.match(await page.locator("#rewards-warnings").textContent(), /switched off/);
+    assert.match(await page.locator("#rewards-warnings").textContent(), /1 linked student\(s\) are suspended\. They still earn and keep/);
+    assert.match(await page.locator("#rewards-summary").textContent(), /Changes to confirm: GRANT 35 · RECONCILE 35/);
     assert.equal(await page.locator("#rewards-grant").isDisabled(), true, "nothing can be granted while the switch is off");
     await context.close();
   }
