@@ -19,6 +19,25 @@
   const boardArtwork = (row) => (row.avatar ? artwork(row.avatar, boardStyle(row)) : `assets/competitors/podium-${row.position}.svg`);
   const boardThumbnail = (row) => (row.avatar ? faceArtwork(row.avatar, boardStyle(row)) : `assets/competitors/thumb-${"abc"[(row.position - 4) % 3]}.svg`);
   const artKind = (row) => (row.personalized ? "personal" : row.avatar ? "default" : "neutral");
+  // Character V2 rows are drawn by the shared renderer (the same one the studio
+  // uses), inline: the strict CSP allows no data: images. The SVG is built only
+  // from catalog constants after the config passed the catalog validator.
+  const V2_TONES = { mint: "mint", coral: "coral", gold: "gold", paper: "paper", sky: "blue", lilac: "lilac" };
+  function setV2Art(host, className, row, context, label) {
+    let art = host.querySelector(`:scope > .${className}`);
+    const renderer = window.AcademicArenaAvatarRenderer;
+    if (!row?.v2 || !renderer) {
+      art?.remove();
+      return false;
+    }
+    if (!art) {
+      art = document.createElement("span");
+      art.className = className;
+      host.append(art);
+    }
+    art.innerHTML = renderer.render(row.v2, { context, backdrop: context !== "full", sticker: false, title: label, decorative: !label });
+    return true;
+  }
   const templates = Object.freeze({
     top3: { title: "TOP THREE!", icon: "🏆", category: "academic", tone: "gold" },
     workshop: { title: "WORKSHOP WIN!", icon: "🎯", category: "consistency", tone: "mint" },
@@ -56,6 +75,10 @@
   let passwordFormOpen = false;
   let lastUsername = "";
   let features = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false };
+  // Later deferred scripts (staff.js) may load after the first session event
+  // fired; they read the latest one from here instead of missing it.
+  let lastSessionDetail = null;
+  Object.defineProperty(window, "AcademicArenaSession", { value: Object.freeze({ latest: () => lastSessionDetail }) });
   const WELCOME_KEY = "arena-welcome-dismissed";
   const WELCOME_VERSION = "v1";
   let welcomeReturnFocus = null;
@@ -146,18 +169,23 @@
       if (!row) {
         image.removeAttribute("src");
         image.alt = "";
+        image.hidden = false;
+        setV2Art(image.closest(".competitor"), "champion-v2", null);
         name.replaceChildren("—");
         name.removeAttribute("title");
         setPersonalTouches(image.closest(".competitor"), {});
         continue;
       }
-      image.src = boardArtwork(row);
+      const competitor = image.closest(".competitor");
+      const custom = setV2Art(competitor, "champion-v2", row, "full", `Character chosen by the rank ${position} student`);
+      image.hidden = custom;
+      if (custom) image.removeAttribute("src");
+      else image.src = boardArtwork(row);
       image.alt = row.personalized ? `Character chosen by the rank ${position} student`
         : row.avatar ? `Illustrated character for rank ${position}` : `Neutral illustration for rank ${position}`;
-      const competitor = image.closest(".competitor");
       competitor.dataset.art = artKind(row);
-      competitor.dataset.style = boardStyle(row);
-      setPersonalTouches(competitor, row);
+      competitor.dataset.style = custom ? "v2" : boardStyle(row);
+      setPersonalTouches(competitor, custom ? { personalized: true, tone: V2_TONES[row.v2.backdrop] || "gold" } : row);
       setPublicName(name, visibleName(row), row.name);
     }
     for (const rowData of rows.filter((row) => row.position > 3).slice(0, 7)) {
@@ -167,12 +195,16 @@
       position.textContent = String(rowData.position).padStart(2, "0");
       const portrait = document.createElement("span");
       portrait.className = "pic";
-      const image = document.createElement("img");
-      image.src = boardThumbnail(rowData);
-      image.alt = "";
       portrait.dataset.art = artKind(rowData) === "neutral" ? "anonymous" : artKind(rowData);
-      portrait.append(image);
-      setPersonalTouches(portrait, rowData);
+      if (setV2Art(portrait, "pic-v2", rowData, "portrait", "")) {
+        portrait.dataset.style = "v2";
+      } else {
+        const image = document.createElement("img");
+        image.src = boardThumbnail(rowData);
+        image.alt = "";
+        portrait.append(image);
+        setPersonalTouches(portrait, rowData);
+      }
       const name = document.createElement("span");
       name.className = "person";
       setPublicName(name, visibleName(rowData), rowData.name);
@@ -650,7 +682,8 @@
     if (!session.authenticated) resetPortrait();
     renderHeader();
     renderSaveNote();
-    window.dispatchEvent(new CustomEvent("arena:session", { detail: { session, api, showPage } }));
+    lastSessionDetail = { session, api, showPage };
+    window.dispatchEvent(new CustomEvent("arena:session", { detail: lastSessionDetail }));
     if (mode !== "production") return;
     const user = session.user || {};
     const student = session.authenticated && user.role === "student" && !user.mustChangePassword;

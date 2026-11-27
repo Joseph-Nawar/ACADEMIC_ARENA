@@ -1,0 +1,6 @@
+body{font-family:system-ui,sans-serif;background:#f8f2e8;margin:20px;color:#182526}
+h2{margin:28px 0 8px;font-size:16px;text-transform:uppercase;letter-spacing:1px}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+figure{margin:0;width:150px;text-align:center;font-size:11px;font-weight:700}
+figure.portrait{width:110px}
+figure svg{width:100%;height:auto;display:block;border:2px solid #182526;background:#fff}

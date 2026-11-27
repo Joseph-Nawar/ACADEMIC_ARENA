@@ -60,6 +60,8 @@ export async function runDemoBrowserTests(browser, baseUrl, root) {
   assert.equal(new Set(Object.values(boards).map((board) => board.podium.join("|"))).size, 3, "each level shows its own rankings");
 
   await page.locator('.nav-link[data-page="avatar"]').click();
+  // Release B: the demo opens the custom (V2) studio; the classic studio is one switch away.
+  await page.locator('[data-look="classic"]').click();
   await page.locator('button[data-base="amara"]').click();
   await page.locator('button[data-style="cartoon3d"]').click();
   assert.match(await page.locator("#studio-art").getAttribute("src"), /amara-3d\.png$/);

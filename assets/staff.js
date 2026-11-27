@@ -574,10 +574,10 @@
     });
   }
 
-  window.addEventListener("arena:session", (event) => {
-    api = event.detail.api;
-    showPage = event.detail.showPage;
-    const session = event.detail.session;
+  function onSession(detail) {
+    api = detail.api;
+    showPage = detail.showPage;
+    const session = detail.session;
     const user = session.authenticated ? session.user : null;
     const verifiedStaff = Boolean(user && user.role !== "student" && !user.mfaRequired && !user.mustChangePassword && api.mode === "production");
     canPublish = verifiedStaff && ["publisher", "admin"].includes(user.role);
@@ -596,5 +596,9 @@
     }
     bind();
     status("Signed in with staff verification.", "ready");
-  });
+  }
+  window.addEventListener("arena:session", (event) => onSession(event.detail));
+  // The first session may have been announced before this script loaded.
+  const announced = window.AcademicArenaSession?.latest();
+  if (announced) onSession(announced);
 })();

@@ -75,9 +75,18 @@
         TONES.has(value.tone) && BADGES.has(value.badge)) {
       return { position, name, avatar: value.avatar, style: value.style, tone: value.tone, badge: value.badge, personalized: true };
     }
+    // Character V2: a compact, versioned config of catalog keys. The server has
+    // already authorized it (ownership, consent, link); the browser only checks
+    // its shape, so nothing outside the trusted catalog is ever drawn.
+    const v2 = globalThis.AcademicArenaAvatarCatalog;
+    if (value.personalized === true && value.v2 && v2) {
+      const check = v2.validateConfig(value.v2, { ownedItems: new Set(Object.keys(v2.items)) });
+      if (check.ok) return { position, name, v2: check.config, personalized: true };
+    }
     // Otherwise the staff-approved character for this publication row, if any;
     // with none, the page shows a neutral illustration.
-    if (value.personalized !== true && CHARACTER_IDS.has(value.avatar)) return { position, name, avatar: value.avatar, personalized: false };
+    // A V2 row this page can't verify falls back to that row's reviewed default.
+    if ((value.personalized !== true || value.v2) && CHARACTER_IDS.has(value.avatar)) return { position, name, avatar: value.avatar, personalized: false };
     return { position, name, personalized: false };
   }
 
@@ -244,6 +253,7 @@
           name: student.name,
           avatar: student.avatar,
           style: student.style,
+          ...(student.v2 ? { v2: student.v2, personalized: true } : {}),
         })).filter(Boolean);
       }
       const scope = "level|" + filters.level;
@@ -263,6 +273,7 @@
           name: student.name,
           avatar: student.avatar,
           style: student.style,
+          ...(student.v2 ? { v2: student.v2, personalized: true } : {}),
         }))
         .filter(Boolean);
     }

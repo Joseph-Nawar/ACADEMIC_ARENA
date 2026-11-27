@@ -2,6 +2,32 @@
 
 Keep short. Newest first.
 
+## 2026-11-27 — Release B1: Character Studio V2 art engine and studio (branch `release-b/character-studio-v2`)
+
+- **Built (fictional demo only; production behaviour unchanged):**
+  - an original modular SVG character engine (`assets/avatar-v2/`): 12 skin tones, 6 faces, 4 builds, 22 hairstyles, 16 hair colours, 8 eye shapes, 10 eye colours, 8 brows, 6 noses, 10 expressions, 10 facial-hair styles, 4 headscarf styles plus a head wrap and hats, makeup and facial details, glasses, hearing aids, a cochlear processor, cane, crutches, a wheelchair (seated pose), clothing, backdrops and stickers;
+  - one renderer for full body, portrait, face, torso and legs; the same config draws the studio, the podium and the rank thumbnails;
+  - My Character → Create / Wardrobe / Arena Pass, with:
+    - undo and redo;
+    - randomize (owned and compatible items only) and reset;
+    - unsaved-change state;
+    - try-on of locked items, which cannot be saved;
+    - a reward celebration that respects reduced motion;
+    - a Classic/Custom switch, so the classic look is kept;
+  - collections: Essentials (free, every identity and access option), Elite, Podium, Champion, plus Scholar and Seasonal, which stay inactive;
+  - reward rules `collectionsForPosition`: Top 10 → Elite; Top 3 → adds Podium; first → adds Champion;
+  - reference doc: `docs/design/character-v2.md` (coordinates, layers, compatibility rules, provenance); contact sheet: `docs/design/avatar-v2-sheet.html`.
+- **Production:** `studio-v2.js` exits outside the demo, so production shows the classic studio. Public rows render V2 only when the server sends a valid `v2` config, and none does yet.
+- **Fixed in passing:** `staff.js` could miss the first `arena:session` event if it loaded late (seen as an intermittent missing Staff Desk once more scripts loaded). It now reads the latest session on load.
+- **Tests:**
+  - `tests/frontend/avatar-v2.test.mjs`: catalogue targets, free identity items, the validator contract, ownership, compatibility, reward rules, every option rendering CSP-safe SVG, a fuzz test, hostile input and provenance;
+  - `tests/browser/v2-character-studio.spec.mjs`: desktop and mobile, keyboard, reduced motion, the board, and production hiding V2;
+  - `npm test` 120/120 (the `process_cleanup` EPERM is a sandbox flake that passes on rerun); `npm run test:browser` passed twice; `check:security` passed.
+- **Not yet tested:** WebKit/Safari, because the Playwright WebKit build is not installed.
+- **Next:**
+  - B2: additive migration with V2 config, catalogue, entitlements and append-only reward events; server-side validation and equip checks; an extended public projection; a Campus Wins consent projection (#25); the `character_studio_v2` switch.
+  - B3: Arena Pass tables behind a switch, the hosted staging gate, the release procedure.
+
 ## 2026-11-23 — Release A: public character sync (branch `release-a/public-character-sync`)
 
 - **Cause (production, read-only):** 0 verified account links have ever been approved (no `leaderboard.links_approved` audit event). 27 characters are saved and 21 opted in, `avatar_personalization` is on, and 30 of 30 rows have reviewed defaults. The board therefore shows 0 personalized rows. Save, opt-in, projection, API and caching all work.

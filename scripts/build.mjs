@@ -34,14 +34,14 @@ await copyFile(join(root, "public", "_headers"), join(outDir, "_headers"));
 
 const sourceAssets = join(root, "assets");
 const targetAssets = join(outDir, "assets");
-const packagedRootAssets = new Set(["app.css", "app.js", "data-access.js", "display-names.js", "character-suggestions.js", "staff.js"]);
+const packagedRootAssets = new Set(["app.css", "app.js", "data-access.js", "display-names.js", "character-suggestions.js", "staff.js", "studio-v2.js", "avatar-v2/catalog.js", "avatar-v2/render.js"]);
 await mkdir(targetAssets, { recursive: true });
 await cp(sourceAssets, targetAssets, {
   recursive: true,
   filter(source) {
     const relative = source.slice(sourceAssets.length + 1).split(sep).join("/");
     return !relative || relative === "characters" || relative.startsWith("characters/") ||
-      relative === "competitors" || relative.startsWith("competitors/") ||
+      relative === "competitors" || relative.startsWith("competitors/") || relative === "avatar-v2" ||
       packagedRootAssets.has(relative);
   },
 });

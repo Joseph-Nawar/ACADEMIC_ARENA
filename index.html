@@ -64,8 +64,43 @@
     <div id="wins-feed" class="wins-feed"></div>
    </section>
    <section id="page-avatar" class="page" hidden aria-labelledby="avatar-title">
-    <div class="studio-heading"><div class="section-prelude"><span class="prelude-swatch"></span>THE EUE CHARACTER STUDIO</div><h1 class="hero-title" id="avatar-title">MAKE IT<br/><span>YOUR OWN.</span></h1><p>Pick a character, an art style, a backdrop and a sticker. Save it to your Arena account, and choose whether it shows on the leaderboard.</p></div>
-    <div class="studio-grid">
+    <div class="studio-heading"><div class="section-prelude"><span class="prelude-swatch"></span>THE EUE CHARACTER STUDIO</div><h1 class="hero-title" id="avatar-title">MAKE IT<br/><span>YOUR OWN.</span></h1><p id="avatar-lede">Pick a character, an art style, a backdrop and a sticker. Save it to your Arena account, and choose whether it shows on the leaderboard.</p></div>
+    <div class="look-switch" id="look-switch" hidden><div role="radiogroup" aria-label="Which look you use"><button type="button" role="radio" data-look="v2" aria-checked="true">CUSTOM LOOK</button><button type="button" role="radio" data-look="classic" aria-checked="false">CLASSIC LOOK</button></div><p id="look-switch-note"></p></div>
+    <div id="studio-v2" class="v2" hidden>
+     <div class="v2-sections" id="v2-sections" role="tablist" aria-label="Character studio sections"><button type="button" role="tab" id="v2-tab-create" aria-controls="v2-create" aria-selected="true">CREATE</button><button type="button" role="tab" id="v2-tab-wardrobe" aria-controls="v2-wardrobe" aria-selected="false">WARDROBE <span class="v2-count" id="v2-new-count" aria-label="new items" hidden></span></button><button type="button" role="tab" id="v2-tab-pass" aria-controls="v2-pass" aria-selected="false">ARENA PASS</button></div>
+     <div class="v2-layout">
+      <div class="v2-preview">
+       <div class="v2-stage" id="v2-stage" data-frame="full"><div class="v2-stage-art" id="v2-stage-art"></div>
+        <div class="v2-stage-board" id="v2-stage-board" hidden><div class="v2-board-podium"></div><div class="v2-board-pedestal" aria-hidden="true">1</div><div class="v2-board-row" aria-hidden="true"><b>04</b><span class="v2-board-thumb"></span><span>Your name</span></div><p class="v2-board-caption">How the same character appears on the podium and in the top 10.</p></div>
+       </div>
+       <div class="v2-stage-bar"><div class="v2-frames" role="group" aria-label="Preview framing"><button type="button" data-frame="full" aria-pressed="true">FULL</button><button type="button" data-frame="portrait" aria-pressed="false">PORTRAIT</button><button type="button" data-frame="board" aria-pressed="false">ON THE BOARD</button></div><span class="v2-dirty" id="v2-dirty" hidden>● UNSAVED</span><span class="v2-saved" id="v2-saved" hidden>✓ SAVED</span></div>
+       <div class="v2-toolbar"><button type="button" id="v2-undo" aria-label="Undo" aria-keyshortcuts="Control+Z Meta+Z"><span aria-hidden="true">↶</span><span class="v2-tl"> UNDO</span></button><button type="button" id="v2-redo" aria-label="Redo" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z"><span aria-hidden="true">↷</span><span class="v2-tl"> REDO</span></button><button type="button" id="v2-random" aria-label="Randomize"><span aria-hidden="true">⚄</span><span class="v2-tl"> RANDOMIZE</span></button><button type="button" id="v2-reset" aria-label="Reset to saved look"><span aria-hidden="true">⟲</span><span class="v2-tl"> RESET</span></button><button type="button" class="button-solid" id="v2-save">SAVE LOOK ↗</button></div>
+       <p class="v2-locked-note" id="v2-locked-note" hidden></p>
+       <p class="v2-toast" id="v2-toast" role="status" aria-live="polite"></p>
+      </div>
+      <div class="v2-panel">
+       <section id="v2-create" role="tabpanel" aria-labelledby="v2-tab-create"><div class="v2-cats" id="v2-cats" role="tablist" aria-label="What to customize"></div><div class="v2-options" id="v2-options" role="tabpanel"></div></section>
+       <section id="v2-wardrobe" role="tabpanel" aria-labelledby="v2-tab-wardrobe" hidden>
+        <div class="v2-wardrobe-head"><h2>WARDROBE.</h2><p id="v2-wardrobe-summary"></p></div>
+        <div class="v2-filters" role="group" aria-label="Show"><button type="button" class="v2-chip" data-wfilter="all" aria-pressed="true">ALL</button><button type="button" class="v2-chip" data-wfilter="owned" aria-pressed="false">OWNED</button><button type="button" class="v2-chip" data-wfilter="locked" aria-pressed="false">LOCKED</button><button type="button" class="v2-chip" data-wfilter="equipped" aria-pressed="false">WEARING</button></div>
+        <div class="v2-filters v2-collections" id="v2-collections" role="group" aria-label="Collection"></div>
+        <p class="v2-fineprint">Everything about who you are (skin, hair, features, head coverings, glasses, hearing and mobility aids, everyday clothes) is free. Only special editions are earned. Rewards stay yours if your rank changes later. The current leader's crown on the board is separate and is never a wardrobe item.</p>
+        <div class="v2-wardrobe-grid" id="v2-wardrobe-grid"></div>
+       </section>
+       <section id="v2-pass" role="tabpanel" aria-labelledby="v2-tab-pass" hidden>
+        <div class="v2-pass-banner" id="v2-pass-banner"></div>
+        <div class="v2-pass-head"><h2 id="v2-pass-name"></h2><p id="v2-pass-level"></p><div class="v2-pass-bar" id="v2-pass-bar" role="img" aria-label="Fictional season progress"><i></i></div></div>
+        <ol class="v2-pass-track" id="v2-pass-track" aria-label="Season rewards"></ol>
+        <ul class="v2-pass-rules"><li><b>Free for everyone.</b> No paid tier, no purchases.</li><li><b>Fair to all ranks.</b> XP comes from approved participation, not only from leaderboard position.</li><li><b>Never from clicks.</b> Logging in or saving a character earns nothing.</li><li><b>Yours to keep.</b> Rewards earned in a season stay in your Wardrobe.</li></ul>
+       </section>
+       <div class="v2-public"><label class="optin-row"><input type="checkbox" id="v2-show-public"/><span>Show my custom character on public leaderboards</span></label><p class="studio-status-small">Same rule as before: it replaces the default board character only after staff verify which ranking is yours, and only while this is on. Reward items you wear (a medal, a laurel) tell others you earned them; wear them only if you want to. Showing your character on Campus Wins will need its own separate choice.</p></div>
+      </div>
+     </div>
+     <div class="v2-demo-tools" id="v2-demo-tools" hidden></div>
+     <div class="v2-celebrate" id="v2-celebrate" role="dialog" aria-modal="true" aria-labelledby="v2-celebrate-title" aria-describedby="v2-celebrate-text" hidden><div class="v2-confetti" id="v2-confetti" aria-hidden="true"></div><div class="v2-celebrate-card"><div class="v2-celebrate-kicker">✦ VERIFIED ACHIEVEMENT</div><h2 id="v2-celebrate-title">REWARD UNLOCKED!</h2><p id="v2-celebrate-text"></p><div class="v2-celebrate-items" id="v2-celebrate-items" aria-hidden="true"></div><div class="v2-celebrate-actions"><button type="button" class="button-solid" id="v2-celebrate-open">OPEN WARDROBE ↗</button><button type="button" id="v2-celebrate-close">LATER</button></div></div></div>
+     <p class="sr-only" id="v2-announce" role="status" aria-live="assertive"></p>
+    </div>
+    <div class="studio-grid" id="studio-classic">
      <div class="studio-stage" id="studio-stage" data-tone="mint"><div class="studio-scribble">YOUR ALTER EGO / PREVIEW</div><span class="studio-badge" id="studio-badge">✦</span><img id="studio-art" class="studio-art" src="assets/characters/amara-ink.png" alt="Selected illustrated character"/><div class="studio-namebar"><strong id="studio-name">YOUR CHARACTER</strong><span>READY FOR THE BOARD</span></div></div>
      <div class="studio-controls"><h2>CHARACTER SELECT.</h2><p>Any look, either art style. No uploads or photos.</p>
       <div class="picker-group"><div class="picker-head"><h3>01 / Choose your character</h3><span>9 different looks</span></div><div class="base-options" id="base-options"></div></div>
@@ -238,10 +273,13 @@
 <div class="dialog-backdrop" id="composer-backdrop" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="composer-title"><h2 id="composer-title">SHARE YOUR WIN ✦</h2><p>Choose an approved milestone. Submissions stay private until staff review.</p><form id="achievement-form"><label for="achievement-type">Milestone</label><select id="achievement-type" required><option value="top3">Made the top three</option><option value="workshop">Completed a workshop challenge</option><option value="project">Finished a project</option><option value="helped">Helped classmates</option></select><p id="submission-hint">Just pick a milestone, no text or photos needed. Staff review every win before it’s posted.</p><div class="dialog-footer"><button type="button" class="outline-btn" id="close-composer">CANCEL</button><button class="button-solid" type="submit">SUBMIT FOR REVIEW</button></div><div id="composer-status" class="dialog-status" role="status"></div></form></div></div>
 <div class="dialog-backdrop welcome-backdrop" id="welcome-backdrop" hidden><div class="dialog welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title" aria-describedby="welcome-copy"><button type="button" class="welcome-close" id="welcome-close" aria-label="Close welcome message">×</button><div class="section-prelude"><span class="prelude-swatch"></span>WELCOME TO THE ARENA</div><h2 id="welcome-title">YOUR NAME.<br/><span>YOUR CHARACTER.</span></h2><p id="welcome-copy">Academic Arena celebrates your achievements. Students with university-issued Arena accounts can sign in and make their character their own.</p><div class="dialog-footer"><button type="button" class="outline-btn" id="welcome-explore">EXPLORE LEADERBOARDS</button><button type="button" class="button-solid" id="welcome-signin">SIGN IN &amp; PERSONALIZE</button></div></div></div>
 <script src="assets/runtime-config.js" defer></script>
+<script src="assets/avatar-v2/catalog.js" defer></script>
+<script src="assets/avatar-v2/render.js" defer></script>
 <script src="assets/data-access.js" defer></script>
 <script src="assets/display-names.js" defer></script>
 <script src="assets/character-suggestions.js" defer></script>
 <script src="assets/app.js" defer></script>
 <script src="assets/staff.js" defer></script>
+<script src="assets/studio-v2.js" defer></script>
 </body>
 </html>

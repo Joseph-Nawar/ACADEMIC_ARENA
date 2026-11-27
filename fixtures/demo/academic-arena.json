@@ -15,13 +15,13 @@
   },
   "students": [
     { "name": "Mariam", "avatar": "mariam", "style": "ink" },
-    { "name": "Omar", "avatar": "omar", "style": "ink" },
-    { "name": "Youssef", "avatar": "youssef", "style": "ink" },
+    { "name": "Omar", "avatar": "omar", "style": "ink", "v2": {"v": 2, "skin": "s03", "face": "oval", "build": "regular", "hair": "crop", "hairColor": "h03", "eyes": "almond", "eyeColor": "e02", "brows": "soft", "nose": "button", "mouth": "beam", "facialHair": "none", "blush": "none", "liner": "none", "lips": "none", "details": [], "headwear": "sport", "headwearColor": "c13", "glasses": "round", "glassesColor": "f02", "hearing": "none", "mobility": "none", "earrings": "none", "top": "tunic", "topColor": "c04", "bottom": "wide", "bottomColor": "c13", "shoes": "sneakers", "shoesColor": "c03", "neck": "none", "neckColor": "c05", "back": "none", "backColor": "c05", "backdrop": "lilac", "sticker": "spark"} },
+    { "name": "Youssef", "avatar": "youssef", "style": "ink", "v2": {"v": 2, "skin": "s10", "face": "oval", "build": "regular", "hair": "puff", "hairColor": "h01", "eyes": "upturned", "eyeColor": "e02", "brows": "soft", "nose": "button", "mouth": "grin", "facialHair": "none", "blush": "none", "liner": "wing", "lips": "none", "details": [], "headwear": "none", "headwearColor": "c11", "glasses": "none", "glassesColor": "f01", "hearing": "none", "mobility": "none", "earrings": "hoops", "top": "varsity", "topColor": "c11", "bottom": "jeans", "bottomColor": "c16", "shoes": "sneakers", "shoesColor": "c03", "neck": "medal", "neckColor": "c05", "back": "none", "backColor": "c05", "backdrop": "gold", "sticker": "spark"} },
     { "name": "Salma", "avatar": "amara", "style": "ink" },
-    { "name": "Ahmed", "avatar": "malek", "style": "ink" },
+    { "name": "Ahmed", "avatar": "malek", "style": "ink", "v2": {"v": 2, "skin": "s07", "face": "oval", "build": "regular", "hair": "locs", "hairColor": "h03", "eyes": "almond", "eyeColor": "e02", "brows": "soft", "nose": "button", "mouth": "calm", "facialHair": "short", "blush": "none", "liner": "none", "lips": "none", "details": [], "headwear": "none", "headwearColor": "c11", "glasses": "none", "glassesColor": "f01", "hearing": "none", "mobility": "none", "earrings": "none", "top": "overshirt", "topColor": "c10", "bottom": "jeans", "bottomColor": "c01", "shoes": "sneakers", "shoesColor": "c03", "neck": "none", "neckColor": "c05", "back": "none", "backColor": "c05", "backdrop": "coral", "sticker": "spark"} },
     { "name": "Nour", "avatar": "nour2", "style": "ink" },
     { "name": "Karim", "avatar": "zein", "style": "ink" },
-    { "name": "Laila", "avatar": "habiba2", "style": "cartoon3d" },
+    { "name": "Laila", "avatar": "habiba2", "style": "cartoon3d", "v2": {"v": 2, "skin": "s02", "face": "oval", "build": "regular", "hair": "wavybob", "hairColor": "h07", "eyes": "almond", "eyeColor": "e02", "brows": "soft", "nose": "button", "mouth": "laugh", "facialHair": "none", "blush": "none", "liner": "none", "lips": "none", "details": ["freckles"], "headwear": "none", "headwearColor": "c11", "glasses": "none", "glassesColor": "f01", "hearing": "none", "mobility": "wheelchair", "earrings": "none", "top": "sweater", "topColor": "c05", "bottom": "jeans", "bottomColor": "c16", "shoes": "sneakers", "shoesColor": "c03", "neck": "none", "neckColor": "c05", "back": "none", "backColor": "c05", "backdrop": "sky", "sticker": "spark"} },
     { "name": "Tarek", "avatar": "tariq", "style": "ink" },
     { "name": "Habiba", "avatar": "habiba2", "style": "ink" }
   ],
