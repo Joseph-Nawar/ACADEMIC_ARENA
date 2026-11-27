@@ -52,7 +52,8 @@ select student_sign_in, student_provisioning, avatar_personalization, welcome_di
 update app_private.student_feature_controls set student_sign_in = false, student_provisioning = false,
   avatar_personalization = false, welcome_dialog = false;
 select is((select pg_catalog.count(*)::int from information_schema.columns
-  where table_schema = 'app_private' and table_name = 'student_feature_controls' and column_default = 'false'), 4,
+  where table_schema = 'app_private' and table_name = 'student_feature_controls' and column_default = 'false'), 6,
+  -- 4 from V1.2, plus character_studio_v2 and cosmetic_rewards (Release B2).
   'every rollout switch defaults to off');
 select is((select row(student_sign_in, avatar_personalization, welcome_dialog)::text from public.public_feature_state()),
   '(f,f,f)', 'public feature state reports off');
