@@ -429,8 +429,12 @@ try {
   providerProxy = proxy.server;
   const testFiles = (await readdir(path.join(root, "tests/m2")))
     .filter((name) => name.endsWith(".test.mjs") && name !== "lifecycle-gate.integration.test.mjs")
+    // Iterating only: AA_M2_ONLY=v18,m3-campus runs files whose names contain one of those parts.
+    // Review gates run without it (every file).
+    .filter((name) => !process.env.AA_M2_ONLY || process.env.AA_M2_ONLY.split(",").some((part) => part && name.includes(part)))
     .sort()
     .map((name) => path.join("tests/m2", name));
+  if (process.env.AA_M2_ONLY) process.stdout.write(`AA_M2_ONLY: running ${testFiles.length} file(s) only; this is not a full run.\n`);
   if (testFiles.length === 0) throw new Error("No local M2 integration tests were found.");
   const jweKey = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const rateLimitKey = base64url(crypto.getRandomValues(new Uint8Array(32)));

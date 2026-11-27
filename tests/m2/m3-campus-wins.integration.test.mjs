@@ -3,7 +3,11 @@ import test from "node:test";
 import { api, json } from "./bff-fixtures.mjs";
 import { call, staffSession, studentSession } from "./m3-helpers.mjs";
 
-const PUBLIC_POST_KEYS = ["author", "avatar", "counts", "created", "id", "style", "type"];
+// Release B2 (issue #25): this author never gave the separate Campus Wins
+// consent, so the post carries no character fields at all (neutral figure),
+// instead of the look snapshotted at approval. Consented looks are covered in
+// v18-character-v2-rewards.
+const PUBLIC_POST_KEYS = ["author", "counts", "created", "id", "type"];
 
 async function feed() {
   const response = await api("/api/public/campus-wins?category=all");

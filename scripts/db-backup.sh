@@ -54,6 +54,8 @@ excludes=(
   -x app_private.bff_sessions -x app_private.login_rate_limit_buckets -x app_private.credential_sync_operations
   -x app_private.auth_diagnostic_events
   -x app_private.role_permissions -x app_private.runtime_controls -x app_private.student_feature_controls
+  -x app_private.cosmetic_collections -x app_private.character_v2_fields -x app_private.character_v2_values
+  -x app_private.rank_reward_rules
 )
 
 if [[ "$command" == export ]]; then

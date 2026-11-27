@@ -12,7 +12,7 @@ test("every migration-seeded table is excluded from encrypted data exports", () 
   for (const name of readdirSync(directory).filter((file) => file.endsWith(".sql"))) {
     // Statements inside function bodies ($$ … $$) are not seeds; only top-level ones are.
     const topLevel = readFileSync(new URL(name, directory), "utf8").replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/gu, "$$$$");
-    for (const match of topLevel.matchAll(/^\s*(?:insert\s+into|copy)\s+"?([a-z_]+)"?\."?([a-z_]+)"?/gimu)) seeded.add(`${match[1]}.${match[2]}`.toLowerCase());
+    for (const match of topLevel.matchAll(/^\s*(?:insert\s+into|copy)\s+"?([a-z0-9_]+)"?\."?([a-z0-9_]+)"?/gimu)) seeded.add(`${match[1]}.${match[2]}`.toLowerCase());
   }
   assert.ok(seeded.size >= 3);
   for (const table of seeded) assert.match(script, new RegExp(`-x ${table.replace(".", "\\.")}(\\s|$)`, "u"), `${table} must be excluded`);

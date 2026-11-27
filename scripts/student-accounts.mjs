@@ -26,7 +26,9 @@ import { parseArgs } from "node:util";
 import { planProvisioning, temporaryPassword, USERNAME_PATTERN, validateRoster } from "./lib/student-roster.mjs";
 
 export const PRODUCTION_REF = "jhukafyrdredfkzyzggw";
-const FEATURES = ["student_sign_in", "student_provisioning", "avatar_personalization", "welcome_dialog"];
+const FEATURES = ["student_sign_in", "student_provisioning", "avatar_personalization", "welcome_dialog",
+  // Release B (present once migration 202611270001 is applied).
+  "character_studio_v2", "cosmetic_rewards"];
 const CODE_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
 
 function die(message, code = 2) {
@@ -220,8 +222,9 @@ function guardTarget(values) {
 }
 
 async function features(connection) {
-  const [row] = await connection.sql("select student_sign_in, student_provisioning, avatar_personalization, welcome_dialog from app_private.student_feature_controls");
-  return row;
+  // Every known switch the database has (older databases lack the Release B ones).
+  const [row] = await connection.sql("select * from app_private.student_feature_controls");
+  return Object.fromEntries(FEATURES.filter((name) => Object.hasOwn(row, name)).map((name) => [name, row[name]]));
 }
 
 async function hostedState(connection, rows) {
@@ -355,7 +358,7 @@ function deliver(values) {
 async function featureCommand(values) {
   const connection = await connect(values.target);
   if (values.set) {
-    const match = /^([a-z_]+)=(on|off)$/u.exec(values.set);
+    const match = /^([a-z0-9_]+)=(on|off)$/u.exec(values.set);
     if (!match || !FEATURES.includes(match[1])) die(`--set must be one of ${FEATURES.join(", ")} =on|off`);
     if (connection.production && match[2] === "on" && !values["confirm-production"]) {
       die("enabling a production feature needs --confirm-production (after written university approval and staging sign-off)");

@@ -82,6 +82,10 @@ export async function onRequestPut({ request, env }) {
       p_show_on_leaderboard: showOnLeaderboard,
     });
     if (error || data !== true) return jsonResponse({ error: "avatar_save_failed" }, 403);
+    // Saving in the classic studio makes the classic look the one shown
+    // (Release B). Absent on a database without that migration.
+    const classicLook = await client.rpc("use_own_classic_look");
+    if (classicLook.error && classicLook.error.code !== "PGRST202") return jsonResponse({ error: "avatar_save_failed" }, 503);
     const saved = await ownedAvatar(env, session);
     if (!saved.avatar) return jsonResponse({ error: "avatar_save_failed" }, 403);
     return jsonResponse({ saved: true, ...saved });
