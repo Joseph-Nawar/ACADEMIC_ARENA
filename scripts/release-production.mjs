@@ -41,7 +41,16 @@ if (command === "smoke") {
     const good = r.code === 200 && /no-store/u.test(r.cache || "");
     console.log(`${good ? "ok  " : "FAIL"} level ${level}: ${r.code} ${r.cache}`); failed ||= !good;
   }
-  for (const [label, url] of [["avatar (signed out)", "/api/me/avatar"], ["staff links (signed out)", "/api/staff/leaderboards/links?publicationId=00000000-0000-4000-8000-000000000000"]]) {
+  // Release B: both new switches must still be off, the consent-aware Campus
+  // Wins feed must answer, and the new private routes must refuse anonymous calls.
+  try {
+    const features = await (await fetch(`${PRODUCTION.site}/api/public/features`)).json();
+    const off = features.characterStudioV2 === false;
+    console.log(`${off ? "ok  " : "FAIL"} character_studio_v2 off: ${JSON.stringify(features.characterStudioV2)}`); failed ||= !off;
+  } catch { console.log("FAIL features unreadable"); failed = true; }
+  const wins = await status(`${PRODUCTION.site}/api/public/campus-wins?category=all`);
+  console.log(`${wins.code === 200 ? "ok  " : "FAIL"} campus wins feed: ${wins.code}`); failed ||= wins.code !== 200;
+  for (const [label, url] of [["avatar (signed out)", "/api/me/avatar"], ["character (signed out)", "/api/me/character"], ["staff rewards (signed out)", "/api/staff/rewards"], ["staff links (signed out)", "/api/staff/leaderboards/links?publicationId=00000000-0000-4000-8000-000000000000"]]) {
     const r = await status(`${PRODUCTION.site}${url}`);
     console.log(`${r.code === 401 ? "ok  " : "FAIL"} ${label}: ${r.code}`); failed ||= r.code !== 401;
   }

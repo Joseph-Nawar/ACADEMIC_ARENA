@@ -146,8 +146,11 @@ export async function connect(target) {
   const keys = await fetchJson(`https://api.supabase.com/v1/projects/${target}/api-keys?reveal=true`, { headers }, "Management API keys");
   const service = keys.find((key) => key.name === "service_role" && key.api_key) || keys.find((key) => key.type === "secret" && key.api_key);
   if (!service) die("no service key available for this project");
+  // The public anon key too (memory only): acceptance tests use it to attempt
+  // direct REST access the way an attacker with the public key could.
+  const anon = keys.find((key) => key.name === "anon" && key.api_key) || keys.find((key) => key.type === "publishable" && key.api_key);
   return {
-    target, production: target === PRODUCTION_REF, url: `https://${target}.supabase.co`, serviceKey: service.api_key,
+    target, production: target === PRODUCTION_REF, url: `https://${target}.supabase.co`, serviceKey: service.api_key, anonKey: anon?.api_key,
     async sql(query) {
       return fetchJson(`https://api.supabase.com/v1/projects/${target}/database/query`, {
         method: "POST", headers, body: JSON.stringify({ query }),
