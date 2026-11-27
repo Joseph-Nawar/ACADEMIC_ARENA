@@ -113,6 +113,13 @@ export async function runCharacterServerTests(browser, baseUrl, root) {
   assert.equal(await page.locator(".mini-photo .mini-v2 svg").count(), 1, "the header portrait uses the shared renderer");
   assert.equal(await page.locator("#look-use-classic").isVisible(), true);
   await page.screenshot({ path: join(root, "test-results", "b2-server-studio.png") });
+  // Production: the fictional Arena Pass track never renders as progress.
+  await page.click("#v2-tab-pass");
+  assert.equal(await page.locator(".v2-tier").count(), 0, "no pass tiers in production");
+  assert.equal(await page.locator("#v2-pass-level").textContent(), "NOT ACTIVE YET");
+  assert.doesNotMatch(await page.locator("#v2-pass").textContent(), /SEASON 0|XP TO TIER|EARNED \(DEMO\)/);
+  assert.equal(await page.locator("#v2-demo-tools").textContent(), "", "no fictional demo tools");
+  await page.click("#v2-tab-wardrobe");
 
   // Changed elsewhere: refused, the latest version loads, the edit survives.
   server.revision = 9;

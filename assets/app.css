@@ -407,3 +407,15 @@ html:not([data-character-access="on"]) [data-requires-student]{display:none!impo
 #look-use-classic{margin-top:6px}
 #v2-public-state{margin-top:10px}
 .v2-save-busy{opacity:.7}
+
+/* B3: the unlock celebration is a compact, non-blocking card: the studio stays
+   visible and usable behind it (no page-wide backdrop, no focus trap). */
+.v2-celebrate{inset:auto 20px 20px auto;display:block;background:none;padding:0;width:min(400px,calc(100vw - 40px));pointer-events:none}
+.v2-celebrate-card{pointer-events:auto;padding:18px 18px 16px;max-width:none;overflow:hidden}
+.v2-celebrate h2{font-size:clamp(26px,3.4vw,34px)}
+.v2-celebrate p{font-size:13px;margin:6px 0}
+.v2-celebrate-items{gap:8px;margin:10px 0 14px}
+.v2-celebrate-item{width:58px;height:58px}
+.v2-confetti{z-index:2}
+@media (max-width:900px){.v2-celebrate{inset:auto 12px 12px 12px;width:auto}.v2-celebrate-items{display:none}}
+#look-use-classic{background:none;border:0;border-bottom:2px solid var(--ink);border-radius:0;padding:4px 0;min-height:32px;font-size:12px}

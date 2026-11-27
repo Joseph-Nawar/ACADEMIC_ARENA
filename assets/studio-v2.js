@@ -549,7 +549,7 @@
     row.replaceChildren();
     const rank = { legendary: 0, epic: 1, rare: 2, common: 3 };
     const headline = [...items].sort((a, b) => rank[C.items[a].rarity] - rank[C.items[b].rarity]);
-    for (const key of headline.slice(0, 6)) {
+    for (const key of headline.slice(0, 5)) {
       const item = C.items[key];
       const cell = document.createElement("span");
       cell.className = "v2-celebrate-item";
@@ -885,15 +885,8 @@
     });
     $("v2-celebrate-open").addEventListener("click", () => { closeCelebrate(); section = "wardrobe"; wardrobeFilter = "owned"; renderAll(); });
     $("v2-celebrate-close").addEventListener("click", closeCelebrate);
-    $("v2-celebrate").addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeCelebrate();
-      if (event.key === "Tab") {
-        const buttons = [$("v2-celebrate-open"), $("v2-celebrate-close")];
-        const index = buttons.indexOf(document.activeElement);
-        event.preventDefault();
-        buttons[(index + 1) % 2].focus(); // two buttons: Tab and Shift+Tab both move to the other one
-      }
-    });
+    // Non-modal: Escape closes it; Tab moves on to the page as usual.
+    $("v2-celebrate").addEventListener("keydown", (event) => { if (event.key === "Escape") closeCelebrate(); });
     // A classic save elsewhere on the page changes which look is shown.
     window.addEventListener("arena:classic-saved", () => { if (store === "server") void loadServer({ keepDraft: true, quiet: true }); });
     // Re-read when My Character is opened again (another device may have saved).

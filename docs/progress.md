@@ -64,7 +64,8 @@ deployed. There is no production or staging migration and no real grant.
   - Assertions are unchanged. A fix would treat EPERM as "still exiting" and
     poll again.
 - **Owner steps:** `docs/operations/rewards-runbook.md`, including the Week 5
-  preview. Week 5 shows 0 eligible students until its links are approved.
+  preview. (Corrected in B3: production Week 5 already has 30 verified links,
+  and Release A verified 9 personalized public characters.)
 - **Next (B3):** Arena Pass foundation behind a switch; coordinated hosted
   staging gate; release procedure.
 
