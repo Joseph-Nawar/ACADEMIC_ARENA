@@ -2,6 +2,72 @@
 
 Keep short. Newest first.
 
+## 2026-11-27 — Release B2: persistence, verified rewards, shared public rendering (branch `release-b/character-studio-v2`)
+
+Status: built and tested locally with fictional data only. Not merged, not
+deployed. There is no production or staging migration and no real grant.
+
+- **Database** (migration `202611270001`, additive; switches
+  `character_studio_v2` and `cosmetic_rewards` both default to off):
+  - V2 config next to the classic look (`active_look`, `revision`). No row is
+    converted, and existing public-display choices are kept.
+  - Ownership is enforced in the save RPC **and** a table trigger. The
+    catalogue allowlist is generated from `catalog.js` and contract-tested.
+  - Period-keyed, idempotent entitlements; append-only `reward_events`; staff
+    preview / grant / reconcile; audited revocation with a fallback for worn
+    items.
+  - Public projections `public_level_leaderboard_v4` (the complete V2 look)
+    and `public_campus_wins_v2` (issue #25: separate consent, latest look,
+    suspended and hidden excluded, a neutral figure otherwise).
+  - Fixed: the M2 owner trigger would have moved a row to the caller's account
+    on a staff-side update.
+- **BFF:**
+  - `/api/me/character`: revision-checked saves; refuses tampered bodies,
+    unowned items (`403 item_not_owned`) and stale saves
+    (`409 character_changed`).
+  - `/api/staff/rewards` (+ `/preview`, `/process`), AAL2 admin.
+  - The public board and Campus Wins re-validate every look with the shared
+    catalogue.
+- **Frontend:**
+  - The studio has a server store, session-epoch and request-sequence guards,
+    and a separate Campus Wins consent.
+  - It shows a server status line, a celebration once per real grant, written
+    unlock tags, and the header portrait drawn by the shared renderer.
+  - Staff Desk has a Verified rewards panel. Arena Pass shows NOT ACTIVE in
+    production.
+- **Art:** 12 more free items (open abaya, thobe, sweater vest, track jacket,
+  pleated trousers, leggings, knee shorts, slip-ons, sandals, tie, lanyard,
+  messenger bag), plus an Elite headband and a Podium silver cap, both visible
+  on 56 px thumbnails.
+- **Tests** (all fictional):
+  - pgTAP: 515 checks, 87 new in `v18`.
+  - Live BFF: `v18`; `m3-campus-wins` now expects the neutral figure without
+    consent.
+  - Unit: 126. Browser suite on **Chromium and WebKit**
+    (`npm run test:browser:webkit`), including the Staff Desk late-load
+    regression.
+  - `scripts/b2-local-demo.mjs`: two-browser demonstration against the local
+    stack (screenshots in `test-results/b2-demo/`).
+- **Found by WebKit and fixed:** the dialog focus trap let focus escape under
+  Safari's default Tab order.
+- **WebKit-only harness notes:**
+  - WebKit applies the CSP's `upgrade-insecure-requests` to `127.0.0.1`, so
+    WebKit runs serve Wrangler over local HTTPS.
+  - Playwright cannot fulfill a 307 response in WebKit, so the login-redirect
+    check stays Chromium-only.
+- **Intermittent `process_cleanup` test (corrects the B1 note):**
+  - It is not a sandbox flake. On macOS it failed 1 of 6 parallel `npm test`
+    runs and 0 of 12 isolated runs.
+  - The error is `kill EPERM`, thrown by `scripts/process-cleanup.mjs`
+    (`process.kill(-pgid)`) from the test's final `stopProcessTree`. macOS can
+    return EPERM instead of ESRCH while the group's last process is exiting.
+  - Assertions are unchanged. A fix would treat EPERM as "still exiting" and
+    poll again.
+- **Owner steps:** `docs/operations/rewards-runbook.md`, including the Week 5
+  preview. Week 5 shows 0 eligible students until its links are approved.
+- **Next (B3):** Arena Pass foundation behind a switch; coordinated hosted
+  staging gate; release procedure.
+
 ## 2026-11-27 — Release B1: Character Studio V2 art engine and studio (branch `release-b/character-studio-v2`)
 
 - **Built (fictional demo only; production behaviour unchanged):**
@@ -22,8 +88,7 @@ Keep short. Newest first.
 - **Tests:**
   - `tests/frontend/avatar-v2.test.mjs`: catalogue targets, free identity items, the validator contract, ownership, compatibility, reward rules, every option rendering CSP-safe SVG, a fuzz test, hostile input and provenance;
   - `tests/browser/v2-character-studio.spec.mjs`: desktop and mobile, keyboard, reduced motion, the board, and production hiding V2;
-  - `npm test` 120/120 (the `process_cleanup` EPERM is a sandbox flake that passes on rerun); `npm run test:browser` passed twice; `check:security` passed.
-- **Not yet tested:** WebKit/Safari, because the Playwright WebKit build is not installed.
+  - `npm test` 120/120 (`process_cleanup` intermittently fails with EPERM; see B2 for the accurate cause); `npm run test:browser` passed twice; `check:security` passed.
 - **Next:**
   - B2: additive migration with V2 config, catalogue, entitlements and append-only reward events; server-side validation and equip checks; an extended public projection; a Campus Wins consent projection (#25); the `character_studio_v2` switch.
   - B3: Arena Pass tables behind a switch, the hosted staging gate, the release procedure.

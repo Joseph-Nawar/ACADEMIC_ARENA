@@ -1,6 +1,17 @@
 # Campus Wins and public characters: current behaviour and the V2 proposal
 
-Status: investigation only (2026-11-23). **Release A does not change Campus Wins.**
+Status: **resolved in Release B2 (2026-11-27, issue #25)**, pending owner
+approval and deployment. B2 uses a separate consent (`show_on_campus_wins`)
+rather than the single shared switch proposed below, because the owner asked
+that leaderboard consent must not imply Campus Wins consent. The public feed
+reads `public.public_campus_wins_v2`, which shows the author's latest look
+only while the author is active, consented and personalization is on, and
+otherwise a neutral figure. Hidden, removed and suspended authors' wins never
+appear. The snapshot columns are no longer read and stay one release for
+rollback. If the database is not yet migrated, the API falls back to neutral
+figures. Tests: pgTAP `v18`, M2 `v18` and `m3-campus-wins`, browser `b2`.
+
+The original investigation follows.
 
 ## Current behaviour (code as of `main` + Release A)
 

@@ -10,9 +10,12 @@ status are in `docs/progress.md`.
 |---|---|
 | `assets/avatar-v2/catalog.js` | The trusted catalogue: palettes, options, items, collections, reward rules, the config schema and its validator. Pure data plus pure functions. Shared by the studio, the board, the BFF (B2) and the tests. |
 | `assets/avatar-v2/render.js` | Deterministic SVG renderer. `render(config, { context })` returns an SVG string built only from catalogue constants. |
-| `assets/studio-v2.js` | Create / Wardrobe / Arena Pass UI. Fictional demo only in B1. |
+| `assets/studio-v2.js` | Create / Wardrobe / Arena Pass UI. Demo store (local, fictional) or server store (`/api/me/character`, B2). |
+| `functions/lib/character-v2.js` | The BFF's validator: imports the same `catalog.js`. |
+| `scripts/character-v2-sql.mjs` | Generates the database allowlist (fields, values, collections, traits, rank rules) from `catalog.js`. |
+| `supabase/migrations/202611270001_*.sql` | B2 storage, ownership, rewards, public projections. |
 | `docs/design/avatar-v2-sheet.html` | Contact sheet of every option across skin tones, faces and builds (serve the repo root with any static server). |
-| `tests/frontend/avatar-v2.test.mjs`, `tests/browser/v2-character-studio.spec.mjs` | Contract, asset-coverage, safety and UI tests. |
+| `tests/frontend/avatar-v2.test.mjs`, `tests/frontend/character-v2-contract.test.mjs`, `supabase/tests/v18_character_v2_rewards.test.sql`, `tests/m2/v18-character-v2-rewards.integration.test.mjs`, `tests/browser/v2-character-studio.spec.mjs`, `tests/browser/b2-character-server.spec.mjs` | Contract, asset-coverage, safety, database, live BFF and UI tests. |
 
 ## A saved character
 
@@ -39,7 +42,10 @@ The full field list is in `catalog.fields`.
 - Every non-essential item must be in `ownedItems`.
 - Fitted hats cannot be worn over big hair.
 
-The server applies the same function at the write boundary (B2).
+The BFF runs the same function before every save. The database checks the
+same rules again (`app_private.character_v2_errors`, generated allowlist) in
+the save RPC **and** in a table trigger, including ownership, so no direct RPC
+or table write can store an unowned item.
 `normalizeForRender` is only for drawing: anything unknown becomes the default.
 It never converts a classic (V1) look into guessed V2 features.
 
@@ -129,7 +135,7 @@ Shading:
 | Head coverings and hats | 4 headscarf styles (wrapped, sport, draped, full-coverage), head wrap, kufi, beanie, cap, bucket hat, each in 16 colours |
 | Makeup and details | Liner, wing, shadow; 5 lip colours; blush; freckles, beauty mark, vitiligo, dimples, rosy nose, long lashes |
 | Access | 6 glasses styles in 5 frame colours; 2 hearing aid styles; cochlear processor; cane; forearm crutches; wheelchair |
-| Clothing | 10 tops (including a long tunic and a full-length dress), 7 bottoms (including midi and maxi skirts), 5 shoes, neck items, bags, earrings |
+| Clothing | 14 tops (including a long tunic, a full-length dress, an open abaya and a thobe), 10 bottoms (including midi and maxi skirts, knee shorts, leggings, pleated trousers), 7 shoes (including sandals and slip-ons), neck items (headphones, scarf, tie, campus lanyard), bags (backpack, tote, messenger), earrings |
 | Scenes | 8 backdrops, 6 stickers |
 
 **Free for everyone (Campus Essentials):** every identity option, every head
@@ -140,14 +146,51 @@ this.
 
 | Collection | Rule | Items |
 |---|---|---|
-| Elite | Verified Top 10 | Varsity jacket, court sneakers, pin, spotlight backdrop, Top 10 badge |
-| Podium | Verified Top 3 | Track jacket, medal, podium stage, podium badge |
+| Elite | Verified Top 10 | Headband with "10" shield, varsity jacket, court sneakers, pin, spotlight backdrop, Top 10 badge |
+| Podium | Verified Top 3 | Silver cap with gold star, track jacket, medal, podium stage, podium badge |
 | Champion | Verified first place | Laurel, cape, gold kicks, champion hall, trophy |
 | Scholar | Inactive until policy approval | Scholar's cap, stripe scarf, library |
 | Seasonal | Inactive until XP rules are approved | Circuit cap, hoodie and pack, circuit grid, chip |
 
 The board's crown for the current leader is separate and is never a wardrobe
-item.
+item. Each earned collection has something on or around the head, or a
+backdrop, so it shows on 56 px rank thumbnails. Earned items keep fixed
+signature colours. Locked items show a written requirement (TOP 10, TOP 3,
+1ST PLACE) and rarity glyphs (○ ◆ ✦ ★), so nothing depends on colour alone.
+
+## Storage, ownership and rewards (B2)
+
+- **Storage.** `student_avatar_configs` keeps the classic look and adds
+  `v2_config`, `active_look` (`classic` | `v2`) and `revision`. Existing rows
+  stay `classic` and nothing is converted. A student switches to V2 only by
+  saving one; saving in the classic studio shows the classic look again.
+- **Stale and concurrent saves.** Every save carries the revision it was based
+  on. The server refuses a mismatch (`409 character_changed`); the studio keeps
+  the edits and loads the latest. Every update bumps the revision, including
+  an equipped-item fallback.
+- **Ownership.** Collections are owned through
+  `app_private.cosmetic_entitlements`, one row per (account, collection,
+  earning period). Free collections need no row.
+- **Rank rewards.** Only staff-verified links of a published level-only
+  publication count, never names or unverified rows, and never avatar
+  consent. Top 10 → Elite; Top 3 → plus Podium; 1st → plus Champion
+  (`app_private.rank_reward_rules`, generated from `rankRewards`).
+- **Earning period.** Staff pick a stable key such as `2026-27:week-05`. A
+  publication can belong to one period only. Retries, corrected
+  republications and rollbacks of the same week use the same key, so nothing
+  is granted twice. A later week is a new period, so a drop in rank never
+  removes earlier rewards.
+- **Corrections.** `reconcile` revokes this period's grants that the corrected
+  publication no longer supports (`revoke_reason = result_corrected`). Any
+  revoked item being worn falls back to the slot's free default. Everything
+  goes to the append-only `app_private.reward_events`.
+- **Future sources.** `reward_periods.source_kind` already allows academic
+  thresholds, attendance, weekly challenges, workshops, hackathons,
+  improvement, module competitions and Arena Pass. Each needs an approved
+  rule and its own processor; none exists yet.
+- **Switches** (owner-only, all off): `character_studio_v2` (V2 saving and
+  public V2 looks) and `cosmetic_rewards` (granting). Previews work while
+  rewards are off.
 
 ## Provenance and licensing
 
@@ -167,7 +210,10 @@ item.
 ## Adding an item
 
 1. Add the key to `catalog.items`, or to an option table, with its slot,
-   collection and rarity.
+   collection and rarity. Then regenerate the database allowlist: before the
+   B2 migration is merged, run `node scripts/character-v2-sql.mjs --write`
+   on it; after that, put the regenerated block in a **new** migration. The
+   contract test reads the newest block.
 2. Draw it in `render.js`, anchored to the build and face parameters, never to
    fixed pixels.
 3. Run `npm test`. The coverage and render tests fail until every key draws
