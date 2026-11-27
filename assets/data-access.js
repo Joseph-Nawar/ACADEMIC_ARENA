@@ -90,6 +90,40 @@
     return { position, name, personalized: false };
   }
 
+  // A public V2 look: the server already checked ownership, so every catalogue
+  // item counts as owned here; only shape and catalogue membership matter.
+  function validV2(value) {
+    const catalog = root.AcademicArenaAvatarCatalog;
+    if (!catalog) return null;
+    const result = catalog.validateConfig(value, { ownedItems: new Set(Object.keys(catalog.items)) });
+    return result.ok ? result.config : null;
+  }
+
+  // The signed-in student's own character state from /api/me/character.
+  function sanitizeCharacterState(value) {
+    const catalog = root.AcademicArenaAvatarCatalog;
+    if (!value || typeof value !== "object" || !catalog) return null;
+    const owned = Array.isArray(value.owned) ? value.owned.filter((name) => Object.hasOwn(catalog.collections, name)) : [];
+    const ownedItems = new Set(Object.keys(catalog.items).filter((key) => owned.includes(catalog.items[key].collection)));
+    const v2Check = value.v2 ? catalog.validateConfig(value.v2, { ownedItems }) : null;
+    return {
+      activeLook: value.activeLook === "v2" || value.activeLook === "classic" ? value.activeLook : null,
+      revision: Number.isSafeInteger(value.revision) && value.revision >= 0 ? value.revision : 0,
+      classic: value.classic ? sanitizeAvatar(value.classic) : null,
+      v2: v2Check?.ok ? v2Check.config : null,
+      showOnLeaderboard: value.showOnLeaderboard === true,
+      showOnCampusWins: value.showOnCampusWins === true,
+      studioEnabled: value.studioEnabled === true,
+      owned: owned.includes("essentials") ? owned : ["essentials", ...owned],
+      grants: Array.isArray(value.grants)
+        ? value.grants.filter((grant) => grant && owned.includes(grant.collection) && typeof grant.period === "string")
+          .slice(0, 50).map((grant) => ({ collection: grant.collection, period: text(grant.period), grantedAt: text(grant.grantedAt) }))
+        : [],
+      publication: publicationState(value.publication),
+      stale: value.stale === true,
+    };
+  }
+
   function sanitizeWin(value, includeViewerReaction = false) {
     if (!value || typeof value !== "object") return null;
     const id = text(value.id);
@@ -101,8 +135,13 @@
     const counts = Array.isArray(value.counts) && value.counts.length === 3
       ? value.counts.map((count) => Number.isSafeInteger(count) && count >= 0 ? count : 0)
       : [0, 0, 0];
-    if (!id || !author || !avatar || !style || !type || !created) return null;
-    const win = { id, author, avatar, style, type, category: TEMPLATES[type].category, created, counts };
+    if (!id || !author || !type || !created) return null;
+    // Release B2 (issue #25): the author's consented current look, or none
+    // at all (the page draws a neutral figure). Never a default character.
+    const win = { id, author, type, category: TEMPLATES[type].category, created, counts };
+    const v2 = value.v2 ? validV2(value.v2) : null;
+    if (v2) win.v2 = v2;
+    else if (avatar && style) Object.assign(win, { avatar, style });
     if (includeViewerReaction) win.myReaction = REACTIONS.has(value.myReaction) ? value.myReaction : null;
     return win;
   }
@@ -325,14 +364,15 @@
 
       // Rollout switches decided by the database owner; anything unexpected means off.
       async getFeatures() {
-        const off = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false };
-        if (mode === "demo") return { studentSignIn: true, avatarPersonalization: true, welcomeDialog: false };
+        const off = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false, characterStudioV2: false };
+        if (mode === "demo") return { studentSignIn: true, avatarPersonalization: true, welcomeDialog: false, characterStudioV2: true };
         try {
           const payload = await request("GET", "/public/features");
           return {
             studentSignIn: payload?.studentSignIn === true,
             avatarPersonalization: payload?.avatarPersonalization === true,
             welcomeDialog: payload?.welcomeDialog === true,
+            characterStudioV2: payload?.characterStudioV2 === true,
           };
         } catch {
           return off;
@@ -519,6 +559,29 @@
         return { saved: payload?.saved === true, avatar: sanitizeAvatar(payload?.avatar), showOnLeaderboard: payload?.showOnLeaderboard === true,
           publication: publicationState(payload?.publication) };
       },
+      // Character V2 (production only; the fictional demo keeps it in the studio).
+      async getCharacterV2() {
+        if (mode === "demo") throw new ArenaDataError("Not connected in the fictional preview.", "unavailable");
+        const state = sanitizeCharacterState(await request("GET", "/me/character"));
+        if (!state) throw new ArenaDataError("Character data is unavailable.", "unavailable");
+        return state;
+      },
+      async saveCharacterV2(input) {
+        if (mode === "demo") throw new ArenaDataError("Not connected in the fictional preview.", "unavailable");
+        const body = {
+          expectedRevision: input?.expectedRevision,
+          activeLook: input?.activeLook,
+          v2: input?.v2 ?? null,
+          showOnLeaderboard: input?.showOnLeaderboard === true,
+          showOnCampusWins: input?.showOnCampusWins === true,
+        };
+        if (!Number.isSafeInteger(body.expectedRevision) || !["classic", "v2"].includes(body.activeLook) || (body.v2 !== null && !validV2(body.v2))) {
+          throw new ArenaDataError("Choose a valid character.", "invalid_character");
+        }
+        const state = sanitizeCharacterState(await request("PUT", "/me/character", body));
+        if (!state) throw new ArenaDataError("Character data is unavailable.", "unavailable");
+        return state;
+      },
       async submitAchievement(input) {
         const type = input && input.type;
         if (!Object.hasOwn(TEMPLATES, type)) throw new ArenaDataError("Choose an approved achievement.", "invalid_achievement");
@@ -659,6 +722,27 @@
         }
         if (mode === "demo") throw new ArenaDataError("Staff moderation is unavailable in the fictional preview.", "unauthorized");
         return request("POST", "/staff/campus-wins/" + encodeURIComponent(id) + "/moderation", { decision });
+      },
+      async rewardPeriods() {
+        if (mode === "demo") return [];
+        const payload = await request("GET", "/staff/rewards");
+        return Array.isArray(payload?.periods) ? payload.periods.filter((item) => item && typeof item.key === "string") : [];
+      },
+      async previewRewards(publicationId, periodKey) {
+        if (mode === "demo") throw new ArenaDataError("Rewards are unavailable in the fictional preview.", "unauthorized");
+        if (!UUID.test(String(publicationId)) || !/^[a-z0-9][a-z0-9._:-]{2,63}$/u.test(String(periodKey))) {
+          throw new ArenaDataError("Choose a publication and an earning period like 2026-27:week-05.", "invalid_request");
+        }
+        return (await request("POST", "/staff/rewards/preview", { publicationId, periodKey })).preview;
+      },
+      async processRewards(input) {
+        if (mode === "demo") throw new ArenaDataError("Rewards are unavailable in the fictional preview.", "unauthorized");
+        const body = { publicationId: input?.publicationId, periodKey: input?.periodKey, periodLabel: input?.periodLabel, mode: input?.mode };
+        if (!UUID.test(String(body.publicationId)) || !/^[a-z0-9][a-z0-9._:-]{2,63}$/u.test(String(body.periodKey)) ||
+            !/^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,47}$/u.test(String(body.periodLabel)) || !["grant", "reconcile"].includes(body.mode)) {
+          throw new ArenaDataError("Check the publication, period and label.", "invalid_request");
+        }
+        return (await request("POST", "/staff/rewards/process", body)).result;
       },
       async provisionStudent(input) {
         if (!input || typeof input.username !== "string" || typeof input.temporaryPassword !== "string" ||

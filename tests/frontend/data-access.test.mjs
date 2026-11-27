@@ -352,9 +352,10 @@ test("personalized_rows_keep_only_allowlisted_artwork_fields", async () => {
 
 test("features_default_to_off_on_any_failure", async () => {
   const failing = createArenaDataAccess({ mode: "production", fetchImpl: async () => { throw new Error("offline"); } });
-  assert.deepEqual(await failing.public.getFeatures(), { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false });
-  const odd = createArenaDataAccess({ mode: "production", fetchImpl: async () => response({ studentSignIn: "yes", welcomeDialog: 1 }) });
-  assert.deepEqual(await odd.public.getFeatures(), { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false });
+  const off = { studentSignIn: false, avatarPersonalization: false, welcomeDialog: false, characterStudioV2: false };
+  assert.deepEqual(await failing.public.getFeatures(), off);
+  const odd = createArenaDataAccess({ mode: "production", fetchImpl: async () => response({ studentSignIn: "yes", welcomeDialog: 1, characterStudioV2: "true" }) });
+  assert.deepEqual(await odd.public.getFeatures(), off);
 });
 
 test("demo_leaderboard_fixture_changes_only_with_level", async () => {

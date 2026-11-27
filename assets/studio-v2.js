@@ -1,9 +1,14 @@
 // Character Studio V2: Create, Wardrobe and Arena Pass.
 //
-// B1 scope: runs in the fictional demo only (local storage, no server). The
-// production page keeps the classic studio until the V2 API, entitlements and
-// the `character_studio_v2` switch ship in B2. Lock icons here are UI only;
-// ownership is enforced by the server and the database in B2.
+// One studio, two stores:
+//   * demo (loopback fictional preview): local storage, fictional reward tools;
+//   * server (production, when the owner switches `character_studio_v2` on and
+//     a student is signed in): /api/me/character. Ownership is decided by the
+//     server and enforced again by the database; lock icons here are only UI.
+// Every server answer is tied to the session epoch and a request sequence, so
+// a sign-out, an account switch or a late response never lands on the wrong
+// account, and saves carry the revision they were based on (stale saves are
+// refused by the server instead of overwriting newer work or a reward fallback).
 (() => {
   "use strict";
 
@@ -12,25 +17,42 @@
   const $ = (id) => document.getElementById(id);
   const root = $("studio-v2");
   if (!C || !R || !root) return;
-  const api = window.AcademicArenaDataAccess?.createArenaDataAccess?.();
-  if (!api || api.mode !== "demo") return; // production: classic studio only (B1)
 
-  const KEYS = { character: "arena-v2-demo-character", look: "arena-v2-demo-active-look", grants: "arena-v2-demo-grants", show: "arena-v2-demo-show" };
+  const KEYS = { character: "arena-v2-demo-character", look: "arena-v2-demo-active-look", grants: "arena-v2-demo-grants", show: "arena-v2-demo-show",
+    // Production: which grants this browser already celebrated (collection:period
+    // strings only). Cleared on sign-out so a shared device keeps nothing.
+    seen: "arena-v2-seen-grants" };
   const read = (key, fallback) => { try { const raw = localStorage.getItem(key); return raw == null ? fallback : JSON.parse(raw); } catch { return fallback; } };
   const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } };
+  const forget = (key) => { try { localStorage.removeItem(key); } catch {} };
   const clone = (config) => ({ ...config, details: [...config.details] });
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const reduceMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const startLook = () => clone(C.normalizeForRender(C.DEFAULT_CONFIG));
 
   // ---------- state ----------
-  const grants = read(KEYS.grants, { collections: [], newItems: [], best: null });
-  const owned = () => new Set(grants.collections.flatMap((name) => C.itemsInCollection(name)));
+  let api = null;
+  let detail = null;
+  let store = null; // "demo" | "server" | null (inactive)
+  let epoch = 0; // bumps on every session change
+  let loadSeq = 0;
+  let saveSeq = 0;
+  let busy = false;
+  let ownedCollections = new Set(["essentials"]);
+  let newItems = [];
+  let demoGrants = { collections: [], newItems: [], best: null };
+  // Server-confirmed state.
+  let saved = null;
+  let activeLook = null;
+  let revision = 0;
+  let classicSaved = null;
+  let consent = { leaderboard: false, campusWins: false };
+  let publication = null;
+  let viewedOnce = false;
+  const owned = () => new Set([...ownedCollections].flatMap((name) => C.itemsInCollection(name)));
   const isOwned = (itemKey) => C.items[itemKey].collection === "essentials" || owned().has(itemKey);
-  const savedRaw = read(KEYS.character, null);
-  const savedCheck = savedRaw ? C.validateConfig(savedRaw, { ownedItems: owned() }) : null;
-  let saved = savedCheck?.ok ? savedCheck.config : null;
-  let draft = clone(saved || C.normalizeForRender(C.DEFAULT_CONFIG));
-  const history = [clone(draft)];
+  let draft = startLook();
+  let history = [clone(draft)];
   let cursor = 0;
   let category = "body";
   let section = "create";
@@ -38,6 +60,14 @@
   let wardrobeFilter = "all";
   let wardrobeCollection = "all";
   let toast = "";
+  const consentNow = () => ({ leaderboard: $("v2-show-public").checked, campusWins: $("v2-show-wins").checked });
+  const consentChanged = () => store === "server" && !same(consentNow(), consent);
+
+  function resetHistory(config) {
+    draft = clone(config);
+    history = [clone(draft)];
+    cursor = 0;
+  }
 
   // ---------- categories ----------
   const S = (field, kind, extra = {}) => ({ field, kind, ...extra });
@@ -160,20 +190,63 @@
   }
 
   // ---------- save ----------
-  function save() {
+  function lockedMessage(errors) {
+    const locked = errors.filter((error) => error.code === "not_owned");
+    if (!locked.length) return "This look can't be saved. Try another combination.";
+    const names = locked.map((error) => `${C.items[error.item].label} (${C.collections[C.items[error.item].collection].rule.replace(/\.$/, "")})`);
+    return `Can't save yet: ${names.join(", ")} ${locked.length > 1 ? "are" : "is"} locked. Remove ${locked.length > 1 ? "them" : "it"} to save, or earn ${locked.length > 1 ? "them" : "it"} first.`;
+  }
+
+  async function save() {
     const result = C.validateConfig(draft, { ownedItems: owned() });
-    if (!result.ok) {
-      const locked = result.errors.filter((error) => error.code === "not_owned");
-      toast = locked.length ? `Can't save yet: ${locked.map((error) => C.items[error.item].label).join(", ")} ${locked.length > 1 ? "are" : "is"} locked. Remove ${locked.length > 1 ? "them" : "it"} or earn ${locked.length > 1 ? "them" : "it"} first.` : "This look can't be saved. Try another combination.";
+    if (!result.ok) { toast = lockedMessage(result.errors); renderAll(); return; }
+    if (store === "demo") {
+      if (!write(KEYS.character, result.config)) { toast = "This browser couldn't store the fictional look."; renderAll(); return; }
+      write(KEYS.look, "v2");
+      write(KEYS.show, $("v2-show-public").checked);
+      saved = clone(result.config);
+      activeLook = "v2";
+      toast = "Saved in this browser (fictional preview: nothing is published).";
       renderAll();
       return;
     }
-    if (!write(KEYS.character, result.config)) { toast = "This browser couldn't store the fictional look."; renderAll(); return; }
-    write(KEYS.look, "v2");
-    write(KEYS.show, $("v2-show-public").checked);
-    saved = clone(result.config);
-    toast = "Saved in this browser (fictional preview: nothing is published).";
-    renderAll();
+    await sendToServer({ activeLook: "v2", v2: saved && same(saved, result.config) ? null : result.config }, "Saved. Your character is updated everywhere it is shown.");
+  }
+
+  // One write path for the server store. The result is applied only if the
+  // session is unchanged and no newer save started meanwhile.
+  async function sendToServer(change, success) {
+    if (busy) return;
+    const at = epoch;
+    const mine = ++saveSeq;
+    busy = true;
+    renderPreview();
+    try {
+      const state = await api.student.saveCharacterV2({
+        expectedRevision: revision, activeLook: change.activeLook, v2: change.v2,
+        showOnLeaderboard: $("v2-show-public").checked, showOnCampusWins: $("v2-show-wins").checked,
+      });
+      if (at !== epoch || mine !== saveSeq) return;
+      loadSeq += 1; // the save's answer supersedes any load still in flight
+      if (state.stale) { toast = success; await loadServer({ keepDraft: true }); return; }
+      applyServerState(state, { keepDraft: true });
+      toast = success;
+      detail?.refreshBoard?.();
+      // The classic studio shares the leaderboard consent: let it re-read.
+      window.dispatchEvent(new CustomEvent("arena:v2-saved"));
+    } catch (error) {
+      if (at !== epoch || mine !== saveSeq) return;
+      if (error?.code === "unauthorized") { detail?.sessionEnded?.("Your session has ended. Sign in again to save your character."); return; }
+      toast = {
+        character_changed: "Your character changed somewhere else (another tab or device, or a results correction). We loaded the latest saved version; your edits are still here. Check them and save again.",
+        item_not_owned: "One of these items isn't in your Wardrobe any more (rewards can be corrected when results are). Remove it to save.",
+        studio_not_enabled: "Custom characters are switched off right now. Your classic look is unchanged.",
+      }[error?.code] || "Your character could not be saved. Try again later.";
+      if (["character_changed", "item_not_owned"].includes(error?.code)) await loadServer({ keepDraft: true, quiet: true });
+    } finally {
+      if (at === epoch && mine === saveSeq) busy = false;
+      if (at === epoch) renderAll();
+    }
   }
 
   // ---------- DOM: preview ----------
@@ -191,15 +264,22 @@
       svgInto($("v2-stage-art"), R.render(draft, { context: frame, title: describe(draft), sticker: frame === "full" ? undefined : false }));
     }
     document.querySelectorAll("[data-frame]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.frame === frame)));
-    const dirty = !saved || !same(saved, draft);
+    const lookDirty = !saved || !same(saved, draft);
+    const notShown = store === "server" && saved && activeLook !== "v2";
+    const dirty = lookDirty || consentChanged() || notShown;
     $("v2-dirty").hidden = !dirty;
-    $("v2-dirty").textContent = saved ? "● UNSAVED CHANGES" : "● NOT SAVED YET";
+    $("v2-dirty").textContent = !saved ? "● NOT SAVED YET" : lookDirty || consentChanged() ? "● UNSAVED CHANGES" : "● SAVED · NOT IN USE";
     $("v2-saved").hidden = dirty;
     const locked = lockedItems(draft);
     const note = $("v2-locked-note");
     note.hidden = locked.length === 0;
-    note.textContent = locked.length ? `Previewing locked: ${locked.map((key) => C.items[key].label).join(", ")}. You can try it on, but you can only save items you own.` : "";
-    $("v2-save").disabled = locked.length > 0 || !dirty;
+    note.textContent = locked.length
+      ? `Previewing locked: ${locked.map((key) => `${C.items[key].label} (${C.collections[C.items[key].collection].rule.replace(/\.$/, "")})`).join(", ")}. You can try it on, but you can only save items you own.`
+      : "";
+    $("v2-save").disabled = busy || locked.length > 0 || !dirty;
+    $("v2-save").setAttribute("aria-busy", String(busy));
+    $("v2-save").textContent = busy ? "SAVING…" : notShown && !lookDirty && !consentChanged() ? "USE THIS LOOK ↗" : "SAVE LOOK ↗";
+    renderPublicState();
     $("v2-undo").disabled = cursor === 0;
     $("v2-redo").disabled = cursor >= history.length - 1;
     $("v2-toast").textContent = toast;
@@ -245,12 +325,12 @@
     $("v2-options").setAttribute("aria-labelledby", `v2-cat-${category}`);
   }
 
-  function optionButton({ selected, label, locked, disabled, reason, onClick, svg, swatch }) {
+  function optionButton({ selected, label, locked, unlock, disabled, reason, onClick, svg, swatch }) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = swatch ? "v2-swatch" : "v2-option";
     button.setAttribute("aria-pressed", String(selected));
-    const fullLabel = `${label}${locked ? " (locked: preview only)" : ""}${disabled ? ` (${reason})` : ""}`;
+    const fullLabel = `${label}${locked ? ` (locked: ${unlock?.rule || "preview only"} Try it on, but you can't save it yet.)` : ""}${disabled ? ` (${reason})` : ""}`;
     button.setAttribute("aria-label", fullLabel);
     button.title = fullLabel;
     if (disabled) button.setAttribute("aria-disabled", "true");
@@ -270,7 +350,12 @@
         lock.className = "v2-lock";
         lock.setAttribute("aria-hidden", "true");
         lock.textContent = "🔒";
-        button.append(lock);
+        // The requirement in words, so it never depends on colour.
+        const tag = document.createElement("span");
+        tag.className = "v2-unlock-tag";
+        tag.setAttribute("aria-hidden", "true");
+        tag.textContent = unlock?.unlock || "LOCKED";
+        button.append(lock, tag);
       }
     }
     button.addEventListener("click", () => {
@@ -309,7 +394,8 @@
         const selected = sec.kind === "toggles" ? draft.details.includes(value) : draft[sec.field] === value;
         const label = sec.kind === "toggles" ? C.options.details[value] : optionLabel(sec.field, value);
         grid.append(optionButton({
-          selected, label, locked, disabled: incompatible, reason: "doesn't fit over this hairstyle",
+          selected, label, locked, unlock: itemKey ? C.collections[C.items[itemKey].collection] : null,
+          disabled: incompatible, reason: "doesn't fit over this hairstyle",
           svg: thumb(incompatible ? { ...preview, headwear: "none" } : preview, { context: sec.context, backdrop: sec.backdrop === true, sticker: sec.sticker ? true : false }),
           onClick: () => setField(sec.field, value),
         }));
@@ -346,7 +432,7 @@
       const value = key.split(".")[1];
       const ownedItem = item.collection === "essentials" || ownedSet.has(key);
       const equipped = draft[field] === value;
-      const isNew = grants.newItems.includes(key);
+      const isNew = newItems.includes(key);
       const card = document.createElement("article");
       card.className = "v2-item";
       card.dataset.rarity = item.rarity;
@@ -360,7 +446,8 @@
       name.textContent = item.label;
       const meta = document.createElement("p");
       meta.className = "v2-item-meta";
-      meta.textContent = `${C.rarities[item.rarity]} · ${C.collections[item.collection].label}`;
+      // Rarity and ownership are always spelled out, never colour alone.
+      meta.textContent = `${{ common: "○", rare: "◆", epic: "✦", legendary: "★" }[item.rarity]} ${C.rarities[item.rarity]} · ${C.collections[item.collection].label}`;
       const status = document.createElement("p");
       status.className = "v2-item-status";
       status.textContent = equipped ? "EQUIPPED" : ownedItem ? "OWNED" : `🔒 ${C.collections[item.collection].rule}`;
@@ -373,8 +460,8 @@
       button.addEventListener("click", () => {
         const next = { ...clone(draft), [field]: value };
         if (C.compatibilityErrors(next).length) next.hair = "crop";
-        grants.newItems = grants.newItems.filter((entry) => entry !== key);
-        write(KEYS.grants, grants);
+        newItems = newItems.filter((entry) => entry !== key);
+        if (store === "demo") { demoGrants.newItems = newItems; write(KEYS.grants, demoGrants); }
         commit(next, ownedItem ? `${item.label} equipped.` : `Trying on ${item.label}. Locked items can't be saved.`);
       });
       if (isNew) {
@@ -394,7 +481,7 @@
     }
     document.querySelectorAll("[data-wfilter]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.wfilter === wardrobeFilter)));
     document.querySelectorAll("[data-wcollection]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.wcollection === wardrobeCollection)));
-    const newCount = grants.newItems.length;
+    const newCount = newItems.length;
     $("v2-new-count").hidden = newCount === 0;
     $("v2-new-count").textContent = String(newCount);
   }
@@ -411,6 +498,17 @@
   };
   function renderPass() {
     const track = $("v2-pass-track");
+    if (store !== "demo") {
+      // Production: nothing is tracked until the Director approves XP rules.
+      track.replaceChildren();
+      $("v2-pass-name").textContent = "ARENA PASS";
+      $("v2-pass-level").textContent = "NOT ACTIVE YET";
+      $("v2-pass-bar").style.setProperty("--progress", "0%");
+      const strong = document.createElement("strong");
+      strong.textContent = "NOT SWITCHED ON";
+      $("v2-pass-banner").replaceChildren(strong, "Arena Pass isn't active. No XP is earned or tracked until the earning rules are approved. Your verified rewards are in the Wardrobe.");
+      return;
+    }
     if (track.childElementCount) return;
     const level = Math.floor(PASS.xp / PASS.perTier);
     $("v2-pass-name").textContent = PASS.name;
@@ -481,14 +579,20 @@
   // Demo only: simulate a verified finish to show what entitlements unlock.
   function simulateFinish(position) {
     const earned = C.collectionsForPosition(position);
-    const fresh = earned.filter((name) => !grants.collections.includes(name));
+    const fresh = earned.filter((name) => !demoGrants.collections.includes(name));
     if (!fresh.length) { toast = position ? "Those collections are already in your Wardrobe. Rewards are never granted twice." : ""; renderAll(); return; }
     const items = fresh.flatMap((name) => C.itemsInCollection(name));
-    grants.collections = [...new Set([...grants.collections, ...fresh])];
-    grants.newItems = [...new Set([...grants.newItems, ...items])];
-    write(KEYS.grants, grants);
+    demoGrants.collections = [...new Set([...demoGrants.collections, ...fresh])];
+    demoGrants.newItems = [...new Set([...demoGrants.newItems, ...items])];
+    write(KEYS.grants, demoGrants);
+    applyDemoGrants();
     renderAll();
     celebrate(fresh, items);
+  }
+
+  function applyDemoGrants() {
+    ownedCollections = new Set(["essentials", ...demoGrants.collections.filter((name) => Object.hasOwn(C.collections, name))]);
+    newItems = [...demoGrants.newItems];
   }
 
   // ---------- section switching ----------
@@ -508,20 +612,191 @@
     if (section === "wardrobe") renderWardrobe();
     if (section === "pass") renderPass();
     if (section !== "wardrobe") {
-      $("v2-new-count").hidden = grants.newItems.length === 0;
-      $("v2-new-count").textContent = String(grants.newItems.length);
+      $("v2-new-count").hidden = newItems.length === 0;
+      $("v2-new-count").textContent = String(newItems.length);
     }
   }
 
   // ---------- look switch (classic vs custom) ----------
+  // Which editor is open. In production the look that is *shown* is the one
+  // the server confirms (activeLook); opening an editor changes nothing.
+  let editor = "v2";
   function applyLook(look) {
-    const v2 = look === "v2";
+    editor = look === "classic" ? "classic" : "v2";
+    const v2 = editor === "v2";
     root.hidden = !v2;
     $("studio-classic").hidden = v2;
-    document.querySelectorAll("[data-look]").forEach((button) => button.setAttribute("aria-checked", String(button.dataset.look === look)));
-    $("look-switch-note").textContent = v2
-      ? (saved ? "Your custom look is the one you use. Your classic look stays saved." : "Build a custom look. Your classic look stays saved and you can switch back any time.")
-      : "Using your classic look. Your custom look stays saved.";
+    document.querySelectorAll("[data-look]").forEach((button) => button.setAttribute("aria-checked", String(button.dataset.look === editor)));
+    const shown = store === "server" ? activeLook : saved ? "v2" : null;
+    $("look-switch-note").textContent = store === "server"
+      ? (shown === "v2" ? "Your custom look is the one shown." + (classicSaved ? " Your classic look stays saved." : "")
+        : shown === "classic" ? (v2 ? "Your classic look is the one shown. Save a custom look to use it instead; your classic look stays saved." : "Your classic look is the one shown.")
+        : "Nothing is saved yet. Build a custom look or pick a classic one.")
+      : v2
+        ? (saved ? "Your custom look is the one you use. Your classic look stays saved." : "Build a custom look. Your classic look stays saved and you can switch back any time.")
+        : "Using your classic look. Your custom look stays saved.";
+    $("look-use-classic").hidden = !(store === "server" && activeLook === "v2" && classicSaved);
+  }
+
+  // The header portrait uses the same renderer when the custom look is shown.
+  function headerPortrait() {
+    const frameEl = document.querySelector(".mini-photo");
+    if (!frameEl) return;
+    let art = frameEl.querySelector(":scope > .mini-v2");
+    const show = store === "server" && activeLook === "v2" && saved;
+    frameEl.classList.toggle("has-v2", Boolean(show));
+    if (!show) { art?.remove(); return; }
+    if (!art) {
+      art = document.createElement("span");
+      art.className = "mini-v2";
+      frameEl.append(art);
+    }
+    svgInto(art, R.render(saved, { context: "portrait", decorative: true }));
+  }
+
+  // ---------- public status (server truth only) ----------
+  const PUBLIC_COPY = Object.freeze({
+    not_saved: ["NOT SAVED YET", "Nothing is saved or public yet."],
+    saved_private: ["SAVED PRIVATELY", "Only you can see it. Public characters aren't switched on yet."],
+    display_off: ["PUBLIC DISPLAY OFF", "Saved to your account. Leaderboards show the default character for your rank."],
+    awaiting_link: ["PUBLIC DISPLAY ON · NOT SHOWN YET", "It appears once you are in a published top 10 and staff have verified which ranking is yours."],
+    public: ["PUBLIC NOW", "Your shown look is on the current leaderboard. Saved changes appear the next time anyone loads it."],
+    unknown: ["STATUS UNAVAILABLE", "We couldn't check whether your character is public. Try again later."],
+  });
+  function renderPublicState() {
+    const panel = $("v2-public-state");
+    panel.hidden = store !== "server" || !publication;
+    if (panel.hidden) return;
+    const [label, text] = PUBLIC_COPY[publication] || PUBLIC_COPY.unknown;
+    if (panel.dataset.state !== publication) {
+      panel.dataset.state = publication;
+      $("v2-public-state-label").textContent = label;
+      $("v2-public-state-text").textContent = text;
+    }
+  }
+
+  // ---------- server store ----------
+  function seenGrants() { const list = read(KEYS.seen, []); return new Set(Array.isArray(list) ? list.filter((entry) => typeof entry === "string") : []); }
+  function applyServerState(state, { keepDraft = false, first = false } = {}) {
+    ownedCollections = new Set(state.owned);
+    const previousSaved = saved;
+    saved = state.v2 ? clone(state.v2) : null;
+    activeLook = state.activeLook;
+    revision = state.revision;
+    classicSaved = state.classic;
+    publication = state.publication;
+    // Keep edits in progress; otherwise show what is saved now.
+    const untouched = cursor === 0 && history.length === 1 && (!previousSaved ? same(draft, startLook()) : same(draft, previousSaved));
+    if (!keepDraft || untouched) resetHistory(saved || startLook());
+    const consentUntouched = same(consentNow(), consent);
+    consent = { leaderboard: state.showOnLeaderboard, campusWins: state.showOnCampusWins };
+    if (!keepDraft || consentUntouched) {
+      $("v2-show-public").checked = consent.leaderboard;
+      $("v2-show-wins").checked = consent.campusWins;
+    }
+    // Newly granted collections (last 14 days, not yet seen here): NEW badges
+    // and one celebration.
+    const seen = seenGrants();
+    const recent = state.grants.filter((grant) => !seen.has(`${grant.collection}:${grant.period}`) &&
+      Date.now() - Date.parse(grant.grantedAt) < 14 * 24 * 3600 * 1000);
+    const fresh = [...new Set(recent.map((grant) => grant.collection))];
+    newItems = [...new Set([...newItems.filter((key) => owned().has(key)), ...fresh.flatMap((name) => C.itemsInCollection(name))])];
+    if (fresh.length) {
+      write(KEYS.seen, [...seen, ...recent.map((grant) => `${grant.collection}:${grant.period}`)].slice(-100));
+      queueMicrotask(() => celebrate(fresh, fresh.flatMap((name) => C.itemsInCollection(name))));
+    }
+    if (first) applyLook(activeLook === "classic" ? "classic" : "v2");
+    else applyLook(editor);
+    headerPortrait();
+    renderAll();
+  }
+
+  async function loadServer({ keepDraft = false, first = false, quiet = false } = {}) {
+    const at = epoch;
+    const mine = ++loadSeq;
+    try {
+      const state = await api.student.getCharacterV2();
+      if (at !== epoch || mine !== loadSeq) return;
+      if (!state.studioEnabled) { deactivate(); return; }
+      applyServerState(state, { keepDraft, first });
+    } catch (error) {
+      if (at !== epoch || mine !== loadSeq) return;
+      if (error?.code === "unauthorized") { detail?.sessionEnded?.(); return; }
+      if (!quiet) toast = "Your custom character couldn't be loaded. Try again later.";
+      renderAll();
+    }
+  }
+
+  async function useClassic() {
+    if (!classicSaved) return;
+    await sendToServer({ activeLook: "classic", v2: null }, "Your classic look is shown again. Your custom look stays saved.");
+    applyLook("classic");
+  }
+
+  // ---------- activation per session ----------
+  let wired = false;
+  function deactivate() {
+    const wasServer = store === "server";
+    store = null;
+    busy = false;
+    saved = null; activeLook = null; revision = 0; classicSaved = null; publication = null;
+    consent = { leaderboard: false, campusWins: false };
+    ownedCollections = new Set(["essentials"]);
+    newItems = [];
+    resetHistory(startLook());
+    $("v2-show-public").checked = false;
+    $("v2-show-wins").checked = false;
+    if (wasServer) forget(KEYS.seen);
+    $("v2-celebrate").hidden = true;
+    root.hidden = true;
+    $("look-switch").hidden = true;
+    $("look-use-classic").hidden = true;
+    $("studio-classic").hidden = false;
+    headerPortrait();
+  }
+
+  function eligible(next) {
+    if (!next?.api) return null;
+    if (next.api.mode === "demo") return "demo";
+    const session = next.session || {};
+    const features = next.features?.() || {};
+    return session.authenticated === true && session.user?.role === "student" && session.user?.mustChangePassword !== true &&
+      features.studentSignIn === true && features.characterStudioV2 === true ? "server" : null;
+  }
+
+  function onSession(next) {
+    detail = next;
+    api = next.api;
+    const target = eligible(next);
+    epoch += 1;
+    if (target === "demo") {
+      if (store === "demo") return;
+      store = "demo";
+      wire();
+      demoCopy();
+      demoGrants = read(KEYS.grants, { collections: [], newItems: [], best: null });
+      applyDemoGrants();
+      const raw = read(KEYS.character, null);
+      const check = raw ? C.validateConfig(raw, { ownedItems: owned() }) : null;
+      saved = check?.ok ? check.config : null;
+      activeLook = saved ? "v2" : null;
+      resetHistory(saved || startLook());
+      $("v2-show-public").checked = read(KEYS.show, false) === true;
+      $("v2-demo-tools").hidden = false;
+      $("look-switch").hidden = false;
+      applyLook(read(KEYS.look, "v2") === "classic" ? "classic" : "v2");
+      renderAll();
+      return;
+    }
+    if (target !== "server") { if (store) deactivate(); return; }
+    // A new session (sign-in or account switch) starts clean, then loads.
+    deactivate();
+    store = "server";
+    wire();
+    $("look-switch").hidden = false;
+    applyLook("v2");
+    renderAll();
+    void loadServer({ first: true });
   }
 
   // ---------- wiring ----------
@@ -532,6 +807,7 @@
     strong.textContent = "PREVIEW · FICTIONAL DATA";
     banner.replaceChildren(strong, "XP earning isn't switched on. The rules (attendance, quizzes, workshops, improvement, weekly challenges) need approval first. Nothing here is saved, and the pass will always be free for every student.");
     const tools = $("v2-demo-tools");
+    if (tools.childElementCount) return;
     const title = document.createElement("strong");
     title.textContent = "FICTIONAL DEMO TOOLS";
     const label = document.createElement("label");
@@ -546,18 +822,21 @@
     const note = document.createElement("span");
     note.textContent = "On the real site, staff-verified rankings grant rewards on the server.";
     tools.replaceChildren(title, label, clear, note);
+    select.addEventListener("change", (event) => { const value = Number(event.target.value); event.target.value = ""; if (value) simulateFinish(value); });
+    clear.addEventListener("click", () => { demoGrants = { collections: [], newItems: [], best: null }; write(KEYS.grants, demoGrants); applyDemoGrants(); toast = "Fictional rewards cleared."; renderAll(); });
   }
 
-  function init() {
-    demoCopy();
-    $("look-switch").hidden = false;
+  function wire() {
+    if (wired) return;
+    wired = true;
     $("avatar-title").innerHTML = "BE<br/><span>YOURSELF.</span>";
     $("avatar-lede").textContent = "Build a character from hundreds of options: skin, hair, features, head coverings, glasses, hearing and mobility aids, and clothes. Everything about who you are is free. Special editions are earned through verified achievements.";
     document.querySelectorAll("[data-look]").forEach((button) => button.addEventListener("click", () => {
-      write(KEYS.look, button.dataset.look);
+      if (store === "demo") write(KEYS.look, button.dataset.look);
       applyLook(button.dataset.look);
       if (button.dataset.look === "v2") renderAll();
     }));
+    $("look-use-classic").addEventListener("click", () => void useClassic());
     for (const name of ["create", "wardrobe", "pass"]) $(`v2-tab-${name}`).addEventListener("click", () => { section = name; toast = ""; renderAll(); });
     $("v2-sections").addEventListener("keydown", (event) => {
       if (!["ArrowRight", "ArrowLeft"].includes(event.key)) return;
@@ -571,7 +850,7 @@
     $("v2-redo").addEventListener("click", redo);
     $("v2-random").addEventListener("click", randomize);
     $("v2-reset").addEventListener("click", reset);
-    $("v2-save").addEventListener("click", save);
+    $("v2-save").addEventListener("click", () => void save());
     root.addEventListener("keydown", (event) => {
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || event.target.matches("input, textarea")) return;
       event.preventDefault();
@@ -588,10 +867,11 @@
       button.addEventListener("click", () => { wardrobeCollection = name; renderWardrobe(); });
       collectionBar.append(button);
     }
-    $("v2-show-public").checked = read(KEYS.show, false) === true;
-    $("v2-show-public").addEventListener("change", () => { write(KEYS.show, $("v2-show-public").checked); toast = "Saved your choice in this browser (fictional preview)."; renderPreview(); });
-    $("v2-simulate").addEventListener("change", (event) => { const value = Number(event.target.value); event.target.value = ""; if (value) simulateFinish(value); });
-    $("v2-demo-clear").addEventListener("click", () => { grants.collections = []; grants.newItems = []; write(KEYS.grants, grants); toast = "Fictional rewards cleared."; renderAll(); });
+    for (const id of ["v2-show-public", "v2-show-wins"]) $(id).addEventListener("change", () => {
+      if (store === "demo") { write(KEYS.show, $("v2-show-public").checked); toast = "Saved your choice in this browser (fictional preview)."; }
+      else toast = "Save to apply your choice.";
+      renderPreview();
+    });
     $("v2-celebrate-open").addEventListener("click", () => { closeCelebrate(); section = "wardrobe"; wardrobeFilter = "owned"; renderAll(); });
     $("v2-celebrate-close").addEventListener("click", closeCelebrate);
     $("v2-celebrate").addEventListener("keydown", (event) => {
@@ -603,10 +883,16 @@
         buttons[(index + 1) % 2].focus(); // two buttons: Tab and Shift+Tab both move to the other one
       }
     });
-    $("v2-demo-tools").hidden = false;
-    applyLook(read(KEYS.look, "v2") === "classic" ? "classic" : "v2");
-    renderAll();
+    // A classic save elsewhere on the page changes which look is shown.
+    window.addEventListener("arena:classic-saved", () => { if (store === "server") void loadServer({ keepDraft: true, quiet: true }); });
+    // Re-read when My Character is opened again (another device may have saved).
+    document.querySelectorAll('[data-page="avatar"]').forEach((link) => link.addEventListener("click", () => {
+      if (store === "server" && viewedOnce) void loadServer({ keepDraft: true, quiet: true });
+      viewedOnce = true;
+    }));
   }
 
-  init();
+  window.addEventListener("arena:session", (event) => onSession(event.detail));
+  const announced = window.AcademicArenaSession?.latest?.();
+  if (announced) onSession(announced);
 })();

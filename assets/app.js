@@ -682,7 +682,9 @@
     if (!session.authenticated) resetPortrait();
     renderHeader();
     renderSaveNote();
-    lastSessionDetail = { session, api, showPage };
+    // Shared with staff.js and studio-v2.js: they must use this api instance
+    // (it holds the session's CSRF token), and read switches through a getter.
+    lastSessionDetail = { session, api, showPage, epoch, features: () => features, sessionEnded, refreshBoard: () => loadLeaderboard() };
     window.dispatchEvent(new CustomEvent("arena:session", { detail: lastSessionDetail }));
     if (mode !== "production") return;
     const user = session.user || {};
@@ -817,10 +819,15 @@
     const header = document.createElement("header");
     const avatar = document.createElement("span");
     avatar.className = "win-avatar";
-    const image = document.createElement("img");
-    image.src = faceArtwork(post.avatar, post.style);
-    image.alt = "";
-    avatar.append(image);
+    // The author's consented current look (V2 drawn by the shared renderer, or
+    // their classic face), otherwise a neutral figure: never a default person.
+    if (!setV2Art(avatar, "win-v2", post.v2 ? post : null, "portrait", "")) {
+      const image = document.createElement("img");
+      image.src = post.avatar ? faceArtwork(post.avatar, post.style) : "assets/competitors/thumb-a.svg";
+      image.alt = "";
+      avatar.dataset.art = post.avatar ? "personal" : "neutral";
+      avatar.append(image);
+    }
     const details = document.createElement("div");
     const author = document.createElement("p");
     author.className = "win-author";
@@ -1011,6 +1018,8 @@
         publicationState = result.avatar ? result.publication : "unknown";
         $("save-status").textContent = "Character saved to your account.";
         renderPublicationState();
+        // A classic save makes the classic look the one shown (studio-v2 re-reads).
+        window.dispatchEvent(new CustomEvent("arena:classic-saved"));
       }
       if (currentPage === "leaderboard" || publicChoice !== undefined) void loadLeaderboard();
     } catch (error) {
@@ -1234,6 +1243,8 @@
     // Re-check after back/forward cache restores or a long time in the background,
     // so the header never keeps showing a stale signed-in or signed-out state.
     window.addEventListener("pageshow", (event) => { if (event.persisted) void renderSession(); });
+    // A custom-look save changes the shared public-display choice and state.
+    window.addEventListener("arena:v2-saved", () => void refreshPublicationState());
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && mode === "production" && Date.now() - lastSessionCheck > 60_000) void renderSession();
       // An open board tab refetches when it is shown again after a minute away,

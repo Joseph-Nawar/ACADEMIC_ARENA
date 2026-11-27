@@ -190,12 +190,13 @@
   };
 
   const collections = {
-    essentials: { label: "Campus Essentials", rule: "Free for every student.", order: 1 },
-    elite: { label: "Elite Collection", rule: "Finish in a verified Top 10.", order: 2 },
-    podium: { label: "Podium Collection", rule: "Finish in a verified Top 3.", order: 3 },
-    champion: { label: "Champion Collection", rule: "Finish first on a verified leaderboard.", order: 4 },
-    scholar: { label: "Scholar Collection", rule: "Academic threshold reward. Not active until the policy is approved.", order: 5, inactive: true },
-    seasonal: { label: "Seasonal Collection", rule: "Arena Pass reward. Not active until XP rules are approved.", order: 6, inactive: true },
+    // unlock: a short, colour-independent tag shown on locked items.
+    essentials: { label: "Campus Essentials", rule: "Free for every student.", unlock: "FREE", order: 1 },
+    elite: { label: "Elite Collection", rule: "Finish in a verified Top 10.", unlock: "TOP 10", order: 2 },
+    podium: { label: "Podium Collection", rule: "Finish in a verified Top 3.", unlock: "TOP 3", order: 3 },
+    champion: { label: "Champion Collection", rule: "Finish first on a verified leaderboard.", unlock: "1ST PLACE", order: 4 },
+    scholar: { label: "Scholar Collection", rule: "Academic threshold reward. Not active until the policy is approved.", unlock: "COMING LATER", order: 5, inactive: true },
+    seasonal: { label: "Seasonal Collection", rule: "Arena Pass reward. Not active until XP rules are approved.", unlock: "ARENA PASS", order: 6, inactive: true },
   };
   const rarities = { common: "Common", rare: "Rare", epic: "Epic", legendary: "Legendary" };
 
