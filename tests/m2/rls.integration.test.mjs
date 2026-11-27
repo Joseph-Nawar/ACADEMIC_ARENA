@@ -162,7 +162,12 @@ test("local PostgREST enforces avatar ownership and exposes only public projecti
     assert.equal(Object.hasOwn(publicRows[0], forbidden), false, `public leaderboard has no ${forbidden} field`);
   }
 
-  const publicWinsResponse = await apiRequest("campus_wins_public?select=*");
+  // Release B2/B3 (issue #25): the legacy table is not readable over REST at
+  // all; the only public read path is the consent-aware projection.
+  const legacyWins = await apiRequest("campus_wins_public?select=*");
+  assert.ok([401, 403].includes(legacyWins.status), "the legacy Campus Wins table is not readable over REST");
+  const publicWinsResponse = await apiRequest("rpc/public_campus_wins_v2", {
+    method: "POST", body: { p_templates: ["top3", "workshop", "project", "helped"] } });
   assert.ok(publicWinsResponse.ok);
   const publicWins = await json(publicWinsResponse);
   assert.deepEqual(publicWins, [], "unpublished or unapproved Campus Wins records are not public");

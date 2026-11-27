@@ -32,7 +32,7 @@ npx supabase link --project-ref cynfnxlbmthjxgivllkg   # relink staging afterwar
 - If the login-role step still fails while DNS works, the supported fallback is the database password, scoped to one subshell so it never lingers. Never pass it as an argument:
   `( read -rs SUPABASE_DB_PASSWORD && export SUPABASE_DB_PASSWORD && scripts/db-backup.sh export linked /secure/offsite/academic-arena-$(date +%F).aabk )`
 
-Excluded seeded tables (`role_permissions`, `runtime_controls`, `student_feature_controls`) keep the target project's values. After a restore, every student switch is therefore **off** until you re-enable it deliberately.
+Excluded seeded tables (`role_permissions`, `runtime_controls`, `student_feature_controls`, and since Release B the generated catalogue `cosmetic_collections`, `character_v2_fields`, `character_v2_values`, `rank_reward_rules`) keep the target project's values, which the migrations create. After a restore, every student switch is therefore **off** until you re-enable it deliberately.
 
 Copy the `.aabk` and `.aabk.sha256` to an institution-approved offsite
 location (for example an encrypted university drive). Keep at least 4 weekly
@@ -59,7 +59,13 @@ and 3 monthly copies; delete older ones per the approved retention period.
           (select count(*) from public.campus_wins_public) wins,
           (select allow_fictional_account_lifecycle from app_private.runtime_controls) lifecycle_gate,
           (select student_sign_in or student_provisioning or avatar_personalization or welcome_dialog
-             from app_private.student_feature_controls) switches_on;
+             from app_private.student_feature_controls) switches_on,
+          -- Release B (after migration 202611270001):
+          (select count(*) from public.student_avatar_configs where v2_config is not null) v2_looks,
+          (select count(*) from app_private.cosmetic_entitlements where revoked_at is null) active_entitlements,
+          (select count(*) from app_private.reward_periods) periods,
+          (select count(*) from app_private.reward_events) reward_events,
+          (select count(*) from app_private.character_v2_values) catalogue_values;
    ```
    Compare with the counts recorded at export time; `lifecycle_gate` and `switches_on` must be `false`.
 5. Point the Pages environment at the new project (`SUPABASE_URL` and
@@ -99,3 +105,31 @@ deployment, and once per term.
 - All counts matched: 3 users, 1 MFA factor, 3 accounts, 32 audit events, 2 versions, 60 level rows, 2 avatars.
 - The drill found that `student_feature_controls` (seeded by migration 202611190001) was missing from the exclusions, so restores failed. It is now excluded, and a unit test checks every migration-seeded table.
 - Drill files were deleted afterwards.
+
+## Restore drill — 27 Nov 2026 (local, fictional data, Release B)
+
+1. Seeded the local stack with `scripts/b2-local-demo.mjs`: 3 Auth users,
+   2 saved custom (V2) looks, 4 entitlements, 1 earning period, 1
+   publication binding and 6 reward history events.
+2. `export local` → encrypted `.aabk`. Then `supabase db reset`: all data
+   gone, while the migrations recreated the catalogue (339 values, 6
+   collections).
+3. `restore local`, then compared counts and an MD5 of every stored V2 config,
+   ordered by account. Before and after were identical:
+
+   | | Count |
+   |---|---|
+   | users | 3 |
+   | accounts | 3 |
+   | avatars | 2 |
+   | V2 looks | 2 (same hash) |
+   | entitlements | 4 (4 active) |
+   | periods | 1 |
+   | bindings | 1 |
+   | reward events | 6 |
+   | links | 2 |
+
+   The `reward_events` identity sequence was restored too (last value 6), so
+   new history rows continue without a clash. The append-only trigger does
+   not block a restore, because it blocks only UPDATE, DELETE and TRUNCATE.
+4. Drill file and passphrase deleted afterwards.
